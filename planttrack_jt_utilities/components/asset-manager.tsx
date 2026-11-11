@@ -35,7 +35,8 @@ type AssetForm = {
 
 const emptyForm: AssetForm = {
   asset_code: "", description: "", category: "", manufacturer: "", model: "",
-  serial_number: "", registration: "", location: "", hour_meter: "", status: "available"
+  serial_number: "", registration: "", location: "", hour_meter: "", status: "available",
+  loler_next_due: "", loler_examined_at: ""
 };
 
 const categories = [
