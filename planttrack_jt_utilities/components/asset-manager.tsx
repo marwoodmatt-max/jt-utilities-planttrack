@@ -41,6 +41,12 @@ const emptyForm: AssetForm = {
   loler_next_due: "", loler_examined_at: ""
 };
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return `${day}/${month}/${year}`;
+}
+
 const categories = [
   "Vehicle", "Plant", "Lifting equipment", "Trailer",
   "Agricultural equipment", "CAT & Genny calibration equipment"
@@ -276,8 +282,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
         <td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
-        <td>{a.loler_next_due || "—"}</td><td>{a.loler_examined_at || "—"}</td>
-        <td><span className="tag">{statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
+        <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
+        <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
       </tr>)}</tbody></table>
       {!filtered.length && <p className="empty">No matching assets.</p>}
