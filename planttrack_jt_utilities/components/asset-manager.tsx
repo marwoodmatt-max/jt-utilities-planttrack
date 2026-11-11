@@ -157,19 +157,20 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       ? await supabase.from("assets").insert(payload).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single()
       : await supabase.from("assets").update(payload).eq("id", editing).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single();
 
-    if (!result.error && editing !== "new" && (form.category || "").toLowerCase() === "lifting equipment" && (form.loler_next_due || form.loler_examined_at)) {
+    let saveError = result.error;
+    if (!saveError && editing !== "new" && (form.category || "").toLowerCase() === "lifting equipment" && (form.loler_next_due || form.loler_examined_at)) {
       const examinationPayload = { asset_id: editing, examination_type: "LOLER", examination_scheme: "LOLER", next_due: form.loler_next_due || null, examined_at: form.loler_examined_at || null };
       const examinationResult = lolerRecordId
         ? await supabase.from("examinations").update(examinationPayload).eq("id", lolerRecordId)
         : await supabase.from("examinations").insert(examinationPayload);
-      if (examinationResult.error) result.error = examinationResult.error;
+      if (examinationResult.error) saveError = examinationResult.error;
     }
 
-    if (result.error) {
-      const duplicate = result.error.code === "23505";
+    if (saveError) {
+      const duplicate = saveError.code === "23505";
       setError(duplicate
         ? "That asset code is already in use. Check the register and enter a unique code."
-        : "The asset could not be saved: " + result.error.message);
+        : "The asset could not be saved: " + saveError.message);
     } else {
       setMessage(editing === "new" ? "Asset added to the live register." : "Asset details updated.");
       setEditing(null);
