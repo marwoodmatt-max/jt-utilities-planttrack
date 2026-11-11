@@ -140,7 +140,8 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [selectedDate,setSelectedDate]=useState("");
-  const now=new Date();\n  const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+  const now=new Date();
+  const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const monthLabel=month.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
   useEffect(()=>{
     let cancelled=false;
