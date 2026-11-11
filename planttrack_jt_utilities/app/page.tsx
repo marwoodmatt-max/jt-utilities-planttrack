@@ -121,7 +121,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
-        {page==="Inspection calendar"&&<Calendar action={action}/>}
+        {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
@@ -133,7 +133,91 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </div>;
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
-function Calendar({action}:{action:(s:string)=>void}) {const [month,setMonth]=useState(10);const names=["January","February","March","April","May","June","July","August","September","October","November","December"];const first=new Date(2026,month,1).getDay();const count=new Date(2026,month+1,0).getDate();const events:any={};return <section className="panel"><div className="panel-head"><div><h3>{names[month]} 2026</h3><p>Inspection and maintenance schedule</p></div><div><button className="secondary" onClick={()=>setMonth((month+11)%12)}>‹</button> <button className="secondary" onClick={()=>setMonth((month+1)%12)}>›</button></div></div><div className="calendar-grid">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=><b key={d}>{d}</b>)}{Array.from({length:first},(_,i)=><div key={"blank"+i}/>)}{Array.from({length:count},(_,i)=>i+1).map(d=><div className="day" key={d}><span>{d}</span>{events[d]&&<small className={events[d]==="LOLER"?"red-event":"green-event"}>{events[d]}</small>}</div>)}</div><p className="muted">No verified inspection or examination events are currently connected to the calendar.</p></section>}
+type CalendarEvent = { id:string; date:string; kind:"examined"|"due"; assetCode:string; description:string };
+function Calendar({supabase}:{supabase:SupabaseClient}) {
+  const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1));
+  const [events,setEvents]=useState<CalendarEvent[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [selectedDate,setSelectedDate]=useState("");
+  const today=new Date().toISOString().slice(0,10);
+  const monthLabel=month.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  useEffect(()=>{
+    let cancelled=false;
+    async function loadCalendar(){
+      setLoading(true);setError("");
+      const {data:examinations,error:examinationError}=await supabase
+        .from("examinations")
+        .select("id,asset_id,examination_type,examined_at,next_due")
+        .ilike("examination_type","%LOLER%")
+        .order("next_due",{ascending:true});
+      if(examinationError){if(!cancelled){setError("Could not load LOLER calendar: "+examinationError.message);setEvents([]);setLoading(false);}return;}
+      const rows=examinations||[];
+      const assetIds=Array.from(new Set(rows.map((row:any)=>row.asset_id).filter(Boolean)));
+      let assetMap=new Map<string,{asset_code:string;description:string}>();
+      if(assetIds.length){
+        const {data:assets,error:assetError}=await supabase.from("assets").select("id,asset_code,description").in("id",assetIds);
+        if(assetError){if(!cancelled){setError("LOLER dates loaded, but asset details could not be loaded: "+assetError.message);setEvents([]);setLoading(false);}return;}
+        assetMap=new Map((assets||[]).map((asset:any)=>[asset.id,{asset_code:asset.asset_code,description:asset.description}]));
+      }
+      const mapped:CalendarEvent[]=[];
+      for(const row of rows as any[]){
+        const asset=assetMap.get(row.asset_id);
+        if(!asset) continue;
+        if(row.examined_at) mapped.push({id:row.id+"-examined",date:row.examined_at,kind:"examined",assetCode:asset.asset_code,description:asset.description});
+        if(row.next_due) mapped.push({id:row.id+"-due",date:row.next_due,kind:"due",assetCode:asset.asset_code,description:asset.description});
+      }
+      if(!cancelled){setEvents(mapped);setLoading(false);}
+    }
+    void loadCalendar();
+    return ()=>{cancelled=true;};
+  },[supabase]);
+  const year=month.getFullYear();
+  const monthIndex=month.getMonth();
+  const firstDay=new Date(year,monthIndex,1).getDay();
+  const daysInMonth=new Date(year,monthIndex+1,0).getDate();
+  const dateKey=(day:number)=>year+"-"+String(monthIndex+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+  const byDate=new Map<string,CalendarEvent[]>();
+  for(const event of events){const current=byDate.get(event.date)||[];current.push(event);byDate.set(event.date,current);}
+  const selectedEvents=(byDate.get(selectedDate)||[]).slice().sort((a,b)=>a.kind===b.kind? a.assetCode.localeCompare(b.assetCode):a.kind==="due"?-1:1);
+  const dueEvents=events.filter(event=>event.kind==="due");
+  const overdueCount=dueEvents.filter(event=>event.date<today).length;
+  const upcomingCount=dueEvents.filter(event=>event.date>=today).length;
+  const formatDate=(value:string)=>{const [y,m,d]=value.split("-");return d+" "+m+" "+y;};
+  return <section className="panel">
+    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examination history and renewal schedule · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
+    <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",marginBottom:18}}>
+      <div className="stat"><div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date</small></div>
+      <div className="stat"><div className="stat-top"><span>Upcoming LOLER</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later</small></div>
+      <div className="stat"><div className="stat-top"><span>Recorded examinations</span><FileCheck2 size={18}/></div><strong>{loading?"…":events.filter(event=>event.kind==="examined").length}</strong><small>Last examination dates</small></div>
+    </div>
+    {error&&<p className="auth-error" role="alert">{error}</p>}
+    <div className="calendar-legend" style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12,fontSize:12}}>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#b91c1c",marginRight:6}}/>Overdue due date</span>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#d97706",marginRight:6}}/>Upcoming due date</span>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>
+    </div>
+    <div className="calendar-grid">
+      {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><b key={day}>{day}</b>)}
+      {Array.from({length:firstDay},(_,index)=><div key={"blank-"+index}/>)}
+      {Array.from({length:daysInMonth},(_,index)=>index+1).map(day=>{
+        const key=dateKey(day);const dayEvents=byDate.get(key)||[];
+        return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
+          <span>{day}</span>
+          {dayEvents.slice(0,3).map(event=><small key={event.id} className={event.kind==="examined"?"blue-event":event.date<today?"red-event":"amber-event"}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
+        </button>;
+      })}
+    </div>
+    <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
+      <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
+      {selectedDate&&selectedEvents.length===0&&<p className="muted">No LOLER events recorded for this date.</p>}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":"LO"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":"Due"}</span></div>)}
+    </div>
+    {loading&&<p className="muted">Loading live LOLER dates…</p>}
+    {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination dates are currently recorded.</p>}
+  </section>;
+}
 function Checks({action}:{action:(s:string)=>void}) {const items=["Engine oil and coolant","Brakes and steering","Tyres / tracks","Hydraulic hoses and leaks","Lights and warning devices","Safety equipment","General condition"];const [answers,setAnswers]=useState<Record<string,string>>({});return <section className="panel"><div className="panel-head"><div><h3>Operator plant check</h3><p>Daily plant check template — not yet connected to live submissions</p></div><Tag tone="blue">Draft</Tag></div><p className="muted">This checklist is a template only. Live asset selection, individual sign-off and submission are not yet connected.</p>{items.map(i=><div className="check-row" key={i}><b>{i}</b><div><button className={answers[i]==="Pass"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"Pass"})}>Pass</button><button className={answers[i]==="Fail"?"choice fail selected": "choice fail"} onClick={()=>setAnswers({...answers,[i]:"Fail"})}>Fail</button><button className={answers[i]==="N/A"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"N/A"})}>N/A</button></div></div>)}<label>Comments<textarea placeholder="Record observations or defects..."/></label><button className="primary" onClick={()=>action("Demo form only. Live authenticated submission and defect escalation require backend setup.")}>Submit check for sign-off</button></section>}
 function UsersPanel({action}:{action:(s:string)=>void}) {return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Proposed role structure</p></div><Tag tone="blue">Access control</Tag></div>{["Plant Manager","Operator / Driver","Workshop Mechanic","Inspector","Director / Administrator"].map((r,i)=><div className="attention" key={r}><div className="avatar">{r.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{r}</b><small>{["Fleet, schedules, jobs and approvals","Assigned plant checks and defects","Assigned jobs, labour and parts","Assigned examinations and reports","Read-only oversight and management reports"][i]}</small></div><Tag>Role</Tag></div>)}<button className="primary" onClick={()=>action("User administration will be activated with Supabase Auth and role policies.")}><Plus size={16}/> Add user</button></section>}
 function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
