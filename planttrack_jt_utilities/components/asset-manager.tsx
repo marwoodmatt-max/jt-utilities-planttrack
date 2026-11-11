@@ -16,6 +16,8 @@ type AssetRow = {
   location: string | null;
   hour_meter: number | string | null;
   status: string;
+  loler_next_due?: string | null;
+  loler_examined_at?: string | null;
 };
 
 type AssetForm = {
@@ -72,7 +74,30 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       .order("asset_code", { ascending: true })
       .limit(1000);
     if (loadError) setError("Could not load assets: " + loadError.message);
-    else setRows((data || []) as AssetRow[]);
+    else {
+      const assetRows = (data || []) as AssetRow[];
+      const assetIds = assetRows.map((asset) => asset.id);
+      if (assetIds.length) {
+        const { data: examinationRows, error: examinationError } = await supabase
+          .from("examinations")
+          .select("asset_id,next_due,examined_at,created_at")
+          .ilike("examination_type", "%LOLER%")
+          .in("asset_id", assetIds)
+          .order("created_at", { ascending: false });
+        if (examinationError) setError("Assets loaded, but LOLER dates could not be loaded: " + examinationError.message);
+        const latestByAsset = new Map<string, { next_due: string | null; examined_at: string | null }>();
+        for (const examination of examinationRows || []) {
+          if (!latestByAsset.has(examination.asset_id)) {
+            latestByAsset.set(examination.asset_id, { next_due: examination.next_due, examined_at: examination.examined_at });
+          }
+        }
+        setRows(assetRows.map((asset) => ({
+          ...asset,
+          loler_next_due: latestByAsset.get(asset.id)?.next_due || null,
+          loler_examined_at: latestByAsset.get(asset.id)?.examined_at || null
+        })));
+      } else setRows([]);
+    }
     setLoading(false);
   }
 
@@ -230,12 +255,13 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
-      <table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
+      <table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
         <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
         <td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
+        <td>{a.loler_next_due || "—"}</td><td>{a.loler_examined_at || "—"}</td>
         <td><span className="tag">{statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
       </tr>)}</tbody></table>
