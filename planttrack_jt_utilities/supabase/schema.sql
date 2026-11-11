@@ -112,3 +112,14 @@ alter table public.audit_events enable row level security;
 
 -- Intentionally no permissive policies are included. Configure role-aware
 -- policies before inviting users or connecting a production client.
+
+
+-- PlantTrack login: allow an authenticated user to read only their own profile.
+-- This policy does not grant access to other users' profiles or operational tables.
+alter table public.profiles enable row level security;
+drop policy if exists "Users can read their own profile" on public.profiles;
+create policy "Users can read their own profile"
+on public.profiles
+for select
+to authenticated
+using (id = auth.uid());

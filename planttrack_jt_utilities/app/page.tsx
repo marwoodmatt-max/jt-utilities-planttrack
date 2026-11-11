@@ -1,5 +1,6 @@
  "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -27,12 +28,11 @@ const nav = [
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
-export default function Home() {
+function Dashboard() {
   const [page,setPage]=useState("Dashboard");
   const [query,setQuery]=useState("");
   const [showNew,setShowNew]=useState(false);
   const [mobileNav,setMobileNav]=useState(false);
-  const [role,setRole]=useState("Plant Manager");
   const [assetFilter,setAssetFilter]=useState("All");
   const [jobStatus,setJobStatus]=useState("All");
   const [notice,setNotice]=useState("");
@@ -50,7 +50,7 @@ export default function Home() {
     </aside>
     {mobileNav&&<div className="scrim" onClick={()=>setMobileNav(false)}/>}
     <main className="main">
-      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button><div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions"><button className="icon-btn" onClick={()=>action("No new notifications in this prototype.")}><Bell size={18}/></button><select value={role} onChange={e=>setRole(e.target.value)} aria-label="Preview role"><option>Plant Manager</option><option>Operator / Driver</option><option>Workshop Mechanic</option><option>Inspector</option><option>Director / Administrator</option></select><div className="avatar">JT</div></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button><div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions"><button className="icon-btn" onClick={()=>action("No new notifications in this prototype.")}><Bell size={18}/></button><div className="avatar">JT</div></div></header>
       <div className="content">
         <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · PLANT MANAGEMENT</div><h1>{title}</h1><p>Wednesday, 11 November 2026 · Central workshop</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> New {page==="Workshop job cards"?"job card":"record"}</button></div>
         {notice&&<div className="notice">{notice}</div>}
@@ -81,3 +81,88 @@ function Calendar({action}:{action:(s:string)=>void}) {const [month,setMonth]=us
 function Checks({action}:{action:(s:string)=>void}) {const items=["Engine oil and coolant","Brakes and steering","Tyres / tracks","Hydraulic hoses and leaks","Lights and warning devices","Safety equipment","General condition"];const [answers,setAnswers]=useState<Record<string,string>>({});return <section className="panel"><div className="panel-head"><div><h3>Operator plant check</h3><p>Example daily inspection form</p></div><Tag tone="blue">Draft</Tag></div><label>Asset<select><option>EX-024 – 20T Excavator</option><option>FL-012 – Forklift</option></select></label>{items.map(i=><div className="check-row" key={i}><b>{i}</b><div><button className={answers[i]==="Pass"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"Pass"})}>Pass</button><button className={answers[i]==="Fail"?"choice fail selected": "choice fail"} onClick={()=>setAnswers({...answers,[i]:"Fail"})}>Fail</button><button className={answers[i]==="N/A"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"N/A"})}>N/A</button></div></div>)}<label>Comments<textarea placeholder="Record observations or defects..."/></label><button className="primary" onClick={()=>action("Demo form only. Live authenticated submission and defect escalation require backend setup.")}>Submit check for sign-off</button></section>}
 function UsersPanel({action}:{action:(s:string)=>void}) {return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Proposed role structure</p></div><Tag tone="blue">Access control</Tag></div>{["Plant Manager","Operator / Driver","Workshop Mechanic","Inspector","Director / Administrator"].map((r,i)=><div className="attention" key={r}><div className="avatar">{r.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{r}</b><small>{["Fleet, schedules, jobs and approvals","Assigned plant checks and defects","Assigned jobs, labour and parts","Assigned examinations and reports","Read-only oversight and management reports"][i]}</small></div><Tag>Role</Tag></div>)}<button className="primary" onClick={()=>action("User administration will be activated with Supabase Auth and role policies.")}><Plus size={16}/> Add user</button></section>}
 function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
+
+
+function getSupabase(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+export default function Home() {
+  const [supabase] = useState<SupabaseClient | null>(() => getSupabase());
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [sessionReady, setSessionReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [roleName, setRoleName] = useState("");
+
+  useEffect(() => {
+    if (!supabase) { setSessionReady(true); return; }
+    let alive = true;
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!alive) return;
+      if (data.session) await loadProfile(data.session.user.id);
+      else setSessionReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return;
+      if (session) {
+        // Defer profile query to avoid running Supabase calls inside the auth callback.
+        window.setTimeout(() => { if (alive) loadProfile(session.user.id); }, 0);
+      } else {
+        setSignedIn(false); setDisplayName(""); setRoleName(""); setSessionReady(true);
+      }
+    });
+    return () => { alive = false; listener.subscription.unsubscribe(); };
+  }, [supabase]);
+
+  async function loadProfile(userId: string) {
+    if (!supabase) return;
+    const { data, error: profileError } = await supabase
+      .from("profiles").select("full_name, role, active").eq("id", userId).single();
+    if (profileError || !data || !data.active) {
+      await supabase.auth.signOut();
+      setError("Your login is not linked to an active PlantTrack profile. Please contact the Plant Manager.");
+      setSessionReady(true);
+      return;
+    }
+    setDisplayName(data.full_name);
+    setRoleName(String(data.role).replaceAll("_", " "));
+    setSignedIn(true);
+    setSessionReady(true);
+  }
+
+  async function signIn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true); setError("");
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (signInError) setError("Sign-in failed. Check your email and password, then try again.");
+    setBusy(false);
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+  }
+
+  if (!supabase) return <div className="auth-screen"><div className="auth-card"><img src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd" /><h1>PlantTrack</h1><p>Supabase connection settings are missing. Add the project URL and publishable key in Vercel Environment Variables, then redeploy.</p></div></div>;
+  if (!sessionReady) return <div className="auth-screen"><div className="auth-card"><p>Checking your secure PlantTrack session…</p></div></div>;
+  if (!signedIn) return <main className="auth-screen"><form className="auth-card" onSubmit={signIn}>
+    <img src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd logo" />
+    <div className="auth-eyebrow">JT UTILITIES LTD</div><h1>PlantTrack</h1>
+    <p>Sign in to your plant management workspace.</p>
+    <label htmlFor="planttrack-email">Company email</label>
+    <input id="planttrack-email" type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)} />
+    <label htmlFor="planttrack-password">Password</label>
+    <input id="planttrack-password" type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} />
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <button className="primary auth-submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    <small>Access is provided through your individual JT Utilities account.</small>
+  </form></main>;
+  return <><div className="signed-in-strip"><span>Signed in: <b>{displayName}</b> · {roleName}</span><button onClick={signOut}>Sign out</button></div><Dashboard /></>;
+}
