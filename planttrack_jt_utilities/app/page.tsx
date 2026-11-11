@@ -39,22 +39,31 @@ function Dashboard({supabase}:{supabase:SupabaseClient}) {
   const [notice,setNotice]=useState("");
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
+
     async function loadAssets() {
       setAssetsLoading(true);
       setAssetsError("");
-      const { data, error } = await supabase
-        .from("assets")
-        .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status")
-        .order("asset_code", { ascending: true });
-      if (!active) return;
-      if (error) {
-        setAssetsError(`Could not load assets: ${error.message}`);
-        setAssets([]);
-      } else {
+      try {
+        // Confirm the authenticated session before requesting protected asset rows.
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!sessionData.session) {
+          throw new Error("Your session has expired. Please sign out and sign in again.");
+        }
+
+        const { data, error } = await supabase
+          .from("assets")
+          .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status")
+          .order("asset_code", { ascending: true })
+          .limit(1000);
+
+        if (error) throw error;
+        if (cancelled) return;
+
         const mapped = ((data || []) as DbAsset[]).map((item) => ({
           id: item.asset_code,
-          name: item.description,
+          name: item.description || [item.manufacturer, item.model].filter(Boolean).join(" ") || "Description not recorded",
           category: item.category || "Uncategorised",
           location: item.location || "Not recorded",
           hours: item.hour_meter == null ? "—" : String(item.hour_meter),
@@ -63,11 +72,19 @@ function Dashboard({supabase}:{supabase:SupabaseClient}) {
           service: "Not recorded"
         }));
         setAssets(mapped);
+      } catch (loadError) {
+        if (!cancelled) {
+          const message = loadError instanceof Error ? loadError.message : String(loadError);
+          setAssetsError(`Could not load assets: ${message}`);
+          setAssets([]);
+        }
+      } finally {
+        if (!cancelled) setAssetsLoading(false);
       }
-      setAssetsLoading(false);
     }
+
     loadAssets();
-    return () => { active = false; };
+    return () => { cancelled = true; };
   }, [supabase]);
   const filtered=useMemo(()=>assets.filter(a=>(a.id+" "+a.name+" "+a.location).toLowerCase().includes(query.toLowerCase()) && (assetFilter==="All"||a.status===assetFilter)),[query,assetFilter]);
   const filteredJobs=jobs.filter(j=>jobStatus==="All"||j.status===jobStatus);
