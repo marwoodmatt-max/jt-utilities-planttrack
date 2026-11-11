@@ -1,6 +1,7 @@
  "use client";
 import { useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import AssetManager from "../components/asset-manager";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -21,7 +22,7 @@ const nav = [
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
-function Dashboard({supabase}:{supabase:SupabaseClient}) {
+function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
   const [page,setPage]=useState("Dashboard");
   const [query,setQuery]=useState("");
   const [assets,setAssets]=useState<Asset[]>([]);
@@ -117,7 +118,7 @@ function Dashboard({supabase}:{supabase:SupabaseClient}) {
           <section className="panel"><div className="panel-head"><div><h3>Workshop activity</h3><p>Live job-card connection has not yet been configured.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">No live job-card records are currently displayed. No sample jobs are shown.</p></section>
           <section className="panel"><div className="panel-head"><div><h3>Inspection and examination information</h3><p>Live inspection records have not yet been connected.</p></div><button className="text-btn" onClick={()=>setPage("LOLER & certificates")}>LOLER register</button></div><p className="muted">No invented due dates or overdue counts are displayed.</p></section>
         </>}
-        {page==="Plant register"&&<section className="panel"><div className="toolbar"><div className="search"><Search size={17}/><input placeholder="Search asset, machine or location..." value={query} onChange={e=>setQuery(e.target.value)}/></div><select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}><option value="All">All categories</option><option value="Vehicle">Vehicles</option><option value="Plant">Plant & Machinery</option><option value="Lifting equipment">Lifting Equipment</option><option value="Trailer">Trailers</option><option value="Agricultural equipment">Agricultural Equipment</option><option value="CAT & Genny calibration equipment">CAT & Genny</option></select><select value={assetFilter} onChange={e=>setAssetFilter(e.target.value)}><option value="All">All</option><option value="Available">Available</option><option value="In use">In use</option><option value="In workshop">In workshop</option><option value="Out of service">Out of service</option><option value="Off hire">Off hire</option></select><button className="secondary" onClick={()=>action("Asset export will be enabled when connected to the live database.")}><Download size={16}/> Export</button></div><AssetTable rows={filtered}/>{assetsLoading&&<p className="muted">Loading assets from the live register…</p>}{assetsError&&<p className="auth-error">{assetsError}</p>}<p className="muted">{assets.length} assets loaded from the live register.</p></section>}
+        {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar action={action}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
@@ -218,5 +219,5 @@ export default function Home() {
     <button className="primary auth-submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
     <small>Access is provided through your individual JT Utilities account.</small>
   </form></main>;
-  return <><div className="signed-in-strip"><span>Signed in: <b>{displayName}</b> · {roleName}</span><button onClick={signOut}>Sign out</button></div><Dashboard supabase={supabase} /></>;
+  return <><div className="signed-in-strip"><span>Signed in: <b>{displayName}</b> · {roleName}</span><button onClick={signOut}>Sign out</button></div><Dashboard supabase={supabase} isAdmin={roleName === "admin"} /></>;
 }
