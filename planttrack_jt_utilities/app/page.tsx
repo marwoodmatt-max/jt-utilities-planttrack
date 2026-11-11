@@ -38,6 +38,37 @@ function Dashboard({supabase}:{supabase:SupabaseClient}) {
   const [jobStatus,setJobStatus]=useState("All");
   const [notice,setNotice]=useState("");
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
+  useEffect(() => {
+    let active = true;
+    async function loadAssets() {
+      setAssetsLoading(true);
+      setAssetsError("");
+      const { data, error } = await supabase
+        .from("assets")
+        .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status")
+        .order("asset_code", { ascending: true });
+      if (!active) return;
+      if (error) {
+        setAssetsError(`Could not load assets: ${error.message}`);
+        setAssets([]);
+      } else {
+        const mapped = ((data || []) as DbAsset[]).map((item) => ({
+          id: item.asset_code,
+          name: item.description,
+          category: item.category || "Uncategorised",
+          location: item.location || "Not recorded",
+          hours: item.hour_meter == null ? "—" : String(item.hour_meter),
+          status: displayStatus(item.status),
+          loler: "Not recorded",
+          service: "Not recorded"
+        }));
+        setAssets(mapped);
+      }
+      setAssetsLoading(false);
+    }
+    loadAssets();
+    return () => { active = false; };
+  }, [supabase]);
   const filtered=useMemo(()=>assets.filter(a=>(a.id+" "+a.name+" "+a.location).toLowerCase().includes(query.toLowerCase()) && (assetFilter==="All"||a.status===assetFilter)),[query,assetFilter]);
   const filteredJobs=jobs.filter(j=>jobStatus==="All"||j.status===jobStatus);
   function action(msg:string){setNotice(msg);setTimeout(()=>setNotice(""),3500)}
