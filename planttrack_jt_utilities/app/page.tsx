@@ -140,7 +140,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [selectedDate,setSelectedDate]=useState("");
-  const today=new Date().toISOString().slice(0,10);
+  const now=new Date();\n  const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const monthLabel=month.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
   useEffect(()=>{
     let cancelled=false;
@@ -204,7 +204,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} className={event.kind==="examined"?"blue-event":event.date<today?"red-event":"amber-event"}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
