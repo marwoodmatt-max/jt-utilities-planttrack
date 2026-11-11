@@ -119,7 +119,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           <section className="panel"><div className="panel-head"><div><h3>Workshop activity</h3><p>Live job-card connection has not yet been configured.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">No live job-card records are currently displayed. No sample jobs are shown.</p></section>
           <section className="panel"><div className="panel-head"><div><h3>Inspection and examination information</h3><p>Live inspection records have not yet been connected.</p></div><button className="text-btn" onClick={()=>setPage("LOLER & certificates")}>LOLER register</button></div><p className="muted">No invented due dates or overdue counts are displayed.</p></section>
         </>}
-        {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin}/>}
+        {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar action={action}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
