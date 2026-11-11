@@ -49,7 +49,7 @@ const statuses = [
   { value: "off_hire", label: "Off hire" }
 ];
 
-export default function AssetManager({ supabase, isAdmin }: { supabase: SupabaseClient; isAdmin: boolean }) {
+export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -75,9 +75,10 @@ export default function AssetManager({ supabase, isAdmin }: { supabase: Supabase
   useEffect(() => { void loadAssets(); }, [supabase]);
 
   const filtered = useMemo(() => rows.filter((a) =>
+    (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase()) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
       .filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
-  ), [rows, search]);
+  ), [rows, search, categoryFilter]);
 
   const categoryOptions = useMemo(
     () => Array.from(new Set([...categories, ...rows.map((r) => r.category || "").filter(Boolean)])).sort(),
