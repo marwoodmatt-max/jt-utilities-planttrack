@@ -29,6 +29,8 @@ type AssetForm = {
   location: string;
   hour_meter: string;
   status: string;
+  loler_next_due: string;
+  loler_examined_at: string;
 };
 
 const emptyForm: AssetForm = {
@@ -56,6 +58,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<AssetForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [lolerRecordId, setLolerRecordId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -92,8 +95,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setError("");
   }
 
-  function startEdit(asset: AssetRow) {
+  async function startEdit(asset: AssetRow) {
     setEditing(asset.id);
+    setLolerRecordId(null);
+    let loler = { next_due: "", examined_at: "" };
+    if ((asset.category || "").toLowerCase() === "lifting equipment") {
+      const { data } = await supabase.from("examinations").select("id,next_due,examined_at").eq("asset_id", asset.id).ilike("examination_type", "%LOLER%").order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (data) { setLolerRecordId(data.id); loler = { next_due: data.next_due || "", examined_at: data.examined_at || "" }; }
+    }
     setForm({
       asset_code: asset.asset_code || "",
       description: asset.description || "",
@@ -104,7 +113,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       registration: asset.registration || "",
       location: asset.location || "",
       hour_meter: asset.hour_meter == null ? "" : String(asset.hour_meter),
-      status: asset.status || "available"
+      status: asset.status || "available",
+      loler_next_due: loler.next_due,
+      loler_examined_at: loler.examined_at
     });
     setMessage("");
     setError("");
@@ -144,6 +155,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     const result = editing === "new"
       ? await supabase.from("assets").insert(payload).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single()
       : await supabase.from("assets").update(payload).eq("id", editing).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single();
+
+    if (!result.error && editing !== "new" && (form.category || "").toLowerCase() === "lifting equipment" && (form.loler_next_due || form.loler_examined_at)) {
+      const examinationPayload = { asset_id: editing, examination_type: "LOLER", examination_scheme: "LOLER", next_due: form.loler_next_due || null, examined_at: form.loler_examined_at || null };
+      const examinationResult = lolerRecordId
+        ? await supabase.from("examinations").update(examinationPayload).eq("id", lolerRecordId)
+        : await supabase.from("examinations").insert(examinationPayload);
+      if (examinationResult.error) result.error = examinationResult.error;
+    }
 
     if (result.error) {
       const duplicate = result.error.code === "23505";
@@ -193,6 +212,10 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
         <label style={labelStyle}>Status<select style={fieldStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{statuses.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+        {(form.category || "").toLowerCase() === "lifting equipment" && editing !== "new" && <>
+          <label style={labelStyle}>LOLER next examination due<input style={fieldStyle} type="date" value={form.loler_next_due} onChange={(e) => setForm({ ...form, loler_next_due: e.target.value })}/></label>
+          <label style={labelStyle}>Actual LOLER examination date<input style={fieldStyle} type="date" value={form.loler_examined_at} onChange={(e) => setForm({ ...form, loler_examined_at: e.target.value })}/></label>
+        </> }
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 12 }}>
         <button type="button" className="secondary" onClick={() => setEditing(null)}>Cancel</button>
