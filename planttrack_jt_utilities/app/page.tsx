@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
+import LolerManager from "../components/loler-manager";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -122,7 +123,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar action={action}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
-        {page==="LOLER & certificates"&&<section className="panel"><div className="panel-head"><div><h3>Examination register</h3><p>Next LOLER Examination dates will appear here when verified examination records are loaded.</p></div></div><AssetTable rows={assets}/></section>}
+        {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
         {page==="Users & sign-offs"&&<UsersPanel action={action}/>}
         {page==="Reports"&&<Reports/>}
