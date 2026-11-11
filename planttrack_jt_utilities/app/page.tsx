@@ -43,7 +43,7 @@ export default function Home() {
   const title=page;
   return <div className="shell">
     <aside className={`sidebar ${mobileNav?"open":""}`}>
-      <div className="brand"><div className="brand-mark">JT</div><div><b>JT UTILITIES LTD</b><small>PLANTTRACK</small></div><button className="close-nav" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
+      <div className="brand"><img className="brand-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd logo" /><div><b>JT UTILITIES LTD</b><small>PLANTTRACK</small></div><button className="close-nav" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
       <div className="nav-caption">WORKSPACE</div>
       {nav.map(([label,Icon])=><button key={label} onClick={()=>{setPage(label);setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span>{label==="Workshop job cards"&&<em>3</em>}</button>)}
       <div className="sidebar-bottom"><div className="online-dot"/> Online workspace <small>v0.1 prototype</small></div>
