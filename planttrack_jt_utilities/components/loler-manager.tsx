@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Pencil, RefreshCw, Save, X } from "lucide-react";
 
+function formatDate(value: string | null) {
+  if (!value) return "Not recorded";
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return `${day} ${month} ${year}`;
+}
+
 type Row = {
   id: string; asset_id: string; examination_type: string; next_due: string | null;
   examined_at: string | null; competent_person: string | null; report_reference: string | null;
@@ -58,7 +64,7 @@ export default function LolerManager({ supabase, isAdmin }: { supabase: Supabase
       <p className="fine">Only enter an examination date, competent person or report reference when verified by the certificate or examination record. Changes are audit logged.</p>
     </form>}
     {loading?<p className="muted">Loading LOLER records…</p>:<div className="table-wrap"><table><thead><tr><th>Asset</th><th>Next examination due</th><th>Examination date</th><th>Competent person</th><th>Report reference</th>{isAdmin&&<th>Action</th>}</tr></thead><tbody>
-      {rows.map(r=>{const a=assetMap.get(r.asset_id);return <tr key={r.id}><td><b>{a?.asset_code||"Asset not found"}</b><small>{a?.description||r.examination_type}</small></td><td>{r.next_due||"Not recorded"}</td><td>{r.examined_at||"Not recorded"}</td><td>{r.competent_person||"Not recorded"}</td><td>{r.report_reference||"Not recorded"}</td>{isAdmin&&<td><button className="secondary" onClick={()=>start(r)}><Pencil size={14}/> Edit</button></td>}</tr>;})}
+      {rows.map(r=>{const a=assetMap.get(r.asset_id);return <tr key={r.id}><td><b>{a?.asset_code||"Asset not found"}</b><small>{a?.description||r.examination_type}</small></td><td>{formatDate(r.next_due)}</td><td>{formatDate(r.examined_at)}</td><td>{r.competent_person||"Not recorded"}</td><td>{r.report_reference||"Not recorded"}</td>{isAdmin&&<td><button className="secondary" onClick={()=>start(r)}><Pencil size={14}/> Edit</button></td>}</tr>;})}
     </tbody></table>{!rows.length&&<p className="empty">No LOLER records found.</p>}</div>}
   </section>;
 }
