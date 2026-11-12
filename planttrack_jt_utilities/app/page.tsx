@@ -225,6 +225,62 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The manual bulk check covers the Vehicle category. The daily 4am UK DVSA schedule is active; its first successful full-fleet run is still awaiting verification. Trailer certificate dates remain separate.</p>
   </section>;
 }
+function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
+ const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
+ const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
+ const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
+ useEffect(()=>{let active=true;(async()=>{
+  const {data:user}=await supabase.auth.getUser();if(!user.user)return;
+  const [j,a,r,e]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.from("planttrack_engineer_directory").select("user_id,display_name")]);
+  if(!active)return;
+  if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
+  setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
+ })();return()=>{active=false};},[supabase,refresh]);
+ const chosen=jobs.find(j=>j.id===selected);
+ const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
+ async function perform(fn:()=>Promise<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ return <section className="panel">
+  <div className="panel-head"><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
+  {notice&&<p role="status">{notice}</p>}
+  {role==="office"&&<div style={{display:"grid",gap:10,marginBottom:22}}>
+   <h3>Raise a job card</h3>
+   <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
+   <label>Job title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Repair, service or inspection"/></label>
+   <label>Work instructions<textarea value={instructions} onChange={e=>setInstructions(e.target.value)}/></label>
+   <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
+   <label>Assign engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>
+   <button className="primary" disabled={busy||!asset||title.trim().length<3||instructions.trim().length<3} onClick={()=>void perform(async()=>{const r=await supabase.rpc("create_workshop_job",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_engineer:engineer||null});if(!r.error){setTitle("");setInstructions("");}return r;},"Job card created")}>Create job card</button>
+  </div>}
+  <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
+  <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}</td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");}}>Open job</button></td></tr>)}
+  </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
+  {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
+   <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
+   <p>{chosen.instructions}</p><p><b>Status:</b> {chosen.status}</p>
+   {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
+   {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
+   {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
+   {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
+   {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
+   {role==="engineer"&&["Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
+    <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
+    <label>Parts used<input value={parts} onChange={e=>setParts(e.target.value)}/></label>
+    <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
+    <label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
+    <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
+   </>}
+   {role==="office"&&chosen.status==="Awaiting office approval"&&<>
+    <label>Office review comments<textarea value={comments} onChange={e=>setComments(e.target.value)}/></label>
+    <label>Office sign-off (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
+    <div style={{display:"flex",gap:8}}>
+     <button className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:true,p_comments:comments,p_signature:signature}),"Office approved and signed")}>Approve and sign</button>
+     <button className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to engineer")}>Return for correction</button>
+    </div>
+   </>}
+  </div>}
+ </section>;
+}
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
   const [page,setPage]=useState("Dashboard");
   const [query,setQuery]=useState("");
@@ -326,12 +382,12 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Projects"&&<Projects supabase={supabase}/>}
-        {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
+        {page==="Workshop job cards"&&<WorkshopJobs supabase={supabase}/>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
-        {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
+        {page==="Maintenance history"&&<WorkshopJobs supabase={supabase}/>}
         {page==="Users & sign-offs"&&<UsersPanel action={action}/>}
         {page==="Reports"&&<Reports/>}
       </div>
