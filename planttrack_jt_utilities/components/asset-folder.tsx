@@ -12,7 +12,7 @@ const types = ["Vehicle documents","MOT certificate","Service record","Inspectio
 const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
 const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
-export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void}) {
+export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onEdit,onDelete,deleting}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void;onEdit:()=>void;onDelete:()=>void;deleting:boolean}) {
   const [docs,setDocs]=useState<Doc[]>([]);
   const [certificates,setCertificates]=useState<JobCertificate[]>([]);
   const [uploadAllowed,setUploadAllowed]=useState(false);
@@ -87,7 +87,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
   const field:React.CSSProperties={padding:"9px 10px",border:"1px solid #d8d8dc",borderRadius:6,background:"#fff",color:"#222",font:"inherit"};
   return <section className="panel">
     <div className="panel-head">
-      <div><button className="secondary" onClick={onBack}><ArrowLeft size={15}/> Back to asset register</button><h2 style={{marginTop:14,display:"flex",alignItems:"center",gap:9}}><FolderOpen color="#c62828"/> {asset.asset_code} – Asset folder</h2><p>{asset.description} · {asset.category||"Uncategorised"}{asset.registration?" · "+asset.registration:""}</p></div>
+      <div><button className="secondary" onClick={onBack}><ArrowLeft size={15}/> Back to asset register</button> {isAdmin&&<><button className="secondary" onClick={onEdit} style={{marginLeft:8}}>Edit asset</button><button className="secondary" onClick={onDelete} disabled={deleting} style={{marginLeft:8,color:"#b91c1c"}}>{deleting?"Deleting…":"Delete asset"}</button></>}<h2 style={{marginTop:14,display:"flex",alignItems:"center",gap:9}}><FolderOpen color="#c62828"/> {asset.asset_code} – Asset folder</h2><p>{asset.description} · {asset.category||"Uncategorised"}{asset.registration?" · "+asset.registration:""}</p></div>
       <button className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCw size={15}/> Refresh</button>
     </div>
     {notice&&<div className="notice" role="status">{notice}</div>}
