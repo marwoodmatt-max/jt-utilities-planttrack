@@ -23,6 +23,45 @@ const nav = [
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
+type PmiItem={asset_code:string;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;status:string};
+function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenCalendar:()=>void}){
+  const [items,setItems]=useState<PmiItem[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let cancelled=false;
+    async function load(){
+      const {data,error}=await supabase.from("assets")
+        .select("asset_code,description,pmi_last_completed,pmi_next_due,status")
+        .not("pmi_next_due","is",null)
+        .order("pmi_next_due",{ascending:true}).limit(100);
+      if(cancelled)return;
+      if(error)setError(error.message);else setItems((data||[]) as PmiItem[]);
+      setLoading(false);
+    }
+    void load();
+    return()=>{cancelled=true;};
+  },[supabase]);
+  const now=new Date();
+  const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+  const soon=new Date(today+"T00:00:00Z");soon.setUTCDate(soon.getUTCDate()+14);
+  const cutoff=soon.toISOString().slice(0,10);
+  const overdue=items.filter(x=>x.pmi_next_due!<today);
+  const upcoming=items.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
+  const fmt=(d:string|null)=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"Not recorded";
+  return <section className="panel" style={{marginTop:18}}>
+    <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open inspection calendar</button></div>
+    <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
+      <div className="stat"><div className="stat-top"><span>Overdue PMI</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue.length}</strong></div>
+      <div className="stat"><div className="stat-top"><span>Due within 14 days</span><CalendarDays size={18}/></div><strong>{loading?"…":upcoming.length}</strong></div>
+      <div className="stat"><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":items.length}</strong></div>
+    </div>
+    {error&&<p className="auth-error" role="alert">Could not load PMI inspections: {error}</p>}
+    {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
+      {[...overdue,...upcoming].map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
+    </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
+  </section>;
+}
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
   const [page,setPage]=useState("Dashboard");
   const [query,setQuery]=useState("");
@@ -118,6 +157,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
+          <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Inspection calendar")}/>
           <Calendar supabase={supabase}/>
           <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
         </>}
