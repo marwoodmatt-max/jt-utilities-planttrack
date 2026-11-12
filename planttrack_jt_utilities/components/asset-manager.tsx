@@ -61,6 +61,18 @@ const statuses = [
   { value: "off_hire", label: "Off hire" }
 ];
 
+const hgvStatuses = [
+  { value: "available", label: "Active" },
+  { value: "out_of_service", label: "VOR" }
+];
+
+function statusLabel(asset: AssetRow) {
+  if ((asset.category || "").toLowerCase() === "hgv") {
+    return asset.status === "out_of_service" ? "VOR" : "Active";
+  }
+  return statuses.find((s) => s.value === asset.status)?.label || asset.status;
+}
+
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
@@ -263,7 +275,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Registration<input style={fieldStyle} value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })}/></label>
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
-        <label style={labelStyle}>Status<select style={fieldStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{statuses.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+        <label style={labelStyle}>Status<select style={fieldStyle} value={(form.category || "").toLowerCase() === "hgv" && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{((form.category || "").toLowerCase() === "hgv" ? hgvStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
         {(form.category || "").trim().toLowerCase() === "lifting equipment" && editing !== "new" && <>
           <label style={labelStyle}>LOLER next examination due<input style={fieldStyle} type="date" value={form.loler_next_due} onChange={(e) => setForm({ ...form, loler_next_due: e.target.value })}/></label>
           <label style={labelStyle}>Actual LOLER examination date<input style={fieldStyle} type="date" value={form.loler_examined_at} onChange={(e) => setForm({ ...form, loler_examined_at: e.target.value })}/></label>
@@ -287,7 +299,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
-        <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : a.status === "available" ? "tag green" : a.status === "out_of_service" ? "tag red" : a.status === "in_workshop" ? "tag amber" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
+        <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : a.status === "available" ? "tag green" : a.status === "out_of_service" ? "tag red" : a.status === "in_workshop" ? "tag amber" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statusLabel(a)}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
       </tr>)}</tbody></table>
       {!filtered.length && <p className="empty">No matching assets.</p>}
