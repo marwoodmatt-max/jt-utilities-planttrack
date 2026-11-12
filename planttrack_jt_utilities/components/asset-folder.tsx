@@ -67,6 +67,18 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
 
+  async function replaceDummyCertificate(cert:JobCertificate,file?:File){
+    if(!file)return;
+    if(asset.asset_code!=="TEST-LOLER-001"||cert.certificate_number!=="JT-LOLER-000001"){setError("Replacement is restricted to the dummy certificate.");return;}
+    if(!file.name.toLowerCase().endsWith(".pdf")||file.size>25*1024*1024){setError("Select a PDF smaller than 25 MB.");return;}
+    if(!window.confirm("Replace the previously filed dummy certificate with this PDF? The previous test PDF will be overwritten."))return;
+    setBusy(true);setError("");setNotice("");
+    const result=await supabase.storage.from("planttrack-job-certificates").update(cert.approved_pdf_path,file,{contentType:"application/pdf",upsert:true,cacheControl:"0"});
+    if(result.error)setError("Could not replace dummy certificate: "+result.error.message);
+    else setNotice("Updated test PDF saved against "+asset.asset_code+". Click Open PDF to check it.");
+    setBusy(false);
+  }
+
   async function openCertificate(cert:JobCertificate) {
     const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(cert.approved_pdf_path,300);
     if(err||!data?.signedUrl){setError("Could not open generated certificate: "+(err?.message||"No secure link returned."));return;}
@@ -103,7 +115,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
       {busy&&<p className="muted">Working…</p>}
     </div>}
     <h3>Generated job certificates ({certificates.length})</h3>
-    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
+    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button>{asset.asset_code==="TEST-LOLER-001"&&cert.certificate_number==="JT-LOLER-000001"&&<label style={{display:"inline-block",marginLeft:8,fontSize:12}}>Replace dummy PDF <input type="file" accept=".pdf,application/pdf" disabled={busy} onChange={e=>{void replaceDummyCertificate(cert,e.target.files?.[0]);e.currentTarget.value="";}}/></label>}</td></tr>)}</tbody></table></div>}
     <h3>Saved documents ({docs.length})</h3>
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
