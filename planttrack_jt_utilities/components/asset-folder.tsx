@@ -12,6 +12,7 @@ const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:
 
 export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void}) {
   const [docs,setDocs]=useState<Doc[]>([]);
+  const [uploadAllowed,setUploadAllowed]=useState(false);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
@@ -27,7 +28,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     else setDocs((data||[]) as Doc[]);
     setLoading(false);
   }
-  useEffect(()=>{void load();},[asset.id]);
+  useEffect(()=>{\n    void load();\n    void (async()=>{const {data}=await supabase.auth.getUser();if(data.user){const {data:profile}=await supabase.from("profiles").select("role,active").eq("id",data.user.id).maybeSingle();setUploadAllowed(!!profile?.active && ["admin","plant_manager","mechanic","inspector"].includes(profile.role));}})();\n  },[asset.id]);
 
   async function upload(file?:File) {
     if(!file) return;
@@ -76,7 +77,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     </div>
     {notice&&<div className="notice" role="status">{notice}</div>}
     {error&&<div className="auth-error" role="alert">{error}</div>}
-    {canUpload&&<div style={{padding:16,border:"1px dashed #c9c9ce",borderRadius:8,marginBottom:18,background:"#fafafa"}}>
+    {canUpload&&uploadAllowed&&<div style={{padding:16,border:"1px dashed #c9c9ce",borderRadius:8,marginBottom:18,background:"#fafafa"}}>
       <h3 style={{marginTop:0}}>Upload a PDF document</h3>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
         <label style={{fontSize:12,fontWeight:700}}>Document type<select style={{...field,width:"100%",marginTop:6}} value={docType} onChange={e=>setDocType(e.target.value)}>{types.map(t=><option key={t}>{t}</option>)}</select></label>
