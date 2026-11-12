@@ -84,6 +84,8 @@ function statusLabel(asset: AssetRow) {
 
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [showFleetImport,setShowFleetImport]=useState(false);
+  const [bulkUploading,setBulkUploading]=useState(false);
+  const [bulkFeedback,setBulkFeedback]=useState("");
   const [importing,setImporting]=useState(false);
   const [importFeedback,setImportFeedback]=useState("");
   const [includeCalculatedPmi,setIncludeCalculatedPmi]=useState(false);
@@ -262,6 +264,39 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setSaving(false);
   }
 
+  async function bulkUploadFleetFiles(files:FileList|null){
+    if(!files || !isAdmin || bulkUploading) return;
+    setBulkUploading(true);setBulkFeedback("");
+    const {data:authData,error:authError}=await supabase.auth.getUser();
+    if(authError || !authData.user){setBulkFeedback("Please sign in again as Admin.");setBulkUploading(false);return;}
+    const outcomes:string[]=[];
+    let uploaded=0,skipped=0,failed=0;
+    for(const file of Array.from(files)){
+      const path=(file.webkitRelativePath||file.name).replace(/\\/g,"/").toUpperCase();
+      if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;continue;}
+      // Files in the review folder contain conflicting C545766/C545776 identifiers.
+      // Do not automatically attach disputed records to a vehicle.
+      if(path.includes("C545776") || path.includes("REVIEW_C545776")){skipped++;continue;}
+      const code=path.includes("R500_JTU")?"R500 JTU":path.includes("WP63_PFD")?"WP63 PFD":null;
+      if(!code){skipped++;continue;}
+      // The crane LOLER belongs to a lifting-equipment asset, not to the lorry.
+      if(file.name.toUpperCase().includes("LOLER")){skipped++;continue;}
+      const asset=rows.find(r=>r.asset_code.toUpperCase()===code);
+      if(!asset){failed++;outcomes.push(code+" not found");continue;}
+      const {data:existing,error:existingError}=await supabase.from("asset_documents").select("id").eq("asset_id",asset.id).eq("file_name",file.name).limit(1);
+      if(existingError){failed++;outcomes.push(file.name+": "+existingError.message);continue;}
+      if(existing?.length){skipped++;continue;}
+      const storagePath=asset.id+"/"+crypto.randomUUID()+"/"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+      const {error:storageError}=await supabase.storage.from("asset-documents").upload(storagePath,file,{contentType:"application/pdf",upsert:false});
+      if(storageError){failed++;outcomes.push(file.name+": "+storageError.message);continue;}
+      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:"Vehicle documents",description:"Bulk import · source PDF",uploaded_by:authData.user.id});
+      if(rowError){await supabase.storage.from("asset-documents").remove([storagePath]);failed++;outcomes.push(file.name+": "+rowError.message);}
+      else uploaded++;
+    }
+    setBulkFeedback(uploaded+" uploaded · "+skipped+" skipped (duplicates, disputed trailer records or unsupported files) · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,4).join("; "):""));
+    setBulkUploading(false);
+  }
+
   // Import is deliberately executed by the signed-in Admin in the app, not by a service account.
   // The existing database audit trigger therefore records the real authenticated actor.
   async function importFleetDates(){
@@ -271,14 +306,15 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     if(authError || !authData.user){setImportFeedback("Sign in again as Admin before importing.");setImporting(false);return;}
     const imports: Array<{code:string;values:Record<string,string>;calculated:string}>=[
       {code:"R500 JTU",values:{pmi_last_completed:"2026-07-16",tacho_calibration_due:"2028-08-03"},calculated:"2026-08-27"},
-      {code:"WP63 PFD",values:{pmi_last_completed:"2026-10-02",mot_due:"2027-10-31",tacho_calibration_due:"2028-08-17"},calculated:"2026-11-13"}
+      {code:"WP63 PFD",values:{pmi_last_completed:"2026-10-02",mot_due:"2027-10-31",tacho_calibration_due:"2028-08-17"},calculated:"2026-11-13"},
+      {code:"C545766",values:{mot_due:"2026-10-31"},calculated:""}
     ];
     const outcomes:string[]=[];
     for(const item of imports){
       const matching=rows.filter(r=>r.asset_code.toUpperCase()===item.code && (r.category||"").toLowerCase()==="hgv");
       if(matching.length!==1){outcomes.push(item.code+": skipped (expected exactly one HGV record)");continue;}
       const payload:Record<string,string>={...item.values};
-      if(includeCalculatedPmi)payload.pmi_next_due=item.calculated;
+      if(includeCalculatedPmi && item.calculated)payload.pmi_next_due=item.calculated;
       const {error:writeError}=await supabase.from("assets").update(payload).eq("id",matching[0].id).eq("category","HGV");
       outcomes.push(item.code+": "+(writeError?"NOT SAVED — "+writeError.message:"saved"));
     }
@@ -304,6 +340,15 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       </div>
     </div>
 
+    {isAdmin && <div style={{marginBottom:16,padding:16,border:"1px solid #cbd5e1",borderRadius:12,background:"#f8fafc"}}>
+      <h3 style={{marginTop:0}}>Bulk PDF upload · Existing PlantTrack folders</h3>
+      <p className="muted">Unzip the fleet compliance pack, then select its extracted parent folder. PDFs in HGV/R500_JTU and HGV/WP63_PFD are matched to the existing asset folders. Disputed trailer files and crane LOLER are deliberately held for review.</p>
+      <label style={{display:"block",fontWeight:700,fontSize:13}}>Choose extracted fleet folder
+        <input type="file" accept=".pdf,application/pdf" multiple {...({webkitdirectory:"",directory:""} as any)} disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
+      </label>
+      {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
+      {bulkFeedback&&<p role="status">{bulkFeedback}</p>}
+    </div>}
     {isAdmin && <div style={{marginBottom:16}}>
       <button type="button" className="primary" onClick={()=>setShowFleetImport(v=>!v)}>{showFleetImport?"Close fleet import":"Review fleet dates for import"}</button>
       {showFleetImport && <div style={{marginTop:12,padding:20,border:"1px solid #cbd5e1",borderRadius:14,background:"#f8fafc"}}>
@@ -312,8 +357,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <div className="table-wrap"><table><thead><tr><th>HGV</th><th>Last PMI</th><th>MOT expiry</th><th>Tacho due</th><th>Calculated next PMI (optional)</th></tr></thead><tbody>
           <tr><td><b>R500 JTU</b></td><td>16 Jul 2026</td><td>Not supplied</td><td>3 Aug 2028</td><td>27 Aug 2026 · overdue if no later PMI</td></tr>
           <tr><td><b>WP63 PFD</b></td><td>2 Oct 2026</td><td>31 Oct 2027</td><td>17 Aug 2028</td><td>13 Nov 2026 · schedule needs verification</td></tr>
+          <tr><td><b>C545766 · trailer</b></td><td>Not confirmed</td><td>31 Oct 2026 · expired</td><td>Not applicable</td><td>Not confirmed · disputed inspection ID</td></tr>
         </tbody></table></div>
-        <p className="muted" style={{marginTop:10}}>Trailer C545766/C545776 is excluded pending identifier verification. No VOR status or return-to-service authorisation will be changed.</p>
+        <p className="muted" style={{marginTop:10}}>C545766 MOT expiry can be imported; its disputed inspection dates and PDF records remain held for review. No VOR status or return-to-service authorisation will be changed.</p>
         <label style={{display:"block",marginTop:12}}><input type="checkbox" checked={includeCalculatedPmi} onChange={e=>setIncludeCalculatedPmi(e.target.checked)}/> Also import the calculated 42-day next PMI dates (only after checking the actual planned schedule)</label>
         <label style={{display:"block",marginTop:10}}><input type="checkbox" checked={importConfirmed} onChange={e=>setImportConfirmed(e.target.checked)}/> I have reviewed the source dates and authorise saving these values to the live register.</label>
         <button type="button" className="primary" style={{marginTop:14}} disabled={!importConfirmed||importing||loading} onClick={()=>void importFleetDates()}>{importing?"Saving dates…":"Approve and import to PlantTrack"}</button>
