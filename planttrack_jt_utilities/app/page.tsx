@@ -269,6 +269,35 @@ function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"cha
   <p style={{fontSize:12}}>Examiner signature and date are recorded separately when the engineer submits this job card.</p>
  </div>;
 }
+function createJobCertificatePdf(job:any,assetLabel:string):Blob{
+ const lines:string[]=[];
+ const add=(label:string,value:unknown)=>{lines.push(label);String(value??"Not recorded").split("\\n").forEach(v=>{const words=v.replace(/[^\\x20-\\x7E]/g,"-").split(/\\s+/);let line="";for(const word of words){if((line+" "+word).length>88){lines.push("  "+line);line=word;}else line=line?line+" "+word:word;}lines.push("  "+line);});lines.push("");};
+ lines.push("JT UTILITIES LTD","APPROVED JOB CARD / EXAMINATION RECORD",""); 
+ add("Certificate / job reference",job.certificate_number||job.id);
+ add("Asset",assetLabel);add("Job type",job.job_type);add("Work order",job.title);add("Instructions",job.instructions);
+ for(const [key,value] of Object.entries(job.job_details||{}))add(key,value);
+ for(const [key,value] of Object.entries(job.completion_checklist||{}))add(key,value);
+ add("Work completed",job.engineer_work);add("Parts used",job.engineer_parts);add("Hours",job.engineer_hours);
+ add("Examiner / engineer sign-off",job.engineer_signature);add("Examiner signed at",job.engineer_signed_at);
+ add("Office review comments",job.office_comments);add("Office approval",job.office_signature);add("Office approved at",job.office_signed_at);
+ if(job.job_type==="LOLER chains & accessories"){lines.push("FAULT CODE REFERENCE","Immediate - Danger to persons: REMOVE FROM SERVICE","A - Dangerous or potentially dangerous defects: action required","B - Deteriorating components requiring attention","C - Condition observations and recommendations","");}
+ if(job.job_type==="LOLER thorough examination"){lines.push("Lifting Operations and Lifting Equipment Regulations 1998","Provision and Use of Work Equipment Regulations 1998","");}
+ lines.push("Record of engineer and office approvals. Review against the original","statutory examination template before using as a formal certificate.");
+ const chunks:string[][]=[];for(let i=0;i<lines.length;i+=55)chunks.push(lines.slice(i,i+55));
+ const objects:string[]=[];const push=(v:string)=>{objects.push(v);return objects.length;};
+ const font=push("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
+ const pages=push("");
+ const pageIds:number[]=[];
+ for(const chunk of chunks){const stream="BT /F1 9 Tf 40 795 Td 12 TL "+chunk.map((line,i)=>(i?"T* ":"")+"("+line.replace(/\\/g,"\\\\").replace(/\\(/g,"\\(").replace(/\\)/g,"\\)")+") Tj").join(" ")+" ET";
+  const content=push("<< /Length "+stream.length+" >>\\nstream\\n"+stream+"\\nendstream");
+  pageIds.push(push("<< /Type /Page /Parent "+pages+" 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 "+font+" 0 R >> >> /Contents "+content+" 0 R >>"));
+ }
+ objects[pages-1]="<< /Type /Pages /Count "+pageIds.length+" /Kids ["+pageIds.map(id=>id+" 0 R").join(" ")+"] >>";
+ const catalog=push("<< /Type /Catalog /Pages "+pages+" 0 R >>");
+ let output="%PDF-1.4\\n";const offsets=[0];objects.forEach((o,i)=>{offsets.push(output.length);output+=(i+1)+" 0 obj\\n"+o+"\\nendobj\\n";});
+ const start=output.length;output+="xref\\n0 "+(objects.length+1)+"\\n0000000000 65535 f \\n"+offsets.slice(1).map(n=>String(n).padStart(10,"0")+" 00000 n \\n").join("")+"trailer\\n<< /Size "+(objects.length+1)+" /Root "+catalog+" 0 R >>\\nstartxref\\n"+start+"\\n%%EOF";
+ return new Blob([output],{type:"application/pdf"});
+}
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
@@ -292,6 +321,32 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  })();return()=>{active=false};},[supabase,refresh]);
  const chosen=jobs.find(j=>j.id===selected);
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
+ async function archiveApprovedPdf(job:any){
+  const path=job.asset_id+"/"+job.id+".pdf";
+  const pdf=createJobCertificatePdf(job,assetName(job.asset_id));
+  const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
+  if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
+  const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
+  if(attached.error)throw attached.error;
+ }
+ async function approveAndArchive(job:any){
+  setBusy(true);setNotice("");
+  try{
+   const result=await supabase.rpc("review_workshop_job",{p_job:job.id,p_approve:true,p_comments:comments,p_signature:signature});
+   if(result.error)throw result.error;
+   const updated={...job,status:"Approved",office_comments:comments,office_signature:signature,office_signed_at:new Date().toISOString()};
+   const {data:approved,error}=await supabase.from("workshop_job_cards").select("*").eq("id",job.id).single();
+   if(error)throw error;
+   await archiveApprovedPdf(approved||updated);
+   setNotice("Office signed; PDF generated and saved against the asset.");
+  }catch(e){setNotice("Approval or PDF filing needs attention: "+(e instanceof Error?e.message:String(e))+". If approved, use Retry PDF filing.");}
+  finally{setBusy(false);setRefresh(n=>n+1);}
+ }
+ async function viewArchivedPdf(path:string){
+  const {data,error}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(path,120);
+  if(error||!data?.signedUrl){setNotice(error?.message||"Could not open PDF");return;}
+  window.open(data.signedUrl,"_blank","noopener,noreferrer");
+ }
  async function perform(fn:()=>PromiseLike<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
  return <section className="panel">
   <div className="panel-head"><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
@@ -322,6 +377,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
+   {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>View signed PDF in asset record</button>}
+   {role==="office"&&chosen.status==="Approved"&&!chosen.approved_pdf_path&&<button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"PDF saved against asset")}>Retry PDF filing</button>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
    {role==="engineer"&&["Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
@@ -337,7 +394,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <label>Office review comments<textarea value={comments} onChange={e=>setComments(e.target.value)}/></label>
     <label>Office sign-off (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
     <div style={{display:"flex",gap:8}}>
-     <button className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:true,p_comments:comments,p_signature:signature}),"Office approved and signed")}>Approve and sign</button>
+     <button className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void approveAndArchive(chosen)}>Approve and sign</button>
      <button className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to engineer")}>Return for correction</button>
     </div>
    </>}
