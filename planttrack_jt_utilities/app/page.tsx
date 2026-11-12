@@ -16,7 +16,7 @@ function displayStatus(status:string) {
   return labels[status] || status;
 }
 const nav = [
-  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Inspection calendar",CalendarDays],
+  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Inspection calendar",CalendarDays],["Vehicle servicing",Wrench],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
   ["Workshop job cards",Wrench],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
@@ -122,6 +122,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
+        {page==="Vehicle servicing"&&<section className="panel"><div className="panel-head"><div><h3>Vehicle servicing</h3><p>Service records for company vehicles</p></div><Tag tone="blue">Planned feature</Tag></div><p className="muted">This section is ready to be developed for recording service dates, mileage at service, work carried out, invoices or documents, and the next service due. No service records are being stored yet.</p><div className="attention"><div className="avatar"><Wrench size={18}/></div><div><b>Vehicle service history</b><small>We will add the service-record form and history here in the next stage.</small></div></div></section>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
