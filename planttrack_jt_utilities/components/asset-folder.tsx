@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateApprovedJobPdf } from "../lib/loler-pdf";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
@@ -68,23 +67,6 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
 
-  async function refreshDummyCertificate(cert:JobCertificate){
-    if(asset.asset_code!=="TEST-LOLER-001"||cert.certificate_number!=="JT-LOLER-000001"){setError("Regeneration is restricted to the dummy certificate.");return;}
-    if(!window.confirm("TEST ONLY: regenerate the statutory LOLER certificate and replace the old test PDF in this asset folder?"))return;
-    setBusy(true);setError("");setNotice("");
-    try{
-      const {data:job,error:jobError}=await supabase.from("workshop_job_cards").select("*").eq("id",cert.id).single();
-      if(jobError||!job)throw jobError||new Error("Test job not found.");
-      if(job.asset_id!==asset.id||job.certificate_number!=="JT-LOLER-000001"||job.status!=="Approved"||job.job_type!=="LOLER thorough examination")throw new Error("The job does not match the approved dummy LOLER test.");
-      const pdf=await generateApprovedJobPdf(job,asset.asset_code+" - "+asset.description,true);
-      const result=await supabase.storage.from("planttrack-job-certificates").update(cert.approved_pdf_path,pdf,{contentType:"application/pdf",upsert:true,cacheControl:"0"});
-      if(result.error)throw result.error;
-      setNotice("The current TEST ONLY LOLER certificate has replaced the old PDF. Open PDF to verify the saved copy.");
-      await load();
-    }catch(e){setError("Could not update test certificate: "+(e instanceof Error?e.message:String(e)));}
-    finally{setBusy(false);}
-  }
-
   async function openCertificate(cert:JobCertificate) {
     const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(cert.approved_pdf_path,300);
     if(err||!data?.signedUrl){setError("Could not open generated certificate: "+(err?.message||"No secure link returned."));return;}
@@ -121,7 +103,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
       {busy&&<p className="muted">Working…</p>}
     </div>}
     <h3>Generated job certificates ({certificates.length})</h3>
-    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button>{asset.asset_code==="TEST-LOLER-001"&&cert.certificate_number==="JT-LOLER-000001"&&<button className="secondary" style={{marginLeft:8}} disabled={busy} onClick={()=>void refreshDummyCertificate(cert)}><RefreshCw size={14}/> Regenerate test certificate</button>}</td></tr>)}</tbody></table></div>}
+    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
     <h3>Saved documents ({docs.length})</h3>
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
