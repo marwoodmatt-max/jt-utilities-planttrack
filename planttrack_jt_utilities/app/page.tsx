@@ -373,6 +373,18 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  return <section className="panel workshop-job-panel">
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
+  <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
+  {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
+    {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:jobs.map(j=><article className="workshop-mobile-job" key={j.id}>
+      <div className="workshop-mobile-job-top"><span className="tag">{j.priority||"Normal"} priority</span><span className="tag blue">{j.status}</span></div>
+      <h4>{j.title}</h4><p className="workshop-mobile-asset">{assetName(j.asset_id)}</p>
+      <p className="muted">{j.job_type||"General repair"}{j.job_card_number?" · "+j.job_card_number:""}{j.certificate_number?" · "+j.certificate_number:""}</p>
+      <button className="primary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button>
+    </article>)}
+  </div>}
+  <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
+  </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
@@ -387,18 +399,6 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
    <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");}return r;},"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
   </div></>}
-  <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
-  {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
-    {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:jobs.map(j=><article className="workshop-mobile-job" key={j.id}>
-      <div className="workshop-mobile-job-top"><span className="tag">{j.priority||"Normal"} priority</span><span className="tag blue">{j.status}</span></div>
-      <h4>{j.title}</h4><p className="workshop-mobile-asset">{assetName(j.asset_id)}</p>
-      <p className="muted">{j.job_type||"General repair"}{j.job_card_number?" · "+j.job_card_number:""}{j.certificate_number?" · "+j.certificate_number:""}</p>
-      <button className="primary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button>
-    </article>)}
-  </div>}
-  <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
-  </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {chosen&&<div className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p>{chosen.certificate_number&&<p><b>Certificate number:</b> {chosen.certificate_number}</p>}<p>{chosen.instructions}</p>
