@@ -436,6 +436,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
 }
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
   const [page,setPage]=useState("Dashboard");
+  useEffect(()=>{if(window.matchMedia("(max-width: 700px)").matches)setPage("Workshop job cards");},[]);
   const [query,setQuery]=useState("");
   const [assets,setAssets]=useState<Asset[]>([]);
   const [assetsLoading,setAssetsLoading]=useState(true);
@@ -538,7 +539,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></>}
+        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></div></>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
