@@ -96,3 +96,21 @@ td small{color:#7c899a}
 @media(max-width:1000px){.content{padding:23px}}
 @media(max-width:700px){.content{padding:16px 13px 32px}.panel{padding:16px;border-radius:13px}.stat{padding:14px;border-radius:12px}.topbar{backdrop-filter:none}.panel-head{align-items:flex-start}.page-head{flex-wrap:wrap}.table-wrap{margin:0 -2px}.primary,.secondary{min-height:40px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition-duration:.01ms!important;animation-duration:.01ms!important;transform:none!important}}
+
+
+/* Workshop Mobile V1: engineer job cards */
+.workshop-mobile-jobs{display:none}
+@media(max-width:700px){
+ .workshop-mobile-jobs{display:grid;gap:12px;margin:12px 0 18px}
+ .workshop-desktop-jobs{display:none}
+ .workshop-mobile-job{background:#fff;border:1px solid #e1e7f0;border-radius:15px;padding:17px;box-shadow:0 5px 18px rgba(25,35,51,.05)}
+ .workshop-mobile-job-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+ .workshop-mobile-job h4{font-size:17px;margin:13px 0 5px;line-height:1.35}
+ .workshop-mobile-asset{font-size:13px;font-weight:700;margin:0 0 7px;color:#35445a}
+ .workshop-mobile-job .primary{width:100%;margin-top:14px;min-height:48px;font-size:14px}
+ .signed-in-strip{left:10px;right:10px;bottom:10px;justify-content:space-between;max-width:none}
+ .content{padding-bottom:90px}
+ .calendar-grid{gap:3px}
+ .calendar-grid>div,.calendar-grid>button{min-width:0}
+ .calendar-grid>button small{overflow-wrap:anywhere}
+}
