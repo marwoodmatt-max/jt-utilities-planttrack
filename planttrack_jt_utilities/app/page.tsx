@@ -763,8 +763,6 @@ function Projects({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) 
       ?'Remove project "'+project.project_name+'"? Its allocated equipment will be released and the project archived. Allocation history will be retained.'
       :'Remove project "'+project.project_name+'"? Projects with previous allocations will be archived to retain history; empty projects will be permanently deleted.';
     if(!window.confirm(message))return;
-    const typed=window.prompt('Type the project name to confirm:');
-    if(typed!==project.project_name){setError("Project removal cancelled: name did not match.");return;}
     setRemovingProject(project.id);setError("");setNotice("");
     const {data,error:removeError}=await supabase.rpc("remove_project_safely",{p_project:project.id});
     if(removeError)setError("Project could not be removed: "+removeError.message);
