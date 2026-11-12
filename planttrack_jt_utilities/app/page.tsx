@@ -542,6 +542,27 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
 type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"; assetCode:string; description:string };
+const calendarCategory=(event:CalendarEvent):"loler"|"mot"|"pmi"|"tacho"=>{
+  if(event.kind==="reminder"||/\bMOT\b/i.test(event.description))return "mot";
+  if(/\bPMI\b/i.test(event.description)||event.kind==="planned")return "pmi";
+  if(/tacho/i.test(event.description))return "tacho";
+  return "loler";
+};
+const calendarStyle=(event:CalendarEvent)=>{
+  const palette={
+    loler:{background:"#e8f1ff",color:"#1d4ed8",border:"#a9c8ff"},
+    mot:{background:"#fff0f1",color:"#b42335",border:"#f5b5bd"},
+    pmi:{background:"#e8f7ee",color:"#18733e",border:"#a8ddbb"},
+    tacho:{background:"#f2ebff",color:"#6941b3",border:"#cbb7f2"}
+  }[calendarCategory(event)];
+  return {...palette,border:"1px solid "+palette.border};
+};
+const calendarLabel=(event:CalendarEvent)=>{
+  const category=calendarCategory(event);
+  const type=category==="loler"?"LOLER":category==="mot"?"MOT":category==="pmi"?"PMI":"Tacho";
+  const action=event.kind==="reminder"?"reminder":event.kind==="planned"?"planned":event.kind==="examined"?"completed":event.date<new Date().toISOString().slice(0,10)?"overdue":"due";
+  return type+" "+action;
+};
 function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1));
   const [events,setEvents]=useState<CalendarEvent[]>([]);
@@ -662,10 +683,9 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
       {((summaryFilter==="overdue"?overdueCount:summaryFilter==="upcoming"?upcomingCount:events.filter(event=>event.kind==="examined").length)===0)&&<p className="muted">There are no records in this list.</p>}
     </div>}
     {error&&<p className="auth-error" role="alert">{error}</p>}
-    <div className="calendar-legend" style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12,fontSize:12}}>
-      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#b91c1c",marginRight:6}}/>Overdue due date</span>
-      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#d97706",marginRight:6}}/>Upcoming due date</span>
-      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>
+    <div className="calendar-legend" style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14,fontSize:12}}>
+      {([["LOLER","#1d4ed8"],["MOT","#b42335"],["PMI","#18733e"],["Tacho","#6941b3"]] as const).map(([name,colour])=><span key={name} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 10px",border:"1px solid #e5eaf0",borderRadius:999,background:"#fff"}}><i style={{display:"inline-block",width:10,height:10,borderRadius:3,background:colour}}/>{name}</span>)}
+      <span style={{color:"#64748b",alignSelf:"center"}}>Labels show due, overdue, completed or reminder</span>
     </div>
     <div className="calendar-grid">
       {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><b key={day}>{day}</b>)}
@@ -674,7 +694,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.kind==="reminder"?"#fef3c7":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.kind==="reminder"?"#92400e":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="reminder"?"MOT reminder":event.kind==="planned"?"PMI planned":event.description.includes("MOT")?"MOT due":event.kind==="examined"?"Completed":event.description.includes("PMI")?"PMI due":event.description.includes("tacho")?"Tacho due":event.date<today?"LOLER overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} title={event.description} style={{display:"block",marginTop:4,padding:"4px 6px",borderRadius:6,fontSize:10,fontWeight:700,lineHeight:1.35,...calendarStyle(event)}}>{calendarLabel(event)} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
@@ -682,7 +702,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
       {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
-      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.kind==="reminder"?"amber":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.kind==="reminder"?"Reminder":event.kind==="planned"?"Planned":event.date<today?"Overdue":"Due"}</span></div>)}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span style={{...calendarStyle(event),borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{calendarLabel(event)}</span></div>)}
     </div>
     {loading&&<p className="muted">Loading live compliance dates…</p>}
     {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
