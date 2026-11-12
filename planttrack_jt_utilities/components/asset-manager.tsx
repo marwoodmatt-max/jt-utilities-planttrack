@@ -116,6 +116,11 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     if (loadError) setError("Could not load assets: " + loadError.message);
     else {
       const assetRows = (data || []) as AssetRow[];
+      const {data:activeAllocations,error:allocationError}=await supabase.from("project_allocations").select("asset_id").is("returned_at",null);
+      if(allocationError)setError("Assets loaded but allocations could not be checked: "+allocationError.message);
+      const allocatedIds=new Set((activeAllocations||[]).map(a=>a.asset_id));
+      for(const item of assetRows){if(item.status==="available"&&allocatedIds.has(item.id))item.status="in_use";}
+
       const assetIds = assetRows.map((asset) => asset.id);
       if (assetIds.length) {
         const { data: examinationRows, error: examinationError } = await supabase
