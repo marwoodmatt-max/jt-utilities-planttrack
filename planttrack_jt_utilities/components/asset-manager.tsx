@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import AssetFolder from "./asset-folder";
-import { Plus, Search, Pencil, X, Save, RefreshCw, FolderOpen } from "lucide-react";
+import { Plus, Search, Pencil, X, Save, RefreshCw, FolderOpen, Trash2 } from "lucide-react";
 
 type AssetRow = {
   id: string;
@@ -204,6 +204,18 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     }
   }
 
+  async function deleteAsset(asset: AssetRow) {
+    if (!isAdmin || saving) return;
+    if (!window.confirm("Delete asset " + asset.asset_code + "? This cannot be undone. Assets with linked compliance records or documents must be retained.")) return;
+    const confirmation = window.prompt('Type the asset code "' + asset.asset_code + '" to confirm deletion:');
+    if (confirmation !== asset.asset_code) { setError("Asset deletion cancelled: asset code did not match."); return; }
+    setSaving(true); setError(""); setMessage("");
+    const {error:deleteError} = await supabase.from("assets").delete().eq("id",asset.id);
+    if (deleteError) setError("Asset not deleted. It may have linked job cards, documents or compliance records: " + deleteError.message);
+    else { setMessage("Asset " + asset.asset_code + " deleted."); setSelectedAsset(null); setEditing(null); await loadAssets(); }
+    setSaving(false);
+  }
+
   async function saveAsset(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isAdmin || saving) return;
@@ -342,7 +354,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     await loadAssets();
   }
 
-  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} />;
+  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} onEdit={() => {const asset=selectedAsset;setSelectedAsset(null);void startEdit(asset);}} onDelete={() => void deleteAsset(selectedAsset)} deleting={saving} />;
 
   const fieldStyle: React.CSSProperties = {
     width: "100%", padding: "10px 11px", border: "1px solid #dcdce0",
@@ -454,7 +466,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
         <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span></td>
-        {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
+        {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button> <button className="secondary" disabled={saving} onClick={() => void deleteAsset(a)}><Trash2 size={14}/> Delete</button></td>}
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
