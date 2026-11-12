@@ -245,7 +245,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  })();return()=>{active=false};},[supabase,refresh]);
  const chosen=jobs.find(j=>j.id===selected);
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
- async function perform(fn:()=>Promise<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function perform(fn:()=>PromiseLike<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
  return <section className="panel">
   <div className="panel-head"><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
