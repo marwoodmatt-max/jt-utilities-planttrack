@@ -31,25 +31,39 @@ function plannedPmiDates(nextDue:string|null,today:string,months=13){
  for(let i=0;i<40;i++){const d=cursor.toISOString().slice(0,10);if(d>end)break;if(d>=today)dates.push(d);cursor.setUTCDate(cursor.getUTCDate()+42);}
  return dates;
 }
-type PmiItem={asset_code:string;registration:string|null;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;tacho_calibration_due:string|null;status:string};
+type PmiItem={id:string;asset_code:string;registration:string|null;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;tacho_calibration_due:string|null;status:string};
 function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenCalendar:()=>void}){
   const [items,setItems]=useState<PmiItem[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
+  const [history,setHistory]=useState<any[]>([]);
+  const [selected,setSelected]=useState("");
+  const [inspectedOn,setInspectedOn]=useState(new Date().toISOString().slice(0,10));
+  const [result,setResult]=useState("Pass");
+  const [mileage,setMileage]=useState("");
+  const [defects,setDefects]=useState("");
+  const [inspector,setInspector]=useState("");
+  const [signer,setSigner]=useState("");
+  const [report,setReport]=useState<File|null>(null);
+  const [saving,setSaving]=useState(false);
+  const [feedback,setFeedback]=useState("");
+  const [reload,setReload]=useState(0);
   useEffect(()=>{
     let cancelled=false;
     async function load(){
       const {data,error}=await supabase.from("assets")
-        .select("asset_code,registration,description,pmi_last_completed,pmi_next_due,tacho_calibration_due,status")
+        .select("id,asset_code,registration,description,pmi_last_completed,pmi_next_due,tacho_calibration_due,status")
         .not("pmi_next_due","is",null)
         .order("pmi_next_due",{ascending:true}).limit(100);
       if(cancelled)return;
       if(error)setError(error.message);else setItems((data||[]) as PmiItem[]);
+      const {data:past}=await supabase.from("hgv_pmi_records").select("id,asset_id,inspected_on,result,inspector_name,signed_off_by,report_path").order("inspected_on",{ascending:false}).limit(100);
+      if(!cancelled)setHistory(past||[]);
       setLoading(false);
     }
     void load();
     return()=>{cancelled=true;};
-  },[supabase]);
+  },[supabase,reload]);
   const now=new Date();
   const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const soon=new Date(today+"T00:00:00Z");soon.setUTCDate(soon.getUTCDate()+14);
@@ -58,6 +72,33 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
   const upcoming=items.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
   const fmt=(d:string|null)=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"Not recorded";
   const hgvItems=items.filter(item=>["R500 JTU","WP63 PFD","C545766"].includes(item.asset_code));
+  async function savePmi(e:React.FormEvent){
+    e.preventDefault();setFeedback("");
+    const asset=hgvItems.find(a=>a.asset_code===selected);
+    if(!asset||!inspector.trim()||!signer.trim())return setFeedback("Select a vehicle, inspector and signatory.");
+    if(inspectedOn>today)return setFeedback("Completion date cannot be in the future.");
+    if(result!=="Pass"&&!defects.trim())return setFeedback("Describe the defects before saving.");
+    setSaving(true);
+    try{
+      let path:string|null=null;
+      if(report){
+        if(report.size>10485760||!["application/pdf","image/jpeg","image/png"].includes(report.type))throw Error("Report must be PDF, JPG or PNG under 10MB.");
+        path=asset.id+"/"+crypto.randomUUID()+"-"+report.name.replace(/[^A-Za-z0-9._-]/g,"_");
+        const {error}=await supabase.storage.from("hgv-pmi-reports").upload(path,report);
+        if(error)throw error;
+      }
+      const {error}=await supabase.from("hgv_pmi_records").insert({asset_id:asset.id,inspected_on:inspectedOn,result,mileage:mileage?Number(mileage):null,defects:defects||null,inspector_name:inspector.trim(),signed_off_by:signer.trim(),report_path:path});
+      if(error)throw error;
+      setFeedback(result==="Pass"?"Signed PMI saved; next PMI advanced by six weeks.":"Inspection saved with defects; next PMI was not advanced.");
+      setDefects("");setMileage("");setReport(null);setReload(n=>n+1);
+    }catch(e){setFeedback("Could not save: "+(e instanceof Error?e.message:String(e)));}
+    finally{setSaving(false);}
+  }
+  async function viewReport(path:string){
+    const {data,error}=await supabase.storage.from("hgv-pmi-reports").createSignedUrl(path,120);
+    if(error||!data?.signedUrl)return setFeedback("Could not open inspection report.");
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
   return <section className="panel" style={{marginTop:18}}>
     <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open inspection calendar</button></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
@@ -69,6 +110,24 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
       {[...overdue,...upcoming].map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
     </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
+    <div style={{marginTop:22}}>
+      <h3>Record completed PMI and sign-off</h3>
+      <p className="muted">Only a passed inspection advances the next due date. Reports are stored privately.</p>
+      <form onSubmit={e=>void savePmi(e)} style={{display:"grid",gap:12,maxWidth:680}}>
+        <label>Vehicle<select required value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Select HGV or trailer</option>{hgvItems.map(a=><option key={a.id} value={a.asset_code}>{a.asset_code} · {a.description}</option>)}</select></label>
+        <label>Inspection date<input type="date" required max={today} value={inspectedOn} onChange={e=>setInspectedOn(e.target.value)}/></label>
+        <label>Mileage / odometer<input type="number" min="0" value={mileage} onChange={e=>setMileage(e.target.value)}/></label>
+        <label>Result<select value={result} onChange={e=>setResult(e.target.value)}><option>Pass</option><option>Defects noted</option><option>Fail</option></select></label>
+        <label>Defects / remedial work<textarea value={defects} onChange={e=>setDefects(e.target.value)}/></label>
+        <label>Inspector name<input required value={inspector} onChange={e=>setInspector(e.target.value)}/></label>
+        <label>Signed off by<input required value={signer} onChange={e=>setSigner(e.target.value)}/></label>
+        <label>PMI report (PDF, JPG, PNG, max 10MB)<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e=>setReport(e.target.files?.[0]||null)}/></label>
+        <button type="submit" className="primary" disabled={saving}>{saving?"Saving…":"Save signed PMI"}</button>
+      </form>
+      {feedback&&<p role="status">{feedback}</p>}
+      <h3 style={{marginTop:20}}>PMI completion history</h3>
+      <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Date</th><th>Result</th><th>Inspector</th><th>Signed off</th><th>Report</th></tr></thead><tbody>{history.map(r=><tr key={r.id}><td>{hgvItems.find(a=>a.id===r.asset_id)?.asset_code||r.asset_id}</td><td>{fmt(r.inspected_on)}</td><td>{r.result}</td><td>{r.inspector_name}</td><td>{r.signed_off_by}</td><td>{r.report_path?<button className="secondary" onClick={()=>void viewReport(r.report_path)}>View report</button>:"—"}</td></tr>)}</tbody></table></div>
+    </div>
   </section>;
 }
 type MotVehicle={id:string;asset_code:string;registration:string|null;description:string|null;mot_due:string|null;status:string;category:string|null};
@@ -255,7 +314,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
               ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
               ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
               ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle]
-            ].map(([label,value,sub,Icon]:any)=><div className="stat" key={label}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub}</small></div>)}
+            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label);setCategoryFilter("All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
