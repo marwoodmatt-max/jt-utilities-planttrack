@@ -275,14 +275,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     let uploaded=0,skipped=0,failed=0;
     for(const file of Array.from(files)){
       const path=(file.webkitRelativePath||file.name).replace(/\\/g,"/").toUpperCase();
-      if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;continue;}
+      if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;outcomes.push(file.name+": PDF only, maximum 25 MB");continue;}
       // Files in the review folder contain conflicting C545766/C545776 identifiers.
       // Do not automatically attach disputed records to a vehicle.
-      if(path.includes("C545776") || path.includes("REVIEW_C545776")){skipped++;continue;}
-      const code=path.includes("R500_JTU")?"R500 JTU":path.includes("WP63_PFD")?"WP63 PFD":null;
-      if(!code){skipped++;continue;}
+      if(path.includes("C545776") || path.includes("REVIEW_C545776")){skipped++;outcomes.push(file.name+": trailer identification requires review");continue;}
+      const code=path.includes("R500_JTU") || /\\bR500(?:[ _-]*JTU|[ _-]*VOR|[ _-]*BT|[ _-]*\\d)/.test(path)?"R500 JTU":path.includes("WP63_PFD") || path.includes("WP63 PFD")?"WP63 PFD":null;
+      if(!code){skipped++;outcomes.push(file.name+": could not match to R500 JTU or WP63 PFD");continue;}
       // The crane LOLER belongs to a lifting-equipment asset, not to the lorry.
-      if(file.name.toUpperCase().includes("LOLER")){skipped++;continue;}
+      if(file.name.toUpperCase().includes("LOLER")){skipped++;outcomes.push(file.name+": crane LOLER requires correct lifting asset");continue;}
       const asset=rows.find(r=>r.asset_code.toUpperCase()===code);
       if(!asset){failed++;outcomes.push(code+" not found");continue;}
       const {data:existing,error:existingError}=await supabase.from("asset_documents").select("id").eq("asset_id",asset.id).eq("file_name",file.name).limit(1);
@@ -358,9 +358,12 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
     {isAdmin && <div style={{marginBottom:16,padding:16,border:"1px solid #cbd5e1",borderRadius:12,background:"#f8fafc"}}>
       <h3 style={{marginTop:0}}>Bulk PDF upload · Existing PlantTrack folders</h3>
-      <p className="muted">Unzip the fleet compliance pack, then select its extracted parent folder. PDFs in HGV/R500_JTU and HGV/WP63_PFD are matched to the existing asset folders. Disputed trailer files and crane LOLER are deliberately held for review.</p>
+      <p className="muted">Unzip the fleet compliance pack, then choose its extracted parent folder, or select multiple PDFs directly. PDFs for R500 JTU and WP63 PFD are matched to the existing asset folders. Disputed trailer files and crane LOLER are deliberately held for review.</p>
       <label style={{display:"block",fontWeight:700,fontSize:13}}>Choose extracted fleet folder
         <input type="file" accept=".pdf,application/pdf" multiple {...({webkitdirectory:"",directory:""} as any)} disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
+      </label>
+      <label style={{display:"block",fontWeight:700,fontSize:13,marginTop:12}}>Or choose several PDFs directly
+        <input type="file" accept=".pdf,application/pdf" multiple disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
       </label>
       {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
       {bulkFeedback&&<p role="status">{bulkFeedback}</p>}
