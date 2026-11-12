@@ -138,7 +138,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   useEffect(() => { void loadAssets(); }, [supabase]);
 
   const filtered = useMemo(() => rows.filter((a) =>
-    (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase()) &&
+    (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase() || (categoryFilter.toLowerCase() === "hgv" && a.asset_code.toUpperCase() === "C545766")) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
       .filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
   ), [rows, search, categoryFilter]);
@@ -361,9 +361,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
     {categoryFilter.toLowerCase() === "hgv" && <div style={{background:"linear-gradient(115deg,#111827,#253449)",borderRadius:16,padding:"22px 24px",color:"#fff",marginBottom:18,display:"flex",justifyContent:"space-between",gap:16,flexWrap:"wrap",alignItems:"center"}}>
-      <div><div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#fda4af"}}>JT UTILITIES · FLEET COMPLIANCE</div><h2 style={{fontSize:25,margin:"7px 0"}}>HGV control centre</h2><div style={{color:"#cbd5e1",fontSize:13}}>PMI inspections · MOT renewals · Tachograph calibration · VOR status</div></div>
+      <div><div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#fda4af"}}>JT UTILITIES · FLEET COMPLIANCE</div><h2 style={{fontSize:25,margin:"7px 0"}}>HGV & trailer control centre</h2><div style={{color:"#cbd5e1",fontSize:13}}>HGVs and trailer C545766 · PMI · MOT · Tacho · VOR</div></div>
       <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-        <div style={{background:"#ffffff16",borderRadius:12,padding:"12px 18px"}}><div style={{fontSize:11,color:"#cbd5e1"}}>HGVs</div><strong style={{fontSize:24}}>{filtered.length}</strong></div>
+        <div style={{background:"#ffffff16",borderRadius:12,padding:"12px 18px"}}><div style={{fontSize:11,color:"#cbd5e1"}}>Fleet assets</div><strong style={{fontSize:24}}>{filtered.length}</strong></div>
         <div style={{background:"#ffffff16",borderRadius:12,padding:"12px 18px"}}><div style={{fontSize:11,color:"#cbd5e1"}}>PMI overdue</div><strong style={{fontSize:24,color:"#fda4af"}}>{filtered.filter(a=>a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10)).length}</strong></div>
         <div style={{background:"#ffffff16",borderRadius:12,padding:"12px 18px"}}><div style={{fontSize:11,color:"#cbd5e1"}}>VOR</div><strong style={{fontSize:24}}>{filtered.filter(a=>a.status==="out_of_service").length}</strong></div>
       </div>
@@ -371,7 +371,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
       {categoryFilter.toLowerCase() === "hgv" ? <table><thead><tr><th>Registration</th><th>Description</th><th>Folder</th><th>Next PMI</th><th>Last PMI</th><th>MOT</th><th>Tacho Calibration</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><b>{a.registration || a.asset_code}</b></td><td>{a.description}</td>
+        <td><b>{a.registration || a.asset_code}</b></td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
         <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span></td>
