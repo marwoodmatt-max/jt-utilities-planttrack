@@ -83,6 +83,11 @@ function statusLabel(asset: AssetRow) {
 }
 
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
+  const [showFleetImport,setShowFleetImport]=useState(false);
+  const [importing,setImporting]=useState(false);
+  const [importFeedback,setImportFeedback]=useState("");
+  const [includeCalculatedPmi,setIncludeCalculatedPmi]=useState(false);
+  const [importConfirmed,setImportConfirmed]=useState(false);
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -257,6 +262,31 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setSaving(false);
   }
 
+  // Import is deliberately executed by the signed-in Admin in the app, not by a service account.
+  // The existing database audit trigger therefore records the real authenticated actor.
+  async function importFleetDates(){
+    if(!isAdmin || importing || !importConfirmed) return;
+    setImporting(true);setImportFeedback("");
+    const {data:authData,error:authError}=await supabase.auth.getUser();
+    if(authError || !authData.user){setImportFeedback("Sign in again as Admin before importing.");setImporting(false);return;}
+    const imports=[
+      {code:"R500 JTU",values:{pmi_last_completed:"2026-07-16",tacho_calibration_due:"2028-08-03"},calculated:"2026-08-27"},
+      {code:"WP63 PFD",values:{pmi_last_completed:"2026-10-02",mot_due:"2027-10-31",tacho_calibration_due:"2028-08-17"},calculated:"2026-11-13"}
+    ];
+    const outcomes:string[]=[];
+    for(const item of imports){
+      const matching=rows.filter(r=>r.asset_code.toUpperCase()===item.code && (r.category||"").toLowerCase()==="hgv");
+      if(matching.length!==1){outcomes.push(item.code+": skipped (expected exactly one HGV record)");continue;}
+      const payload:Record<string,string>={...item.values};
+      if(includeCalculatedPmi)payload.pmi_next_due=item.calculated;
+      const {error:writeError}=await supabase.from("assets").update(payload).eq("id",matching[0].id).eq("category","HGV");
+      outcomes.push(item.code+": "+(writeError?"NOT SAVED — "+writeError.message:"saved"));
+    }
+    setImportFeedback(outcomes.join(" · "));
+    setImporting(false);setImportConfirmed(false);
+    await loadAssets();
+  }
+
   if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} />;
 
   const fieldStyle: React.CSSProperties = {
@@ -274,6 +304,22 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       </div>
     </div>
 
+    {isAdmin && <div style={{marginBottom:16}}>
+      <button type="button" className="primary" onClick={()=>setShowFleetImport(v=>!v)}>{showFleetImport?"Close fleet import":"Review fleet dates for import"}</button>
+      {showFleetImport && <div style={{marginTop:12,padding:20,border:"1px solid #cbd5e1",borderRadius:14,background:"#f8fafc"}}>
+        <h3 style={{margin:"0 0 6px"}}>Fleet compliance import · Admin review</h3>
+        <p className="muted">Updates existing PlantTrack assets only. The database audit log records your signed-in account. No separate system is used.</p>
+        <div className="table-wrap"><table><thead><tr><th>HGV</th><th>Last PMI</th><th>MOT expiry</th><th>Tacho due</th><th>Calculated next PMI (optional)</th></tr></thead><tbody>
+          <tr><td><b>R500 JTU</b></td><td>16 Jul 2026</td><td>Not supplied</td><td>3 Aug 2028</td><td>27 Aug 2026 · overdue if no later PMI</td></tr>
+          <tr><td><b>WP63 PFD</b></td><td>2 Oct 2026</td><td>31 Oct 2027</td><td>17 Aug 2028</td><td>13 Nov 2026 · schedule needs verification</td></tr>
+        </tbody></table></div>
+        <p className="muted" style={{marginTop:10}}>Trailer C545766/C545776 is excluded pending identifier verification. No VOR status or return-to-service authorisation will be changed.</p>
+        <label style={{display:"block",marginTop:12}}><input type="checkbox" checked={includeCalculatedPmi} onChange={e=>setIncludeCalculatedPmi(e.target.checked)}/> Also import the calculated 42-day next PMI dates (only after checking the actual planned schedule)</label>
+        <label style={{display:"block",marginTop:10}}><input type="checkbox" checked={importConfirmed} onChange={e=>setImportConfirmed(e.target.checked)}/> I have reviewed the source dates and authorise saving these values to the live register.</label>
+        <button type="button" className="primary" style={{marginTop:14}} disabled={!importConfirmed||importing||loading} onClick={()=>void importFleetDates()}>{importing?"Saving dates…":"Approve and import to PlantTrack"}</button>
+        {importFeedback&&<p role="status" style={{marginTop:12}}>{importFeedback}</p>}
+      </div>}
+    </div>}
     {message && <div className="notice" role="status">{message}</div>}
     {error && <div className="auth-error" role="alert">{error}</div>}
 
