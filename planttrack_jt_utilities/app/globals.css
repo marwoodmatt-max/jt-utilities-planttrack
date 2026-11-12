@@ -168,3 +168,5 @@ td small{color:#7c899a}
  .workshop-job-panel>.workshop-desktop-jobs{order:3}
  .workshop-job-panel>.workshop-selected-job{order:4}
 }
+
+.workshop-asset-summary{display:grid;gap:5px;padding:12px 14px;background:#f3f6fa;border:1px solid #dce4ee;border-radius:10px;font-size:13px;color:#273747}.workshop-asset-summary strong{font-size:14px;color:#17212b}
