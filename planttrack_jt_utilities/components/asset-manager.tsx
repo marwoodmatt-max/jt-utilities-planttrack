@@ -19,6 +19,10 @@ type AssetRow = {
   status: string;
   loler_next_due?: string | null;
   loler_examined_at?: string | null;
+  pmi_next_due?: string | null;
+  pmi_last_completed?: string | null;
+  mot_due?: string | null;
+  tacho_calibration_due?: string | null;
 };
 
 type AssetForm = {
@@ -34,12 +38,17 @@ type AssetForm = {
   status: string;
   loler_next_due: string;
   loler_examined_at: string;
+  pmi_next_due: string;
+  pmi_last_completed: string;
+  mot_due: string;
+  tacho_calibration_due: string;
 };
 
 const emptyForm: AssetForm = {
   asset_code: "", description: "", category: "", manufacturer: "", model: "",
   serial_number: "", registration: "", location: "", hour_meter: "", status: "available",
-  loler_next_due: "", loler_examined_at: ""
+  loler_next_due: "", loler_examined_at: "",
+  pmi_next_due: "", pmi_last_completed: "", mot_due: "", tacho_calibration_due: ""
 };
 
 function formatDate(value: string | null | undefined) {
@@ -90,7 +99,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setError("");
     const { data, error: loadError } = await supabase
       .from("assets")
-      .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status")
+      .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due")
       .order("asset_code", { ascending: true })
       .limit(1000);
     if (loadError) setError("Could not load assets: " + loadError.message);
@@ -156,7 +165,11 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       hour_meter: asset.hour_meter == null ? "" : String(asset.hour_meter),
       status: asset.status || "available",
       loler_next_due: asset.loler_next_due || "",
-      loler_examined_at: asset.loler_examined_at || ""
+      loler_examined_at: asset.loler_examined_at || "",
+      pmi_next_due: asset.pmi_next_due || "",
+      pmi_last_completed: asset.pmi_last_completed || "",
+      mot_due: asset.mot_due || "",
+      tacho_calibration_due: asset.tacho_calibration_due || ""
     });
     setMessage("");
     setError("");
@@ -199,7 +212,11 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       registration: form.registration.trim() || null,
       location: form.location.trim() || null,
       hour_meter: form.hour_meter.trim() === "" ? null : Number(form.hour_meter),
-      status: form.status
+      status: form.status,
+      pmi_next_due: (form.category || "").trim().toLowerCase() === "hgv" ? form.pmi_next_due || null : null,
+      pmi_last_completed: (form.category || "").trim().toLowerCase() === "hgv" ? form.pmi_last_completed || null : null,
+      mot_due: (form.category || "").trim().toLowerCase() === "hgv" ? form.mot_due || null : null,
+      tacho_calibration_due: (form.category || "").trim().toLowerCase() === "hgv" ? form.tacho_calibration_due || null : null
     };
 
     if (!payload.asset_code || !payload.description) {
@@ -214,7 +231,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     }
 
     const result = editing === "new"
-      ? await supabase.from("assets").insert(payload).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single()
+      ? await supabase.from("assets").insert(payload).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due").single()
       : await supabase.from("assets").update(payload).eq("id", editing).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single();
 
     let saveError = result.error;
@@ -276,7 +293,13 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
         <label style={labelStyle}>Status<select style={fieldStyle} value={(form.category || "").toLowerCase() === "hgv" && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{((form.category || "").toLowerCase() === "hgv" ? hgvStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
-        {(form.category || "").trim().toLowerCase() === "lifting equipment" && editing !== "new" && <>
+        {(form.category || "").trim().toLowerCase() === "hgv" && <>
+          <label style={labelStyle}>Next PMI<input style={fieldStyle} type="date" value={form.pmi_next_due} onChange={(e) => setForm({ ...form, pmi_next_due: e.target.value })}/></label>
+          <label style={labelStyle}>Last PMI<input style={fieldStyle} type="date" value={form.pmi_last_completed} onChange={(e) => setForm({ ...form, pmi_last_completed: e.target.value })}/></label>
+          <label style={labelStyle}>MOT expiry<input style={fieldStyle} type="date" value={form.mot_due} onChange={(e) => setForm({ ...form, mot_due: e.target.value })}/></label>
+          <label style={labelStyle}>Tacho Calibration expiry<input style={fieldStyle} type="date" value={form.tacho_calibration_due} onChange={(e) => setForm({ ...form, tacho_calibration_due: e.target.value })}/></label>
+        </>}
+      {(form.category || "").trim().toLowerCase() === "lifting equipment" && editing !== "new" && <>
           <label style={labelStyle}>LOLER next examination due<input style={fieldStyle} type="date" value={form.loler_next_due} onChange={(e) => setForm({ ...form, loler_next_due: e.target.value })}/></label>
           <label style={labelStyle}>Actual LOLER examination date<input style={fieldStyle} type="date" value={form.loler_examined_at} onChange={(e) => setForm({ ...form, loler_examined_at: e.target.value })}/></label>
         </> }
@@ -292,7 +315,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
-      <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
+      {categoryFilter.toLowerCase() === "hgv" ? <table><thead><tr><th>Registration</th><th>Description</th><th>Folder</th><th>Next PMI</th><th>Last PMI</th><th>MOT</th><th>Tacho Calibration</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
+      <tbody>{filtered.map((a) => <tr key={a.id}>
+        <td><b>{a.registration || a.asset_code}</b></td><td>{a.description}</td>
+        <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
+        <td>{formatDate(a.pmi_next_due)}</td><td>{formatDate(a.pmi_last_completed)}</td><td>{formatDate(a.mot_due)}</td><td>{formatDate(a.tacho_calibration_due)}</td>
+        <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span></td>
+        {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
+      </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
         <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
@@ -301,7 +331,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : a.status === "available" ? "tag green" : a.status === "out_of_service" ? "tag red" : a.status === "in_workshop" ? "tag amber" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statusLabel(a)}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
-      </tr>)}</tbody></table>
+      </tr>)}</tbody></table>}
       {!filtered.length && <p className="empty">No matching assets.</p>}
     </div>}
     <p className="muted" style={{ marginTop: 12 }}>Showing {filtered.length} of {rows.length} assets.</p>
