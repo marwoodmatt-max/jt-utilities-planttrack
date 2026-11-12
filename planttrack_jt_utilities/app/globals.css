@@ -126,3 +126,13 @@ td small{color:#7c899a}
  .shell .page-head h1{font-size:23px}
  .workshop-office-pmi{display:none}
 }
+
+.workshop-mobile-add{display:none}
+@media(max-width:700px){
+ .workshop-mobile-add{display:block;margin:8px 0 15px}
+ .workshop-mobile-add .primary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;font-size:16px}
+ .workshop-create-form{display:none!important}
+ .workshop-create-form.mobile-open{display:grid!important;padding:15px;border:1px solid #dce3ed;border-radius:14px;background:#f8fafc}
+ .workshop-create-form input,.workshop-create-form select,.workshop-create-form textarea{width:100%;max-width:100%;min-height:46px}
+ .workshop-create-form .primary{width:100%;min-height:50px}
+}
