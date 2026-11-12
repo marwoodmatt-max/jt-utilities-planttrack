@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
-type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null };
+type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
@@ -29,7 +29,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     const {data,error:err}=await supabase.from("asset_documents").select("id,asset_id,file_name,storage_path,document_type,description,uploaded_at,uploaded_by").eq("asset_id",asset.id).order("uploaded_at",{ascending:false});
     if(err) setError("Could not load this asset folder: "+err.message);
     else setDocs((data||[]) as Doc[]);
-    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});
+    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at,pdf_filed_at,pdf_filed_by_email,pdf_filed_by").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});
     if(certs.error)setError(prev=>[prev,"Could not load generated certificates: "+certs.error.message].filter(Boolean).join(" "));
     else setCertificates((certs.data||[]) as JobCertificate[]);
     setLoading(false);
@@ -103,7 +103,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
       {busy&&<p className="muted">Working…</p>}
     </div>}
     <h3>Generated job certificates ({certificates.length})</h3>
-    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
+    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Filed at</th><th>Filed by</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td>{cert.pdf_filed_at?dateLabel(cert.pdf_filed_at):"Not recorded (older certificate)"}</td><td>{cert.pdf_filed_by_email|| (cert.pdf_filed_by?"User "+cert.pdf_filed_by.slice(0,8):"Not recorded")}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
     <h3>Saved documents ({docs.length})</h3>
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
