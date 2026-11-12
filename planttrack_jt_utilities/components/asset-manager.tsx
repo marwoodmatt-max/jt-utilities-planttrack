@@ -371,6 +371,10 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
       {bulkFeedback&&<p role="status" style={{whiteSpace:"pre-wrap",fontWeight:600}}>{bulkFeedback}</p>}
     </div>}
+    {isAdmin && categoryFilter.toLowerCase()==="hgv" && <div style={{marginBottom:16,padding:14,border:"1px solid #cbd5e1",borderRadius:10}}>
+      <b>C545766 trailer dates missing?</b>
+      <p className="muted">Uploading an inspection PDF does not update the PMI fields automatically. Use “Review fleet dates for import” above, tick the confirmation box and approve. This saves last PMI 02 Oct 2026 and MOT 31 Oct 2027. Tick the separate calculated-PMI option only if 13 Nov 2026 matches your actual six-week inspection schedule.</p>
+    </div>}
     {isAdmin && categoryFilter.toLowerCase()==="hgv" && <div style={{marginBottom:16,padding:16,border:"1px solid #fca5a5",borderRadius:12}}>
       <h3 style={{marginTop:0}}>R500 JTU · Vehicle Off Road (VOR)</h3>
       <p>Source notice: 26 Aug 2026, 08:55 · Reason: VEHICLE NOT IN USE. The return-to-service section is blank. The notice alone does not prove the vehicle remains off road today.</p>
