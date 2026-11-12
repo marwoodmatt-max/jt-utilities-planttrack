@@ -8,6 +8,7 @@ type Asset = { id:string; asset_code:string; description:string; category:string
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
+const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
 const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
 export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void}) {
@@ -17,7 +18,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
-  const [docType,setDocType]=useState("Other");
+  const [docType,setDocType]=useState("Vehicle documents");
   const [description,setDescription]=useState("");
   const fileRef=useRef<HTMLInputElement>(null);
 
@@ -83,7 +84,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     {canUpload&&uploadAllowed&&<div style={{padding:16,border:"1px dashed #c9c9ce",borderRadius:8,marginBottom:18,background:"#fafafa"}}>
       <h3 style={{marginTop:0}}>Upload a PDF document</h3>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
-        <label style={{fontSize:12,fontWeight:700}}>Document type<select style={{...field,width:"100%",marginTop:6}} value={docType} onChange={e=>setDocType(e.target.value)}>{types.map(t=><option key={t}>{t}</option>)}</select></label>
+        <label style={{fontSize:12,fontWeight:700}}>Document type<select style={{...field,width:"100%",marginTop:6}} value={docType} onChange={e=>setDocType(e.target.value)}>{((asset.category||"").toLowerCase()==="hgv" || asset.asset_code.toUpperCase()==="C545766"?fleetTypes:types).map(t=><option key={t}>{t}</option>)}</select></label>
         <label style={{fontSize:12,fontWeight:700}}>Description (optional)<input style={{...field,width:"100%",marginTop:6}} value={description} onChange={e=>setDescription(e.target.value)} placeholder="e.g. Annual inspection 2026"/></label>
         <label style={{fontSize:12,fontWeight:700}}>Choose PDF<input ref={fileRef} style={{display:"block",width:"100%",marginTop:9}} type="file" accept="application/pdf,.pdf" onChange={e=>void upload(e.target.files?.[0])}/></label>
       </div>

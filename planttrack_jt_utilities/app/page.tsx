@@ -85,7 +85,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     return () => { cancelled = true; };
   }, [supabase]);
   const filtered=useMemo(()=>assets.filter(a=>
-    (a.id+" "+a.name+" "+a.location+" "+a.registration).toLowerCase().includes(query.toLowerCase()) &&
+    (a.id+" "+a.name+" "+a.category+" "+a.location+" "+a.registration).toLowerCase().includes(query.trim().toLowerCase()) &&
     (assetFilter==="All"||a.status===assetFilter) &&
     (categoryFilter==="All"||a.category.toLowerCase()===categoryFilter.toLowerCase())
   ),[assets,query,assetFilter,categoryFilter]);
@@ -96,7 +96,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     <aside className={`sidebar ${mobileNav?"open":""}`}>
       <div className="brand"><img className="brand-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd logo" /><div><b>JT UTILITIES LTD</b><small>PLANTTRACK</small></div><button className="close-nav" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
       <div className="nav-caption">WORKSPACE</div>
-      {nav.map(([label,Icon])=>label==="Plant register"?<div key={label}><button onClick={()=>{setPage(label);setCategoryFilter("All");setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>{page==="Plant register"&&<div style={{paddingLeft:28,display:"grid",gap:3}}>{[["All assets","All"],["Vehicles","Vehicle"],["Plant & Machinery","Plant"],["Lifting Equipment","Lifting equipment"],["Trailers","Trailer"],["Agricultural Equipment","Agricultural equipment"],["CAT & Genny","CAT & Genny calibration equipment"]].map(([label,value])=><button key={value} className={`nav-item ${categoryFilter===value?"active":""}`} style={{fontSize:13,padding:"7px 9px"}} onClick={()=>{setCategoryFilter(value);setPage("Plant register");setMobileNav(false)}}>{label}</button>)}</div>}</div>:<button key={label} onClick={()=>{setPage(label);setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>)}
+      {nav.map(([label,Icon])=>label==="Plant register"?<div key={label}><button onClick={()=>{setPage(label);setCategoryFilter("All");setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>{page==="Plant register"&&<div style={{paddingLeft:28,display:"grid",gap:3}}>{[["All assets","All"],["Vehicles","Vehicle"],["HGVs","HGV"],["Plant & Machinery","Plant"],["Lifting Equipment","Lifting equipment"],["Trailers","Trailer"],["Agricultural Equipment","Agricultural equipment"],["CAT & Genny","CAT & Genny calibration equipment"]].map(([label,value])=><button key={value} className={`nav-item ${categoryFilter===value?"active":""}`} style={{fontSize:13,padding:"7px 9px"}} onClick={()=>{setCategoryFilter(value);setPage("Plant register");setMobileNav(false)}}>{label}</button>)}</div>}</div>:<button key={label} onClick={()=>{setPage(label);setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>)}
       <div className="sidebar-bottom"><div className="online-dot"/> Online workspace <small>v0.1 prototype</small></div>
     </aside>
     {mobileNav&&<div className="scrim" onClick={()=>setMobileNav(false)}/>}
@@ -172,6 +172,23 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         if(row.examined_at) mapped.push({id:row.id+"-examined",date:row.examined_at,kind:"examined",assetCode:asset.asset_code,description:asset.description});
         if(row.next_due) mapped.push({id:row.id+"-due",date:row.next_due,kind:"due",assetCode:asset.asset_code,description:asset.description});
       }
+      // HGV compliance deadlines live alongside LOLER events in the original PlantTrack calendar.
+      // Keep the date types separate so an MOT is never presented as a LOLER examination.
+      const {data:hgvs,error:hgvError}=await supabase.from("assets")
+        .select("id,asset_code,registration,description,pmi_next_due,pmi_last_completed,mot_due,tacho_calibration_due")
+        .in("asset_code",["R500 JTU","WP63 PFD","C545766"]);
+      if(hgvError){if(!cancelled){setError("Could not load HGV compliance dates: "+hgvError.message);setLoading(false);}return;}
+      for(const hgv of hgvs||[]){
+        const code=hgv.asset_code==="C545766"?"C545766 · Trailer":hgv.registration||hgv.asset_code;
+        const prefix=hgv.asset_code==="C545766"?"Trailer":"HGV";
+        const add=(date:string|null,kind:"examined"|"due",label:string)=>{
+          if(date) mapped.push({id:hgv.id+"-"+label,date:date.slice(0,10),kind,assetCode:code,description:label+" · "+(hgv.description||"HGV")});
+        };
+        add(hgv.pmi_last_completed,"examined",prefix+" PMI inspection completed");
+        add(hgv.pmi_next_due,"due",prefix+" PMI inspection due");
+        add(hgv.mot_due,"due",prefix+" MOT expiry");
+        if(prefix==="HGV")add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
+      }
       if(!cancelled){setEvents(mapped);setLoading(false);}
     }
     void loadCalendar();
@@ -190,20 +207,20 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const upcomingCount=dueEvents.filter(event=>event.date>=today).length;
   const formatDate=(value:string)=>{const [y,m,d]=value.split("-");return d+" "+m+" "+y;};
   return <section className="panel">
-    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examination history and renewal schedule · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
+    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER and HGV compliance dates · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",marginBottom:18}}>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="overdue"?null:"overdue")} aria-pressed={summaryFilter==="overdue"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="overdue"?"2px solid #b91c1c":undefined}}>
-        <div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
+        <div className="stat-top"><span>Overdue checks</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
       </button>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="upcoming"?null:"upcoming")} aria-pressed={summaryFilter==="upcoming"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="upcoming"?"2px solid #d97706":undefined}}>
-        <div className="stat-top"><span>Upcoming LOLER</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later · Click to view</small>
+        <div className="stat-top"><span>Upcoming checks</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later · Click to view</small>
       </button>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="examined"?null:"examined")} aria-pressed={summaryFilter==="examined"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="examined"?"2px solid #2563eb":undefined}}>
         <div className="stat-top"><span>Recorded examinations</span><FileCheck2 size={18}/></div><strong>{loading?"…":events.filter(event=>event.kind==="examined").length}</strong><small>Last examination dates · Click to view</small>
       </button>
     </div>
     {summaryFilter&&<div style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:18}}>
-      <div className="panel-head"><div><h3>{summaryFilter==="overdue"?"Overdue LOLER examinations":summaryFilter==="upcoming"?"Upcoming LOLER examinations":"Recorded examinations"}</h3><p>{summaryFilter==="overdue"?"These renewal dates are in the past and need checking.":summaryFilter==="upcoming"?"These are the next examination renewal dates in the register.":"These assets have a last examination date recorded."}</p></div><button type="button" className="secondary" onClick={()=>setSummaryFilter(null)}>Close</button></div>
+      <div className="panel-head"><div><h3>{summaryFilter==="overdue"?"Overdue compliance dates":summaryFilter==="upcoming"?"Upcoming compliance dates":"Recorded examinations"}</h3><p>{summaryFilter==="overdue"?"These renewal dates are in the past and need checking.":summaryFilter==="upcoming"?"These are the next examination renewal dates in the register.":"These assets have a last examination date recorded."}</p></div><button type="button" className="secondary" onClick={()=>setSummaryFilter(null)}>Close</button></div>
       {(()=>{const list=dueEvents.filter(event=>summaryFilter==="overdue"?event.date<today:summaryFilter==="upcoming"?event.date>=today:false);const rows=summaryFilter==="examined"?events.filter(event=>event.kind==="examined"):list;return rows.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.assetCode.localeCompare(b.assetCode)).map(event=><div className="attention" key={event.id}><div className="avatar">{event.assetCode.slice(0,2)}</div><div><b>{event.assetCode} · {event.description}</b><small>{summaryFilter==="examined"?"Last examination":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(summaryFilter==="overdue"?"red":summaryFilter==="upcoming"?"amber":"blue")}>{summaryFilter==="overdue"?"Overdue":summaryFilter==="upcoming"?"Upcoming":"Examined"}</span></div>);})()}
       {((summaryFilter==="overdue"?overdueCount:summaryFilter==="upcoming"?upcomingCount:events.filter(event=>event.kind==="examined").length)===0)&&<p className="muted">There are no records in this list.</p>}
     </div>}
@@ -220,18 +237,18 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":event.description.startsWith("HGV")||event.description.startsWith("Trailer")?event.description.split(" · ")[0].replace(/^HGV /,""):"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
     </div>
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
-      {selectedDate&&selectedEvents.length===0&&<p className="muted">No LOLER events recorded for this date.</p>}
+      {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
       {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":"LO"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":"Due"}</span></div>)}
     </div>
-    {loading&&<p className="muted">Loading live LOLER dates…</p>}
-    {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination dates are currently recorded.</p>}
+    {loading&&<p className="muted">Loading live compliance dates…</p>}
+    {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
   </section>;
 }
 function Projects({supabase}:{supabase:SupabaseClient}) {
