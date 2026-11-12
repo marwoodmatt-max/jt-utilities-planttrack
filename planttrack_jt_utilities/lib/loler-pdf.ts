@@ -47,84 +47,56 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
  if(isChains){values["Report number"]=job.certificate_number||"Not assigned";values["Name & address of employer for whom the Thorough Examination was made"] ||=owner;}
 
  if(isPlant){
-  const page=pdf.addPage([595,842]), dark=rgb(0.12,0.12,0.12), border=rgb(0.65,0.65,0.65), light=rgb(0.95,0.95,0.95), red=rgb(0.72,0.09,0.09);
-  const test= draft || String(job.job_details?.["TEST ONLY"]||"").includes("NOT A VALID") || String(job.engineer_signature||"").startsWith("TEST ONLY");
-  const text=(v:unknown)=>ascii(v??"").trim();
-  const date=(v:unknown)=>{const t=text(v);if(!t)return "";if(/^\\d{4}-\\d{2}-\\d{2}/.test(t)){const [yy,mm,dd]=t.slice(0,10).split("-");return dd+"/"+mm+"/"+yy;}return t;};
-  const fit=(v:unknown,font:any,size:number,width:number,maxLines=2)=>{
-   const raw=text(v)||"Not recorded";
-   const lines:string[]=[];let line="";
-   // Break overlong individual words as well as ordinary text, so nothing escapes its cell.
-   for(const word of raw.split(/\s+/)){
-    const candidate=line?line+" "+word:word;
-    if(font.widthOfTextAtSize(candidate,size)<=width){line=candidate;continue;}
-    if(line){lines.push(line);line="";}
-    let chunk="";
-    for(const char of word){
-     if(chunk&&font.widthOfTextAtSize(chunk+char,size)>width){lines.push(chunk);chunk="";}
-     chunk+=char;
-    }
-    line=chunk;
-   }
-   if(line)lines.push(line);
-   const out=lines.slice(0,maxLines);
-   if(lines.length>maxLines&&out.length){
-    let last=out[out.length-1];
-    while(last&&font.widthOfTextAtSize(last+"...",size)>width)last=last.slice(0,-1);
-    out[out.length-1]=last+"...";
-   }
-   return out;
+  // Layout follows the original JT Utilities DOCX statutory form, not the generic certificate table.
+  const page=pdf.addPage([595.3,841.9]);
+  const ink=rgb(0.09,0.09,0.09),navy=rgb(0.07,0.28,0.45),shade=rgb(0.87,0.87,0.87),edge=rgb(0.3,0.3,0.3),red=rgb(0.7,0.05,0.05);
+  const details=values;
+  const v=(key:string)=>ascii(details[key]??"").trim();
+  const text=(str:unknown,x:number,y:number,size=7,font=regular,width=100,maxLines=2,color=ink)=>{
+   const words=ascii(str||"").split(/\\s+/);let lines:string[]=[];let line="";
+   for(const word of words){let chunk="";for(const ch of word){if(chunk&&font.widthOfTextAtSize(chunk+ch,size)>width){if(line){lines.push(line);line="";}lines.push(chunk);chunk="";}chunk+=ch;}
+    const candidate=line?line+" "+chunk:chunk;if(font.widthOfTextAtSize(candidate,size)>width&&line){lines.push(line);line=chunk;}else line=candidate;
+   }if(line)lines.push(line);
+   if(lines.length>maxLines){lines=lines.slice(0,maxLines);let last=lines[maxLines-1];while(last&&font.widthOfTextAtSize(last+"...",size)>width)last=last.slice(0,-1);lines[maxLines-1]=last+"...";}
+   lines.forEach((l,i)=>page.drawText(l,{x,y:y-i*(size+2),size,font,color}));
   };
-  const draw=(value:unknown,x:number,y:number,size=8,font=regular,color=dark,width=490,maxLines=2)=>{
-   fit(value,font,size,width,maxLines).forEach((line,i)=>page.drawText(line,{x,y:y-i*(size+2),size,font,color}));
+  const cell=(x:number,top:number,w:number,h:number,label:string,value:unknown,labelW:number,fs=7)=>{
+   page.drawRectangle({x,y:top-h,width:w,height:h,borderColor:edge,borderWidth:.55});
+   if(labelW>0){page.drawRectangle({x,y:top-h,width:labelW,height:h,color:shade,borderColor:edge,borderWidth:.55});text(label,x+5,top-12,6.9,regular,labelW-9,Math.max(1,Math.floor((h-7)/9)));}
+   if(value!==undefined&&value!==null&&String(value).trim())text(value,x+labelW+5,top-12,fs,regular,w-labelW-10,Math.max(1,Math.floor((h-8)/(fs+2))));
   };
-  // Keep the warning above the heading; never obscure certificate particulars.
-  if(test)draw("TEST ONLY - NOT A VALID LOLER CERTIFICATE",39,808,9,bold,red);
-  try{
-   const response=await fetch("/jt-utilities-logo.jpg");
-   if(response.ok){const logo=await pdf.embedJpg(await response.arrayBuffer());const dims=logo.scaleToFit(175,72);page.drawImage(logo,{x:556-dims.width,y:760,width:dims.width,height:dims.height});}
-  }catch{/* The certificate remains usable if the brand image cannot be fetched. */}
-  draw("JT UTILITIES LTD",39,743,12,bold);
-  draw("REPORT OF THOROUGH EXAMINATION AND/OR TEST OF EQUIPMENT",39,717,11,bold);
-  draw("Lifting Operations and Lifting Equipment Regulations 1998 (LOLER) | Provision and Use of Work Equipment",39,699,7,regular,dark,515);
-  draw("Regulations 1998 (PUWER) | Supply of Machinery (Safety) Regulations 2008",39,688,7,regular,dark,515);
-  const clean=(key:string)=>{const v=text(values[key]);return /^[kl]$/i.test(v)?"":v;};
-  const rows:[string,string][]=[
-   ["CERTIFICATE NO",text(job.certificate_number)||"Not assigned"],
-   ["ORIGINAL CERTIFICATE NO/CE",clean("ORIGINAL CERTIFICATE NO/CE")],
-   ["EXAMINATION/TEST DATE",date(clean("EXAMINATION/TEST DATE"))],
-   ["LAST EXAMINATION/TEST DATE",date(clean("LAST EXAMINATION/TEST DATE"))],
-   ["TYPE OF EXAMINATION/TEST",clean("TYPE OF EXAMINATION/TEST")],
-   ["ITEM",clean("ITEM")],
-   ["NAME AND ADDRESS OF EQUIPMENT OWNER",clean("NAME AND ADDRESS OF EQUIPMENT OWNER")||owner],
-   ["LOCATION OF EQUIPMENT WHEN EXAMINED",clean("LOCATION OF EQUIPMENT WHEN EXAMINED")],
-   ["EXAMINATION INTERVAL",["ACCESSORIES 6 MONTHLY","LIFTING PERSONS 6 MONTHLY","APPLIANCES 12 MONTHLY","EXAMINATION SCHEME","EXCEPTIONAL CIRCUMSTANCES"].filter(k=>{const v=clean(k).toLowerCase();return ["yes","true","checked","x"].includes(v);}).map(k=>k.replace(" MONTHLY"," monthly").toLowerCase()).join("; ")||"Not recorded"],
-   ["QUANTITY",clean("QUANTITY")],
-   ["ID NO/S",clean("ID NO/S")||assetLabel.split(" ")[0]],
-   ["EQUIPMENT DESCRIPTION",clean("EQUIPMENT DESCRIPTION")||assetLabel],
-   ["SWL/WLL",clean("SWL/WLL")],
-   ["PROOF LOAD",clean("PROOF LOAD")],
-   ["NEXT EXAMINATION / TEST DUE DATE",date(clean("NEXT EXAMINATION / TEST DUE DATE"))],
-   ["CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR NONE",clean("CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’")],
-   ["FURTHER DETAILS OR REMEDIAL ACTION REQUIRED",clean("FURTHER DETAILS OR REMEDIAL ACTION REQUIRED")||text(job.engineer_work)],
-   ["NAME OF INSPECTOR",clean("NAME OF INSPECTOR")],
-   ["QUALIFICATIONS",clean("QUALIFICATIONS")],
-   ["COMPANY",clean("COMPANY")],
-   ["INSPECTOR SIGNATURE",text(job.engineer_signature)||(test?"UNSIGNED - test preview":"Not signed")],
-   ["OFFICE REVIEW",text(job.office_signature)||(test?"NOT APPROVED":"Not approved")]
-  ];
-  const x=39,tableWidth=517,labelWidth=248,top=669,bottom=125,rowHeight=(top-bottom)/rows.length;
-  rows.forEach(([label,value],i)=>{
-   const y=top-(i+1)*rowHeight;
-   page.drawRectangle({x,y,width:labelWidth,height:rowHeight,color:light,borderColor:border,borderWidth:0.55});
-   page.drawRectangle({x:x+labelWidth,y,width:tableWidth-labelWidth,height:rowHeight,borderColor:border,borderWidth:0.55});
-   draw(label,x+7,y+rowHeight-10,7.1,bold,dark,labelWidth-14,2);
-   draw(value||"Not recorded",x+labelWidth+7,y+rowHeight-10,7.4,regular,dark,tableWidth-labelWidth-14,2);
-  });
-  const defects=clean("CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’");
-  const declaration=test?"TEST ONLY: No real examination or approval has taken place. This document is not evidence of fitness for use.":defects.toUpperCase()==="NONE"?"Inspector declaration: No critical defects recorded. Refer to the examiner's signed report and findings.":"Inspector declaration withheld: examination findings do not explicitly record NONE for critical defects.";
-  draw(declaration,39,103,7.5,bold,dark,515,2);
-  draw(test?"PDF layout test only - simulated signatures are not valid examiner authentication.":"Generated by PlantTrack. Verify statutory particulars and examiner authentication before relying on this report.",39,70,7,regular,dark,515,2);
+  const mark=(key:string,x:number,y:number)=>{const a=v(key).toLowerCase();if(["yes","true","checked","x","1"].includes(a))text("X",x,y,9,bold,10);};
+  const test=draft||String(job.engineer_signature||"").startsWith("TEST ONLY")||!!details["TEST ONLY"];
+  if(test)text("TEST ONLY - NOT A VALID LOLER CERTIFICATE",37,817,9,bold,500,1,red);
+  try{const res=await fetch("/jt-utilities-logo.jpg");if(res.ok){const logo=await pdf.embedJpg(await res.arrayBuffer());const dim=logo.scaleToFit(198,92);page.drawImage(logo,{x:37,y:705,width:dim.width,height:dim.height});}}catch{}
+  text("Report of Thorough Examination and/or Test of Equipment",255,771,10,bold,305,2,navy);
+  text("Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307",255,746,7.5,regular,300,2,navy);
+  text("Provision and Use of Work Equipment Regulations P.U.W.E.R 1998 SI 2306",255,718,7.3,regular,300,2,navy);
+  text("Supply of Machinery (Safety) Regulations 2008",367,697,7.3,regular,190,2,navy);
+  const c=job.certificate_number||"Not assigned";
+  cell(37,688,260,22,"CERTIFICATE NO",c,124);cell(297,688,260,22,"ORIGINAL CERTIFICATE NO/CE",v("ORIGINAL CERTIFICATE NO/CE"),145);
+  cell(37,666,260,22,"EXAMINATION/TEST DATE",v("EXAMINATION/TEST DATE"),124);cell(297,666,260,22,"LAST EXAMINATION/TEST DATE",v("LAST EXAMINATION/TEST DATE"),145);
+  cell(37,644,260,22,"TYPE OF EXAMINATION/TEST",v("TYPE OF EXAMINATION/TEST"),124);cell(297,644,260,22,"ITEM",v("ITEM"),145);
+  cell(37,608,318,36,"NAME AND ADDRESS OF EQUIPMENT OWNER",v("NAME AND ADDRESS OF EQUIPMENT OWNER")||owner,130);
+  cell(37,572,318,93,"LOCATION OF EQUIPMENT WHEN EXAMINED",v("LOCATION OF EQUIPMENT WHEN EXAMINED"),130);
+  page.drawRectangle({x:398,y:479,width:159,height:129,borderColor:edge,borderWidth:.55});
+  const interval:[string,string][]=[["ACCESSORIES 6 MONTHLY","ACCESSORIES 6 MONTHLY"],["LIFTING PERSONS 6 MONTHLY","LIFTING PERSONS 6 MONTHLY"],["APPLIANCES 12 MONTHLY","APPLIANCES 12 MONTHLY"],["EXAMINATION SCHEME","EXAMINATION SCHEME"],["EXCEPTIONAL CIRCUMSTANCES","EXCEPTIONAL CIRCUMSTANCES"]];
+  interval.forEach(([label,key],i)=>{const yy=594-i*24;text(label,404,yy,6.6,regular,127,2);page.drawRectangle({x:539,y:yy-4,width:11,height:11,borderColor:edge,borderWidth:.5});mark(key,541,yy-1);});
+  const cols=[58,85,183,58,64,69],labels=["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"];
+  let xx=37;cols.forEach((w,i)=>{cell(xx,464,w,35,labels[i],undefined,w);xx+=w;});
+  const vals=[v("QUANTITY"),v("ID NO/S")||assetLabel.split(" ")[0],v("EQUIPMENT DESCRIPTION")||assetLabel,v("SWL/WLL"),v("PROOF LOAD"),v("NEXT EXAMINATION / TEST DUE DATE")];
+  xx=37;cols.forEach((w,i)=>{cell(xx,429,w,118,"",vals[i],0,7);xx+=w;});
+  cell(37,296,520,27,"CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR 'NONE'",v("CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’"),273,6.6);
+  cell(37,269,520,27,"FURTHER DETAILS OR REMEDIAL ACTION REQUIRED",v("FURTHER DETAILS OR REMEDIAL ACTION REQUIRED")||job.engineer_work,273,6.6);
+  page.drawRectangle({x:37,y:225,width:520,height:17,color:shade,borderColor:edge,borderWidth:.55});text("DECLARATION BY INSPECTOR",43,230,8,regular,490);
+  const defects=v("CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’");
+  page.drawRectangle({x:37,y:194,width:520,height:31,borderColor:edge,borderWidth:.55});
+  const declaration=test?"TEST ONLY: This is a simulated software test. No thorough examination or valid inspector declaration has taken place.":defects.toUpperCase()==="NONE"?"I hereby certify that no critical defects were found on the equipment described on this certificate at the time of inspection and that this equipment was found to be fit for use.":"Inspector declaration withheld pending confirmed examination findings and competent-person sign-off.";
+  text(declaration,43,213,8,regular,508,3);
+  cell(37,194,260,24,"NAME OF INSPECTOR",v("NAME OF INSPECTOR"),101);cell(297,194,260,24,"SIGNATURE",test?"TEST ONLY - SIMULATED":job.engineer_signature,109,6.5);
+  cell(37,170,520,22,"QUALIFICATIONS",v("QUALIFICATIONS"),101);cell(37,148,520,22,"COMPANY",v("COMPANY"),101);
+  text("JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR",145,90,8,regular,370,2);
+  if(test)text("TEST ONLY - NOT FOR STATUTORY USE OR EVIDENCE OF EXAMINATION",37,64,8,bold,520,2,red);
   const bytes=await pdf.save();return new Blob([new Uint8Array(bytes)],{type:"application/pdf"});
  }
  const navy=rgb(0.08,0.16,0.25),grey=rgb(0.37,0.43,0.50);
