@@ -227,6 +227,24 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The manual bulk check covers the Vehicle category. The daily 4am UK DVSA schedule is active; its first successful full-fleet run is still awaiting verification. Trailer certificate dates remain separate.</p>
   </section>;
 }
+function GeneralRepairPaperForm({job,asset}: {job:any;asset:any}){
+ const field=(label:string,value:unknown)=><div style={{border:"1px solid #94a3b8",padding:10,minHeight:58}}><strong style={{fontSize:12}}>{label}</strong><div style={{whiteSpace:"pre-wrap",marginTop:5}}>{String(value??"")||"—"}</div></div>;
+ return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:16,margin:"12px 0"}}>
+  <h3 style={{textAlign:"center",color:"#17212b"}}>JT UTILITIES LTD · ASSET JOB CARD</h3>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))"}}>
+   {field("ASSET NUMBER",asset?.asset_code)}{field("DATE OF DEFECT",job.job_details?.["Date of defect"]||job.created_at?.slice(0,10))}{field("JOB CARD NO",job.job_card_number)}
+   {field("DESCRIPTION",asset?.description)}{field("SERIAL NUMBER",asset?.serial_number)}
+  </div>
+  <div style={{border:"1px solid #94a3b8",padding:10,marginTop:8}}><strong>JOB DETAILS</strong><p style={{whiteSpace:"pre-wrap"}}>{job.instructions||job.title}</p></div>
+  <div style={{border:"1px solid #94a3b8",padding:10,marginTop:8}}><strong>PARTS ADDED</strong><p style={{whiteSpace:"pre-wrap"}}>{job.engineer_parts||"To be completed by engineer"}</p></div>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",marginTop:8}}>
+   {field("LOCATION",job.job_details?.Location||asset?.location)}{field("WORK COMPLETED BY",job.engineer_signature)}
+   {field("POSITION",job.job_details?.Position)}{field("SIGNED",job.engineer_signature?job.engineer_signature+" · "+(job.engineer_signed_at||""):"Awaiting signature")}
+   {field("COMPLIANT AS OF (DD/MM/YY)",job.job_details?.["Compliant as of"])}
+  </div>
+  <p style={{textAlign:"center",fontSize:12,marginTop:12}}>Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR · www.jtutilities.com · 020 3840 4826</p>
+ </div>;
+}
 function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"chains";values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly?:boolean}){
  const chains=kind==="chains";
  const fields=chains?[
@@ -317,7 +335,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
-  const [j,a,r,e]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.from("planttrack_engineer_directory").select("user_id,display_name")]);
+  const [j,a,r,e]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,serial_number,location").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.from("planttrack_engineer_directory").select("user_id,display_name")]);
   if(!active)return;
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
@@ -368,7 +386,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   </div>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
@@ -377,9 +395,11 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/>}
+   {chosen.job_type==="General repair"&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
+   {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
    {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>View signed PDF in asset record</button>}
    {role==="office"&&chosen.status==="Approved"&&!chosen.approved_pdf_path&&<button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"PDF saved against asset")}>Retry PDF filing</button>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
