@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
@@ -28,7 +28,10 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     else setDocs((data||[]) as Doc[]);
     setLoading(false);
   }
-  useEffect(()=>{\n    void load();\n    void (async()=>{const {data}=await supabase.auth.getUser();if(data.user){const {data:profile}=await supabase.from("profiles").select("role,active").eq("id",data.user.id).maybeSingle();setUploadAllowed(!!profile?.active && ["admin","plant_manager","mechanic","inspector"].includes(profile.role));}})();\n  },[asset.id]);
+  useEffect(()=>{
+    void load();
+    void (async()=>{const {data}=await supabase.auth.getUser();if(data.user){const {data:profile}=await supabase.from("profiles").select("role,active").eq("id",data.user.id).maybeSingle();setUploadAllowed(!!profile?.active && ["admin","plant_manager","mechanic","inspector"].includes(profile.role));}})();
+  },[asset.id]);
 
   async function upload(file?:File) {
     if(!file) return;
