@@ -157,3 +157,14 @@ td small{color:#7c899a}
 }
 
 @media(max-width:700px){.workshop-selected-job{order:3;margin:10px 0 18px!important;padding:14px;border:1px solid #e0e7ef;border-radius:14px;background:#fff}}
+
+/* Preserve office creation-first flow; mobile remains assigned-jobs-first. */
+@media(min-width:701px){
+ .workshop-job-panel{display:flex;flex-direction:column}
+ .workshop-job-panel>.panel-head{order:0}
+ .workshop-job-panel>.workshop-mobile-add{order:1}
+ .workshop-job-panel>.workshop-create-form{order:1}
+ .workshop-job-panel>.workshop-jobs-title{order:2}
+ .workshop-job-panel>.workshop-desktop-jobs{order:3}
+ .workshop-job-panel>.workshop-selected-job{order:4}
+}
