@@ -58,7 +58,7 @@ export default function MotHistory({supabase}:{supabase:SupabaseClient}) {
     const records=Array.isArray(result)?result:Array.isArray(result?.vehicles)?result.vehicles:[result];
     const found=records.find((r:any)=>r&&typeof r==="object") as MotRecord|undefined;
     if(!found){setError("DVSA returned no MOT record for "+vehicle.registration+".");}
-    else setRecord(found);
+    else {\n      setRecord(found);\n      setSaveNotice(data?.saved ? "MOT result saved to PlantTrack. Its expiry date will appear in the Inspection Calendar." : (data?.saveError || "DVSA returned the MOT history, but PlantTrack did not confirm that it was saved."));\n    }
     setLoading(false);
   }
 
@@ -80,7 +80,7 @@ export default function MotHistory({supabase}:{supabase:SupabaseClient}) {
       <button className="primary" onClick={lookup} disabled={!vehicle||loading||loadingVehicles}><Search size={16}/>{loading?"Checking DVSA…":"Check MOT history"}</button>
     </div>
     {error&&<div className="auth-error" role="alert" style={{marginTop:16}}>{error}</div>}
-    {loading&&<p className="muted" style={{marginTop:16}}>Contacting DVSA securely and retrieving MOT records…</p>}\n    {saveNotice&&<p className={saveNotice.startsWith("MOT result saved")?"notice":"auth-error"} role="status" style={{marginTop:14}}>{saveNotice}</p>}
+    {loading&&<p className="muted" style={{marginTop:16}}>Contacting DVSA securely and retrieving MOT records…</p>}\n    {saveNotice&&<p role="status" style={{marginTop:14,padding:12,borderRadius:8,background:saveNotice.startsWith("MOT result saved")?"#ecfdf3":"#fff7ed",color:saveNotice.startsWith("MOT result saved")?"#166534":"#9a3412"}}>{saveNotice}</p>}\n    {saveNotice&&<p className={saveNotice.startsWith("MOT result saved")?"notice":"auth-error"} role="status" style={{marginTop:14}}>{saveNotice}</p>}
     {record&&<div style={{marginTop:20}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center",borderBottom:"1px solid #eee",paddingBottom:14}}>
         <div><span className="eyebrow">DVSA VEHICLE RECORD</span><h3 style={{margin:"5px 0"}}>{record.registration||lastRegistration} · {record.make||vehicle?.manufacturer||""} {record.model||vehicle?.model||""}</h3><p className="muted">{[record.primaryColour,record.fuelType,record.firstUsedDate?"First used "+date(record.firstUsedDate):""].filter(Boolean).join(" · ")}</p></div>
