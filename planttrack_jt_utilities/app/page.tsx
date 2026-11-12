@@ -33,6 +33,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
   const [mobileNav,setMobileNav]=useState(false);
   const [assetFilter,setAssetFilter]=useState("All");
   const [categoryFilter,setCategoryFilter]=useState("All");
+  const [selectedAssetStatus,setSelectedAssetStatus]=useState<string|null>(null);
   const [notice,setNotice]=useState("");
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
   useEffect(() => {
@@ -109,14 +110,18 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           <div className="welcome"><div><span className="eyebrow light">JT UTILITIES FLEET</span><h2>Your plant, ready for the work ahead.</h2><p>A live overview of the equipment your teams rely on every day.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
           <div className="stats">
             {[
-              ["Total assets",assetsLoading?"…":String(assets.length),"All vehicles, plant and equipment",Truck],
-              ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2],
-              ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
-              ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
-              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle]
-            ].map(([label,value,sub,Icon]:any)=><div className="stat" key={label}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub}</small></div>)}
+              ["Total assets",assetsLoading?"…":String(assets.length),"All vehicles, plant and equipment",Truck,"All assets"],
+              ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2,"Available"],
+              ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity,"In use"],
+              ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench,"In workshop"],
+              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle,"Out of service"]
+            ].map(([label,value,sub,Icon,filter]:any)=><button type="button" className="stat" key={label} onClick={()=>setSelectedAssetStatus(selectedAssetStatus===filter?null:filter)} aria-pressed={selectedAssetStatus===filter} style={{textAlign:"left",cursor:"pointer",border:selectedAssetStatus===filter?"2px solid #b91c1c":undefined}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
+          {selectedAssetStatus&&<section className="panel" style={{marginTop:16}}>
+            <div className="panel-head"><div><h3>{selectedAssetStatus==="All assets"?"All fleet assets":selectedAssetStatus+" assets"}</h3><p>{selectedAssetStatus==="All assets"?"Every vehicle, item of plant and equipment in the register.":"Assets currently marked "+selectedAssetStatus.toLowerCase()+"."}</p></div><button type="button" className="secondary" onClick={()=>setSelectedAssetStatus(null)}>Close</button></div>
+            {assetsLoading?<p className="muted">Loading assets…</p>:(()=>{const rows=selectedAssetStatus==="All assets"?assets:assets.filter(asset=>asset.status===selectedAssetStatus);return rows.length?rows.map(asset=><div className="attention" key={asset.id}><div className="avatar"><Truck size={16}/></div><div><b>{asset.id} · {asset.name}</b><small>{asset.category} · {asset.registration} · {asset.location}</small></div><Tag tone={asset.status==="Available"?"green":asset.status==="In workshop"?"amber":"red"}>{asset.status}</Tag></div>):<p className="muted">No assets are currently in this group.</p>;})()}
+          </section>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
           <Calendar supabase={supabase}/>
           <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
