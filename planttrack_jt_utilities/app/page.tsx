@@ -184,8 +184,8 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const add=(date:string|null,kind:"examined"|"due",label:string)=>{
           if(date) mapped.push({id:hgv.id+"-"+label,date:date.slice(0,10),kind,assetCode:code,description:label+" · "+(hgv.description||"HGV")});
         };
-        add(hgv.pmi_last_completed,"examined",prefix+" last PMI");
-        add(hgv.pmi_next_due,"due",prefix+" next PMI");
+        add(hgv.pmi_last_completed,"examined",prefix+" PMI inspection completed");
+        add(hgv.pmi_next_due,"due",prefix+" PMI inspection due");
         add(hgv.mot_due,"due",prefix+" MOT expiry");
         if(prefix==="HGV")add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
       }
@@ -237,7 +237,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":event.description.startsWith("HGV")||event.description.startsWith("Trailer")?event.description.split(" · ")[0]:"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":event.description.startsWith("HGV")||event.description.startsWith("Trailer")?event.description.split(" · ")[0].replace(/^HGV /,""):"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
