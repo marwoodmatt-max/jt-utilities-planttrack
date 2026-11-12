@@ -228,6 +228,13 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
+ const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","Defect rectification","Other / unexpected work"];
+ const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
+ const fieldsByType:Record<string,string[]>={
+  "General repair":["Fault reported","Diagnosis"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
+  "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","PMI checklist / inspection notes"],
+  "Defect rectification":["Original defect reference","Rectification and safety checks"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
+ };
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
@@ -242,22 +249,26 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  return <section className="panel">
   <div className="panel-head"><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
-  {role==="office"&&<div style={{display:"grid",gap:10,marginBottom:22}}>
-   <h3>Raise a job card</h3>
+  {(role==="office"||role==="engineer")&&<div style={{display:"grid",gap:10,marginBottom:22}}>
+   <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
+   <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
+   {fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
    <label>Job title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Repair, service or inspection"/></label>
    <label>Work instructions<textarea value={instructions} onChange={e=>setInstructions(e.target.value)}/></label>
    <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
-   <label>Assign engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>
-   <button className="primary" disabled={busy||!asset||title.trim().length<3||instructions.trim().length<3} onClick={()=>void perform(async()=>{const r=await supabase.rpc("create_workshop_job",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_engineer:engineer||null});if(!r.error){setTitle("");setInstructions("");}return r;},"Job card created")}>Create job card</button>
+   {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
+   <button className="primary" disabled={busy||!asset||title.trim().length<3||instructions.trim().length<3} onClick={()=>void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");}return r;},"Job card created")}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
   </div>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}</td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");}}>Open job</button></td></tr>)}
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");}}>Open job</button></td></tr>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
-   <p>{chosen.instructions}</p><p><b>Status:</b> {chosen.status}</p>
+   <p><b>Form:</b> {chosen.job_type||"General repair"}</p><p>{chosen.instructions}</p>
+   {Object.entries(chosen.job_details||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}<p><b>Status:</b> {chosen.status}</p>
+   {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
