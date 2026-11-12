@@ -226,10 +226,53 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The manual bulk check covers the Vehicle category. The daily 4am UK DVSA schedule is active; its first successful full-fleet run is still awaiting verification. Trailer certificate dates remain separate.</p>
   </section>;
 }
+function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"chains";values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly?:boolean}){
+ const chains=kind==="chains";
+ const fields=chains?[
+ ["Date of Thorough Examination","Date of report","Report number"],
+ ["Name & address of employer for whom the Thorough Examination was made","Address of premises at which the Examination took place"],
+ ["Description & identification of the equipment or accessories","SWL","Date of manufacture","Serial no:","Date of last examination"],
+ ["Name & address of employer/ examiner who carried out the previous thorough examination. (if applicable):"],
+ ["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?"],
+ ["Identification of any part to have a defect which is or could become a danger to persons and a description of defect or Identification of deteriorating conditions which require attention, repair or adjustment. (If none state NONE)"],
+ ["Status","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"],
+ ["Name, address & qualifications of person making this report:","Name of person authenticating this report:","Latest date by which next thorough examination must be carried out:"],
+ ["Is person making this report","Name & address of employer of person making this report:"]
+ ]:[
+ ["CERTIFICATE NO","ORIGINAL CERTIFICATE NO/CE"],
+ ["EXAMINATION/TEST DATE","LAST EXAMINATION/TEST DATE"],
+ ["TYPE OF EXAMINATION/TEST","ITEM"],
+ ["NAME AND ADDRESS OF EQUIPMENT OWNER","LOCATION OF EQUIPMENT WHEN EXAMINED"],
+ ["ACCESSORIES 6 MONTHLY","LIFTING PERSONS 6 MONTHLY","APPLIANCES 12 MONTHLY","EXAMINATION SCHEME","EXCEPTIONAL CIRCUMSTANCES"],
+ ["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"],
+ ["CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’"],
+ ["FURTHER DETAILS OR REMEDIAL ACTION REQUIRED"],
+ ["NAME OF INSPECTOR","QUALIFICATIONS","COMPANY"]
+ ];
+ const choice=(key:string)=>chains&&(["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"].includes(key));
+ return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:18,margin:"14px 0",borderRadius:4}}>
+  <h3 style={{textAlign:"center",color:"#17212b"}}>{chains?"REPORT OF A THOROUGH EXAMINATION OF LIFTING EQUIPMENT & ACCESSORIES":"Report of Thorough Examination and/or Test of Equipment"}</h3>
+  {!chains&&<p style={{textAlign:"center",fontSize:12}}>Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307<br/>Provision and Use of Work Equipment Regulations P.U.W.E.R 1998 SI 2306<br/>Supply of Machinery (Safety) Regulations 2008</p>}
+  {fields.map((group,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
+   {group.map(key=><label key={key} style={{borderRight:"1px solid #cbd5e1",padding:8,fontSize:12,fontWeight:600,color:"#17212b"}}>{key}
+    {choice(key)?<select disabled={readOnly} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6}}><option value="">Select</option><option>Yes</option><option>No</option></select>:
+    <textarea readOnly={readOnly} rows={key.length>70?3:2} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6,background:readOnly?"#f1f5f9":"#fff"}}/>}
+   </label>)}
+  </div>)}
+  {chains?<><p style={{fontSize:12,marginTop:12}}><b>* Fault code reference:</b></p>
+   <p style={{fontSize:12}}>Immediate - Defects which are a danger to persons - equipment or accessories must be REMOVED FROM SERVICE</p>
+   <p style={{fontSize:12}}>A- Defects which are a danger or may become a danger to persons, action required - repairs to be concluded within 1 month</p>
+   <p style={{fontSize:12}}>B- Identification of components / assemblies found to be deteriorating which need to be checked or rectified.</p>
+   <p style={{fontSize:12}}>C - Observations on the condition of the equipment or accessories, comments & recommendations</p>
+   <p style={{fontSize:12}}>This report complies with the requirements of the Lifting Operations and Lifting Equipment Regulations 1998</p>
+  </>:<p style={{fontSize:12,marginTop:12}}><b>DECLARATION BY INSPECTOR</b><br/>I hereby certify that no critical defects were found on the equipment described on this certificate at the time of inspection and that this equipment was found to be fit for use.</p>}
+  <p style={{fontSize:12}}>Examiner signature and date are recorded separately when the engineer submits this job card.</p>
+ </div>;
+}
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
- const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","LOLER thorough examination","Defect rectification","Other / unexpected work"];
+ const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Defect rectification","Other / unexpected work"];
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
   "General repair":["Fault reported","Diagnosis"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
@@ -238,6 +281,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  };
  const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
+ const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
@@ -256,7 +300,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
    <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
-   {fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
+   {jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories"?<LolerPaperForm kind={jobType==="LOLER thorough examination"?"plant":"chains"} values={jobDetails} onChange={(key,value)=>setJobDetails(d=>({...d,[key]:value}))}/>:null}
+   {jobType!=="LOLER thorough examination"&&jobType!=="LOLER chains & accessories"&&fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
    <label>Job title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Repair, service or inspection"/></label>
    <label>Work instructions<textarea value={instructions} onChange={e=>setInstructions(e.target.value)}/></label>
    <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
@@ -265,7 +310,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   </div>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});}}>Open job</button></td></tr>)}
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
@@ -273,18 +318,20 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {Object.entries(chosen.job_details||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}<p><b>Status:</b> {chosen.status}</p>
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
+   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
    {role==="engineer"&&["Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
+    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
     {(checklistByType[chosen.job_type]||[]).map(field=><label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <label>Parts used<input value={parts} onChange={e=>setParts(e.target.value)}/></label>
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
     <label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
-    <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim())} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,p_checklist:checklist}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
+    <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim())} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,p_checklist:{...checklist,...lolerFields}}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
    </>}
    {role==="office"&&chosen.status==="Awaiting office approval"&&<>
     <label>Office review comments<textarea value={comments} onChange={e=>setComments(e.target.value)}/></label>
