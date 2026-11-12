@@ -16,7 +16,7 @@ function displayStatus(status:string) {
   return labels[status] || status;
 }
 const nav = [
-  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],
+  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],["MOT checker",FileCheck2],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
   ["Workshop job cards",Wrench],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
@@ -60,6 +60,45 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
       {[...overdue,...upcoming].map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
     </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
+  </section>;
+}
+type MotVehicle={asset_code:string;description:string|null;mot_due:string|null;status:string;category:string|null};
+function MotChecker({supabase}:{supabase:SupabaseClient}){
+  const [vehicles,setVehicles]=useState<MotVehicle[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let cancelled=false;
+    async function load(){
+      const {data,error}=await supabase.from("assets").select("asset_code,description,mot_due,status,category").eq("category","HGV").order("asset_code");
+      if(cancelled)return;
+      if(error)setError(error.message);else setVehicles((data||[]) as MotVehicle[]);
+      setLoading(false);
+    }
+    void load();return()=>{cancelled=true;};
+  },[supabase]);
+  const now=new Date();
+  const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+  const daysUntil=(date:string)=>Math.round((Date.parse(date.slice(0,10)+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
+  const fmt=(d:string)=>d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4);
+  const dueSoon=vehicles.filter(v=>v.mot_due&&daysUntil(v.mot_due)<=60&&daysUntil(v.mot_due)>=0).length;
+  const overdue=vehicles.filter(v=>v.mot_due&&daysUntil(v.mot_due)<0).length;
+  return <section className="panel">
+    <div className="panel-head"><div><h3>MOT checker · HGVs & trailers</h3><p>Live MOT expiry dates from the Plant Register · 60 / 30 / 14-day warnings</p></div></div>
+    <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",marginBottom:16}}>
+      <div className="stat"><div className="stat-top"><span>MOT overdue</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue}</strong></div>
+      <div className="stat"><div className="stat-top"><span>Due in 60 days</span><CalendarDays size={18}/></div><strong>{loading?"…":dueSoon}</strong></div>
+      <div className="stat"><div className="stat-top"><span>MOT date missing</span><FileText size={18}/></div><strong>{loading?"…":vehicles.filter(v=>!v.mot_due).length}</strong></div>
+    </div>
+    {error&&<p className="auth-error" role="alert">Could not load MOT records: {error}</p>}
+    {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>MOT expiry</th><th>Warning</th><th>Vehicle status</th></tr></thead><tbody>
+      {vehicles.slice().sort((a,b)=>(a.mot_due||"9999").localeCompare(b.mot_due||"9999")).map(v=>{
+        const days=v.mot_due?daysUntil(v.mot_due):null;
+        const label=days===null?"Date missing":days<0?"MOT overdue":days===0?"Expires today":days<=14?"14-day warning":days<=30?"30-day warning":days<=60?"60-day warning":"Current";
+        return <tr key={v.asset_code}><td><b>{v.asset_code}</b><small>{v.description||""}</small></td><td>{v.mot_due?fmt(v.mot_due):"Not recorded"}</td><td><Tag tone={days===null||days<0?"red":days<=60?"amber":"green"}>{label}</Tag></td><td>{v.status==="out_of_service"?"VOR":v.status}</td></tr>;
+      })}
+    </tbody></table>{vehicles.length===0&&<p className="muted">No HGV or trailer records found.</p>}</div>}
+    <p className="muted">These are internal PlantTrack expiry records, not an automatic DVSA lookup. Update dates from verified MOT certificates in the Plant Register.</p>
   </section>;
 }
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
@@ -165,6 +204,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Projects"&&<Projects supabase={supabase}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
+        {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
