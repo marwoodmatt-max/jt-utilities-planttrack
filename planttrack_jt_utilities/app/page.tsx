@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
+import { generateApprovedJobPdf } from "../lib/loler-pdf";
 import LolerManager from "../components/loler-manager";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
@@ -325,7 +326,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
  async function archiveApprovedPdf(job:any){
   const path=job.asset_id+"/"+job.id+".pdf";
-  const pdf=createJobCertificatePdf(job,assetName(job.asset_id));
+  const pdf=await generateApprovedJobPdf(job,assetName(job.asset_id));
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
   const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
@@ -363,7 +364,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <label>Work instructions<textarea value={instructions} onChange={e=>setInstructions(e.target.value)}/></label>
    <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
    {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
-   <button className="primary" disabled={busy||!asset||title.trim().length<3||instructions.trim().length<3} onClick={()=>void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");}return r;},"Job card created")}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
+   <button className="primary" disabled={busy||!asset||title.trim().length<3||instructions.trim().length<3} onClick={()=>void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");}return r;},"Job card created")}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
   </div>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
