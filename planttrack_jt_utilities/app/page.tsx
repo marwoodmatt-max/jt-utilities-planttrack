@@ -325,7 +325,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
-  "General repair":["Fault reported","Diagnosis"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
+  "General repair":["Fault reported","Diagnosis","Date of defect","Location","Position","Compliant as of"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
   "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","Inspection date","PMI checklist / inspection notes"],"LOLER thorough examination":["Equipment identification","Examination date","Competent person","Report / certificate reference"],
   "Defect rectification":["Original defect reference","Rectification and safety checks"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
  };
@@ -345,7 +345,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
  async function archiveApprovedPdf(job:any){
   const path=job.asset_id+"/"+job.id+".pdf";
-  const pdf=await generateApprovedJobPdf(job,assetName(job.asset_id),assets.find(a=>a.id===job.asset_id)?.asset_code==="TEST-LOLER-001");
+  const selectedAsset=assets.find(a=>a.id===job.asset_id);
+  const pdf=await generateApprovedJobPdf({...job,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},assetName(job.asset_id),selectedAsset?.asset_code==="TEST-LOLER-001");
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
   const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
@@ -388,6 +389,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
+   {asset&&<div className="workshop-asset-summary"><strong>Machine details (filled automatically)</strong><span>Asset: {assets.find(a=>a.id===asset)?.asset_code}</span><span>Description: {assets.find(a=>a.id===asset)?.description||"Not recorded"}</span><span>Serial number: {assets.find(a=>a.id===asset)?.serial_number||"Not recorded"}</span><span>Location: {assets.find(a=>a.id===asset)?.location||"Not recorded"}</span></div>}
    <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
    {jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories"?<LolerPaperForm kind={jobType==="LOLER thorough examination"?"plant":"chains"} values={jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails} onChange={(key,value)=>setJobDetails(d=>({...d,[key]:value}))}/>:null}
    {jobType!=="LOLER thorough examination"&&jobType!=="LOLER chains & accessories"&&fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
@@ -397,7 +399,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
    {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
-   <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");}return r;},"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
+   <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");}return r;},"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
   </div></>}
   {chosen&&<div className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
