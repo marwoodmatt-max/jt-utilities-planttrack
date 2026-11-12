@@ -26,6 +26,10 @@ create table public.assets (
   location text,
   hour_meter numeric,
   status public.asset_status not null default 'available',
+  pmi_next_due date,
+  pmi_last_completed date,
+  mot_due date,
+  tacho_calibration_due date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
