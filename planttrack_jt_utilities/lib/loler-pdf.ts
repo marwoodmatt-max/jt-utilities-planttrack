@@ -63,7 +63,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string):Promise<
  const title=isPlant?"REPORT OF THOROUGH EXAMINATION AND/OR TEST OF EQUIPMENT":isChains?"REPORT OF A THOROUGH EXAMINATION OF LIFTING EQUIPMENT & ACCESSORIES":"APPROVED WORKSHOP JOB RECORD";
  write("JT UTILITIES LTD",12,true);write(title,14,true);y-=10;
  write("Asset: "+assetLabel,10,true);
- write("Certificate / record number: "+(job.certificate_number||job.id),10,true);
+ write("Certificate / record number: "+(job.certificate_number||job.job_card_number||job.id),10,true);
  write("Office approval: "+(job.office_signed_at||"Not recorded"),8);y-=10;
  if(isPlant){
   write("Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307",8);
@@ -94,6 +94,23 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string):Promise<
  field("Office approval date",job.office_signed_at);
  field("Office review comments",job.office_comments);
  if(!isLoler){
+  if(job.job_type==="General repair"){
+   heading("ASSET JOB CARD - GENERAL REPAIR");
+   field("ASSET NUMBER",assetLabel);
+   field("DATE OF DEFECT",job.job_details?.["Date of defect"]||job.created_at);
+   field("JOB CARD NO",job.job_card_number);
+   field("DESCRIPTION",assetLabel);
+   field("SERIAL NUMBER",job.job_details?.["Serial number"]);
+   field("JOB DETAILS",job.instructions);
+   field("PARTS ADDED",job.engineer_parts);
+   field("LOCATION",job.job_details?.Location);
+   field("WORK COMPLETED BY",job.engineer_signature);
+   field("POSITION",job.job_details?.Position);
+   field("SIGNED",job.engineer_signature);
+   field("COMPLIANT AS OF (DD/MM/YY)",job.job_details?.["Compliant as of"]);
+   write("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",8);
+   write("www.jtutilities.com  |  020 3840 4826",8);
+  }
   field("Job",job.title);field("Instructions",job.instructions);
   for(const [key,value] of Object.entries(values))field(key,value);
  }
