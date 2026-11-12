@@ -84,6 +84,8 @@ function statusLabel(asset: AssetRow) {
 
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [showFleetImport,setShowFleetImport]=useState(false);
+  const [showBulkUpload,setShowBulkUpload]=useState(false);
+  const [uploadAssetId,setUploadAssetId]=useState("");
   const [bulkUploading,setBulkUploading]=useState(false);
   const [vorSaving,setVorSaving]=useState(false);
   const [vorFeedback,setVorFeedback]=useState("");
@@ -210,7 +212,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     const confirmation = window.prompt('Type the asset code "' + asset.asset_code + '" to confirm deletion:');
     if (confirmation !== asset.asset_code) { setError("Asset deletion cancelled: asset code did not match."); return; }
     setSaving(true); setError(""); setMessage("");
-    const {error:deleteError} = await supabase.from("assets").delete().eq("id",asset.id);
+    const {error:deleteError} = await supabase.rpc("delete_unused_asset",{p_asset:asset.id});
     if (deleteError) setError("Asset not deleted. It may have linked job cards, documents or compliance records: " + deleteError.message);
     else { setMessage("Asset " + asset.asset_code + " deleted."); setSelectedAsset(null); setEditing(null); await loadAssets(); }
     setSaving(false);
@@ -280,37 +282,28 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   async function bulkUploadFleetFiles(files:FileList|null){
     if(!files || !isAdmin || bulkUploading) return;
+    const asset=rows.find(a=>a.id===uploadAssetId);
+    if(!asset){setBulkFeedback("Choose the asset these PDFs belong to first.");return;}
     const selectedFiles=Array.from(files);
-    if(!selectedFiles.length){setBulkFeedback("No files selected. Choose the unzipped fleet folder or individual PDF files.");return;}
+    if(!selectedFiles.length)return;
     setBulkUploading(true);setBulkFeedback("");
     const {data:authData,error:authError}=await supabase.auth.getUser();
     if(authError || !authData.user){setBulkFeedback("Please sign in again as Admin.");setBulkUploading(false);return;}
-    const outcomes:string[]=[];
     let uploaded=0,skipped=0,failed=0;
+    const outcomes:string[]=[];
     for(const file of selectedFiles){
-      const path=(file.webkitRelativePath||file.name).replace(/\\/g,"/").toUpperCase();
       if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;outcomes.push(file.name+": PDF only, maximum 25 MB");continue;}
-      // Files in the review folder contain conflicting C545766/C545776 identifiers.
-      // Do not automatically attach disputed records to a vehicle.
-      const correctedTrailer=path.includes("C545776") && /02[.\-_ ]10[.\-_ ]26/.test(path);
-      if(path.includes("C545776") && !correctedTrailer){skipped++;outcomes.push(file.name+": other trailer paperwork requires review");continue;}
-      const code=correctedTrailer?"C545766":path.includes("R500_JTU") || /\\bR500(?:[ _-]*JTU|[ _-]*VOR|[ _-]*BT|[ _-]*\\d)/.test(path)?"R500 JTU":path.includes("WP63_PFD") || path.includes("WP63 PFD")?"WP63 PFD":null;
-      if(!code){skipped++;outcomes.push(file.name+": could not match to R500 JTU or WP63 PFD");continue;}
-      // The crane LOLER belongs to a lifting-equipment asset, not to the lorry.
-      if(file.name.toUpperCase().includes("LOLER")){skipped++;outcomes.push(file.name+": crane LOLER requires correct lifting asset");continue;}
-      const asset=rows.find(r=>r.asset_code.toUpperCase()===code);
-      if(!asset){failed++;outcomes.push(code+" not found");continue;}
       const {data:existing,error:existingError}=await supabase.from("asset_documents").select("id").eq("asset_id",asset.id).eq("file_name",file.name).limit(1);
       if(existingError){failed++;outcomes.push(file.name+": "+existingError.message);continue;}
-      if(existing?.length){skipped++;continue;}
+      if(existing?.length){skipped++;outcomes.push(file.name+": already in this asset folder");continue;}
       const storagePath=asset.id+"/"+crypto.randomUUID()+"/"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
       const {error:storageError}=await supabase.storage.from("asset-documents").upload(storagePath,file,{contentType:"application/pdf",upsert:false});
       if(storageError){failed++;outcomes.push(file.name+": "+storageError.message);continue;}
-      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:file.name.toUpperCase().includes("VOR")?"VOR record":"Vehicle documents",description:correctedTrailer?"Owner confirmed clerical error: original PDF says C545776, correct trailer C545766. Inspection and brake test 02 Oct 2026. Original filename retained.":file.name.toUpperCase().includes("VOR")?"VOR notice dated 26 Aug 2026 · return-to-service not documented":"Bulk import · source PDF",uploaded_by:authData.user.id});
+      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:"Asset documents",description:"Bulk upload to "+asset.asset_code,uploaded_by:authData.user.id});
       if(rowError){await supabase.storage.from("asset-documents").remove([storagePath]);failed++;outcomes.push(file.name+": "+rowError.message);}
       else uploaded++;
     }
-    setBulkFeedback(selectedFiles.length+" selected · "+uploaded+" uploaded · "+skipped+" skipped · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,8).join("; "):"")+(uploaded===0?" · No documents were added; check the reasons above.":""));
+    setBulkFeedback(asset.asset_code+": "+uploaded+" uploaded · "+skipped+" skipped · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,6).join("; "):""));
     setBulkUploading(false);
   }
 
@@ -371,17 +364,22 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       </div>
     </div>
 
-    {isAdmin && <div style={{marginBottom:16,padding:16,border:"1px solid #cbd5e1",borderRadius:12,background:"#f8fafc"}}>
-      <h3 style={{marginTop:0}}>Bulk PDF upload · Existing PlantTrack folders</h3>
-      <p className="muted">Unzip the fleet compliance pack, then choose its extracted parent folder, or select multiple PDFs directly. PDFs for R500 JTU and WP63 PFD are matched to the existing asset folders. Disputed trailer files and crane LOLER are deliberately held for review.</p>
-      <label style={{display:"block",fontWeight:700,fontSize:13}}>Choose extracted fleet folder
-        <input type="file" accept=".pdf,application/pdf" multiple {...({webkitdirectory:"",directory:""} as any)} disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
-      </label>
-      <label style={{display:"block",fontWeight:700,fontSize:13,marginTop:12}}>Or choose several PDFs directly
-        <input type="file" accept=".pdf,application/pdf" multiple disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
-      </label>
-      {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
-      {bulkFeedback&&<p role="status" style={{whiteSpace:"pre-wrap",fontWeight:600}}>{bulkFeedback}</p>}
+    {isAdmin && <div style={{marginBottom:12}}>
+      <button type="button" className="secondary" onClick={()=>setShowBulkUpload(v=>!v)}>{showBulkUpload?"Close bulk PDF upload":"Bulk upload PDFs to an asset"}</button>
+      {showBulkUpload&&<div style={{marginTop:10,padding:16,border:"1px solid #cbd5e1",borderRadius:12,background:"#f8fafc"}}>
+        <h3 style={{marginTop:0}}>Upload PDFs to any asset</h3>
+        <p className="muted">Choose an asset first. All selected PDFs will be filed in that asset's document folder. Maximum 25 MB per PDF; existing filenames are skipped.</p>
+        <label style={{display:"block",fontWeight:700}}>Asset
+          <select value={uploadAssetId} onChange={e=>{setUploadAssetId(e.target.value);setBulkFeedback("");}} style={{display:"block",marginTop:6,maxWidth:"100%",padding:10}}>
+            <option value="">Select an asset</option>{rows.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}
+          </select>
+        </label>
+        <label style={{display:"block",marginTop:14,fontWeight:700}}>Select PDFs
+          <input type="file" accept=".pdf,application/pdf" multiple disabled={bulkUploading||!uploadAssetId} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:7}}/>
+        </label>
+        {bulkUploading&&<p role="status">Uploading…</p>}
+        {bulkFeedback&&<p role="status" style={{whiteSpace:"pre-wrap"}}>{bulkFeedback}</p>}
+      </div>}
     </div>}
     {isAdmin && categoryFilter.toLowerCase()==="hgv" && <div style={{marginBottom:16,padding:14,border:"1px solid #cbd5e1",borderRadius:10}}>
       <b>C545766 trailer dates missing?</b>
