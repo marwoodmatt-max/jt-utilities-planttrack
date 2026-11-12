@@ -253,7 +253,6 @@ function Projects({supabase}:{supabase:SupabaseClient}) {
       supabase.from("project_allocations").select("id,project_id,asset_id,allocated_at,returned_at,notes").is("returned_at",null).order("allocated_at",{ascending:false}),
     ]);
     if(p.error||a.error){setError(p.error?.message||a.error?.message||"Could not load projects.");setLoading(false);return;}
-    const activeAssets=(a.data||[]).map((x:any)=>x.asset_id);
     const {data:assetRows,error:assetError}=await supabase.from("assets").select("id,asset_code,description,category,location,status").order("asset_code");
     if(assetError){setError(assetError.message);setLoading(false);return;}
     setProjects(p.data||[]);setAllocations(a.data||[]);setAssets(assetRows||[]);setLoading(false);
@@ -281,7 +280,6 @@ function Projects({supabase}:{supabase:SupabaseClient}) {
   }
   const activeAssetIds=new Set(allocations.map(a=>a.asset_id));
   const availableAssets=assets.filter(a=>!activeAssetIds.has(a.id));
-  const activeProjects=projects.filter(p=>p.status==="active"||p.status==="planned");
   const fmt=(d:string)=>new Date(d).toLocaleDateString("en-GB");
   return <section className="panel">
     <div className="panel-head"><div><h3>Projects and site equipment</h3><p>Manage your UK jobs and see which equipment is allocated to each site.</p></div><button className="primary" onClick={()=>setShowForm(!showForm)}><Plus size={16}/> New project</button></div>
