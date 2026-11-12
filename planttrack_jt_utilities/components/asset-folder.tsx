@@ -5,14 +5,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
-type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
+type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null };\ntype Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
 const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
 const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
 export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void}) {
-  const [docs,setDocs]=useState<Doc[]>([]);
+  const [docs,setDocs]=useState<Doc[]>([]);\n  const [certificates,setCertificates]=useState<JobCertificate[]>([]);
   const [uploadAllowed,setUploadAllowed]=useState(false);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -26,7 +26,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     setLoading(true); setError("");
     const {data,error:err}=await supabase.from("asset_documents").select("id,asset_id,file_name,storage_path,document_type,description,uploaded_at,uploaded_by").eq("asset_id",asset.id).order("uploaded_at",{ascending:false});
     if(err) setError("Could not load this asset folder: "+err.message);
-    else setDocs((data||[]) as Doc[]);
+    else setDocs((data||[]) as Doc[]);\n    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});\n    if(certs.error)setError(prev=>[prev,"Could not load generated certificates: "+certs.error.message].filter(Boolean).join(" "));\n    else setCertificates((certs.data||[]) as JobCertificate[]);
     setLoading(false);
   }
   useEffect(()=>{
@@ -62,6 +62,12 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
 
+  async function openCertificate(cert:JobCertificate) {
+    const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(cert.approved_pdf_path,300);
+    if(err||!data?.signedUrl){setError("Could not open generated certificate: "+(err?.message||"No secure link returned."));return;}
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
+
   async function removeDoc(doc:Doc) {
     if(!isAdmin||!window.confirm("Delete "+doc.file_name+" from this asset folder?")) return;
     setBusy(true);setError("");setNotice("");
@@ -91,6 +97,8 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
       <p className="fine">PDF files only · maximum 25 MB per document. Uploads are linked to this asset and recorded against your login.</p>
       {busy&&<p className="muted">Working…</p>}
     </div>}
+    <h3>Generated job certificates ({certificates.length})</h3>
+    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
     <h3>Saved documents ({docs.length})</h3>
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
