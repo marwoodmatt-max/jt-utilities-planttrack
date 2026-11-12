@@ -71,6 +71,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [checking,setChecking]=useState<string|null>(null);
   const [batchProgress,setBatchProgress]=useState("");
   const [message,setMessage]=useState("");
+  const [lookupResult,setLookupResult]=useState<any>(null);
   const [error,setError]=useState("");
   async function load(){
     setLoading(true);setError("");
@@ -86,15 +87,16 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   }
   useEffect(()=>{void load();},[supabase]);
   async function checkMot(registration:string){
-    setChecking(registration);setMessage("");
+    setChecking(registration);setMessage("");setLookupResult(null);
     const {data,error}=await supabase.functions.invoke("dvsa-mot-lookup",{body:{registration}});
+    if(data?.data)setLookupResult(data.data);
     if(error||data?.error)setMessage(registration+": "+(data?.error||error?.message||"DVSA check failed"));
     else setMessage(registration+": "+(data?.saved?"DVSA result saved to PlantTrack":"DVSA result received but not saved"+(data?.saveError?": "+data.saveError:"")));
     await load();setChecking(null);
   }
   async function checkAllVehicles(){
     const targets=vehicles.filter(v=>v.category==="Vehicle"&&v.registration);
-    setChecking("all");setMessage("");let saved=0;let failed=0;
+    setChecking("all");setMessage("");setLookupResult(null);let saved=0;let failed=0;
     for(let i=0;i<targets.length;i++){
       const vehicle=targets[i];
       setBatchProgress("Checking "+(i+1)+" of "+targets.length+": "+vehicle.registration);
@@ -123,6 +125,18 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     </div>
     {error&&<p className="auth-error" role="alert">{error}</p>}
     {message&&<p role="status">{message}</p>}
+    {lookupResult&&<div className="panel" style={{marginBottom:16,padding:16}}>
+      <h3>DVSA MOT history</h3>
+      {(Array.isArray(lookupResult)?lookupResult:Array.isArray(lookupResult?.vehicles)?lookupResult.vehicles:[lookupResult]).map((vehicle:any,i:number)=>{
+        const tests=Array.isArray(vehicle?.motTests)?vehicle.motTests:[];
+        return <div key={i}><p><b>{vehicle?.registration||vehicle?.registrationNumber||"Vehicle"}</b> · {[vehicle?.make,vehicle?.model].filter(Boolean).join(" ")}</p>
+          <div className="table-wrap"><table><thead><tr><th>Test date</th><th>Result</th><th>Expiry date</th><th>Mileage</th></tr></thead><tbody>
+            {tests.map((test:any,j:number)=><tr key={j}><td>{test.completedDate?String(test.completedDate).slice(0,10):"—"}</td><td>{test.testResult||"—"}</td><td>{test.expiryDate||"—"}</td><td>{test.odometerValue||"—"} {test.odometerUnit||""}</td></tr>)}
+          </tbody></table></div>
+          {!tests.length&&<p className="muted">DVSA returned no MOT tests for this registration.</p>}
+        </div>;
+      })}
+    </div>}
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>MOT expiry</th><th>Warning</th><th>DVSA last checked</th><th>Action</th></tr></thead><tbody>
       {vehicles.slice().sort((a,b)=>(expiry(a)||"9999").localeCompare(expiry(b)||"9999")).map(v=>{
         const d=expiry(v);const days=d?daysUntil(d):null;const record=recordByAsset.get(v.id);
