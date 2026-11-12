@@ -5,14 +5,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
-type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null };\ntype Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
+type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null };
+type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
 const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
 const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
 export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void}) {
-  const [docs,setDocs]=useState<Doc[]>([]);\n  const [certificates,setCertificates]=useState<JobCertificate[]>([]);
+  const [docs,setDocs]=useState<Doc[]>([]);
+  const [certificates,setCertificates]=useState<JobCertificate[]>([]);
   const [uploadAllowed,setUploadAllowed]=useState(false);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -26,7 +28,10 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack}:{s
     setLoading(true); setError("");
     const {data,error:err}=await supabase.from("asset_documents").select("id,asset_id,file_name,storage_path,document_type,description,uploaded_at,uploaded_by").eq("asset_id",asset.id).order("uploaded_at",{ascending:false});
     if(err) setError("Could not load this asset folder: "+err.message);
-    else setDocs((data||[]) as Doc[]);\n    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});\n    if(certs.error)setError(prev=>[prev,"Could not load generated certificates: "+certs.error.message].filter(Boolean).join(" "));\n    else setCertificates((certs.data||[]) as JobCertificate[]);
+    else setDocs((data||[]) as Doc[]);
+    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});
+    if(certs.error)setError(prev=>[prev,"Could not load generated certificates: "+certs.error.message].filter(Boolean).join(" "));
+    else setCertificates((certs.data||[]) as JobCertificate[]);
     setLoading(false);
   }
   useEffect(()=>{
