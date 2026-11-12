@@ -332,6 +332,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
+ const [showCreateJob,setShowCreateJob]=useState(false);
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
@@ -372,7 +373,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  return <section className="panel">
   <div className="panel-head"><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
-  {(role==="office"||role==="engineer")&&<div style={{display:"grid",gap:10,marginBottom:22}}>
+  {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
    <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
@@ -385,7 +386,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
    <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");}return r;},"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
-  </div>}
+  </div></>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
     {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:jobs.map(j=><article className="workshop-mobile-job" key={j.id}>
