@@ -106,18 +106,21 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · PLANT MANAGEMENT</div><h1>{title}</h1><p>Wednesday, 11 November 2026 · Central workshop</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> New {page==="Workshop job cards"?"job card":"record"}</button></div>
         {notice&&<div className="notice">{notice}</div>}
         {page==="Dashboard"&&<>
-          <div className="welcome"><div><span className="eyebrow light">FLEET OVERVIEW</span><h2>Plant overview, JT Utilities.</h2><p>Live asset information from the PlantTrack register.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
+          <div className="welcome"><div><span className="eyebrow light">JT UTILITIES FLEET</span><h2>Your plant, ready for the work ahead.</h2><p>A live overview of the equipment your teams rely on every day.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
           <div className="stats">
             {[
-              ["Total plant",assetsLoading?"…":String(assets.length),"Assets in live register",Truck],
-              ["Available",assetsLoading?"…":String(availableCount),"Ready for allocation",CheckCircle2],
-              ["Inspections due","Not connected","Inspection records not yet linked",CalendarDays],
-              ["Open job cards","Not connected","Live job cards not yet linked",Wrench]
+              ["Total assets",assetsLoading?"…":String(assets.length),"All vehicles, plant and equipment",Truck],
+              ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2],
+              ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
+              ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
+              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle],
+              ["Off hire",assetsLoading?"…":String(assets.filter(a=>a.status==="Off hire").length),"Not currently in service",Clock3]
             ].map(([label,value,sub,Icon]:any)=><div className="stat" key={label}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub}</small></div>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
-          <section className="panel"><div className="panel-head"><div><h3>Workshop activity</h3><p>Live job-card connection has not yet been configured.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">No live job-card records are currently displayed. No sample jobs are shown.</p></section>
-          <section className="panel"><div className="panel-head"><div><h3>Inspection and examination information</h3><p>Live inspection records have not yet been connected.</p></div><button className="text-btn" onClick={()=>setPage("LOLER & certificates")}>LOLER register</button></div><p className="muted">No invented due dates or overdue counts are displayed.</p></section>
+          <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
+          <Calendar supabase={supabase}/>
+          <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
