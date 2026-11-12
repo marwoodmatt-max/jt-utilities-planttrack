@@ -280,8 +280,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;outcomes.push(file.name+": PDF only, maximum 25 MB");continue;}
       // Files in the review folder contain conflicting C545766/C545776 identifiers.
       // Do not automatically attach disputed records to a vehicle.
-      if(path.includes("C545776") || path.includes("REVIEW_C545776")){skipped++;outcomes.push(file.name+": trailer identification requires review");continue;}
-      const code=path.includes("R500_JTU") || /\\bR500(?:[ _-]*JTU|[ _-]*VOR|[ _-]*BT|[ _-]*\\d)/.test(path)?"R500 JTU":path.includes("WP63_PFD") || path.includes("WP63 PFD")?"WP63 PFD":null;
+      const correctedTrailer=path.includes("C545776") && /02[.\-_ ]10[.\-_ ]26/.test(path);
+      if(path.includes("C545776") && !correctedTrailer){skipped++;outcomes.push(file.name+": other trailer paperwork requires review");continue;}
+      const code=correctedTrailer?"C545766":path.includes("R500_JTU") || /\\bR500(?:[ _-]*JTU|[ _-]*VOR|[ _-]*BT|[ _-]*\\d)/.test(path)?"R500 JTU":path.includes("WP63_PFD") || path.includes("WP63 PFD")?"WP63 PFD":null;
       if(!code){skipped++;outcomes.push(file.name+": could not match to R500 JTU or WP63 PFD");continue;}
       // The crane LOLER belongs to a lifting-equipment asset, not to the lorry.
       if(file.name.toUpperCase().includes("LOLER")){skipped++;outcomes.push(file.name+": crane LOLER requires correct lifting asset");continue;}
@@ -293,7 +294,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       const storagePath=asset.id+"/"+crypto.randomUUID()+"/"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
       const {error:storageError}=await supabase.storage.from("asset-documents").upload(storagePath,file,{contentType:"application/pdf",upsert:false});
       if(storageError){failed++;outcomes.push(file.name+": "+storageError.message);continue;}
-      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:file.name.toUpperCase().includes("VOR")?"VOR record":"Vehicle documents",description:file.name.toUpperCase().includes("VOR")?"VOR notice dated 26 Aug 2026 · return-to-service not documented":"Bulk import · source PDF",uploaded_by:authData.user.id});
+      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:file.name.toUpperCase().includes("VOR")?"VOR record":"Vehicle documents",description:correctedTrailer?"Owner confirmed clerical error: original PDF says C545776, correct trailer C545766. Inspection and brake test 02 Oct 2026. Original filename retained.":file.name.toUpperCase().includes("VOR")?"VOR notice dated 26 Aug 2026 · return-to-service not documented":"Bulk import · source PDF",uploaded_by:authData.user.id});
       if(rowError){await supabase.storage.from("asset-documents").remove([storagePath]);failed++;outcomes.push(file.name+": "+rowError.message);}
       else uploaded++;
     }
