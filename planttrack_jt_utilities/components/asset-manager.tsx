@@ -268,12 +268,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   async function bulkUploadFleetFiles(files:FileList|null){
     if(!files || !isAdmin || bulkUploading) return;
+    const selectedFiles=Array.from(files);
+    if(!selectedFiles.length){setBulkFeedback("No files selected. Choose the unzipped fleet folder or individual PDF files.");return;}
     setBulkUploading(true);setBulkFeedback("");
     const {data:authData,error:authError}=await supabase.auth.getUser();
     if(authError || !authData.user){setBulkFeedback("Please sign in again as Admin.");setBulkUploading(false);return;}
     const outcomes:string[]=[];
     let uploaded=0,skipped=0,failed=0;
-    for(const file of Array.from(files)){
+    for(const file of selectedFiles){
       const path=(file.webkitRelativePath||file.name).replace(/\\/g,"/").toUpperCase();
       if(!file.name.toLowerCase().endsWith(".pdf") || file.size>25*1024*1024){skipped++;outcomes.push(file.name+": PDF only, maximum 25 MB");continue;}
       // Files in the review folder contain conflicting C545766/C545776 identifiers.
@@ -295,7 +297,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       if(rowError){await supabase.storage.from("asset-documents").remove([storagePath]);failed++;outcomes.push(file.name+": "+rowError.message);}
       else uploaded++;
     }
-    setBulkFeedback(uploaded+" uploaded · "+skipped+" skipped (duplicates, disputed trailer records or unsupported files) · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,4).join("; "):""));
+    setBulkFeedback(selectedFiles.length+" selected · "+uploaded+" uploaded · "+skipped+" skipped · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,8).join("; "):"")+(uploaded===0?" · No documents were added; check the reasons above.":""));
     setBulkUploading(false);
   }
 
@@ -366,7 +368,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <input type="file" accept=".pdf,application/pdf" multiple disabled={bulkUploading} onChange={e=>void bulkUploadFleetFiles(e.target.files)} style={{display:"block",marginTop:8}}/>
       </label>
       {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
-      {bulkFeedback&&<p role="status">{bulkFeedback}</p>}
+      {bulkFeedback&&<p role="status" style={{whiteSpace:"pre-wrap",fontWeight:600}}>{bulkFeedback}</p>}
     </div>}
     {isAdmin && categoryFilter.toLowerCase()==="hgv" && <div style={{marginBottom:16,padding:16,border:"1px solid #fca5a5",borderRadius:12}}>
       <h3 style={{marginTop:0}}>R500 JTU · Vehicle Off Road (VOR)</h3>
