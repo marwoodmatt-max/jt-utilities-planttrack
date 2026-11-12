@@ -22,6 +22,7 @@ export default function MotHistory({supabase}:{supabase:SupabaseClient}) {
   const [error,setError]=useState("");
   const [record,setRecord]=useState<MotRecord|null>(null);
   const [lastRegistration,setLastRegistration]=useState("");
+  const [saveNotice,setSaveNotice]=useState("");
 
   useEffect(()=>{
     let alive=true;
@@ -45,7 +46,7 @@ export default function MotHistory({supabase}:{supabase:SupabaseClient}) {
 
   async function lookup() {
     if(!vehicle?.registration)return;
-    setLoading(true);setError("");setRecord(null);setLastRegistration(vehicle.registration);
+    setLoading(true);setError("");setSaveNotice("");setRecord(null);setLastRegistration(vehicle.registration);
     const {data,error}=await supabase.functions.invoke("dvsa-mot-lookup",{body:{registration:vehicle.registration}});
     if(error) {
       let message=error.message||"The MOT lookup could not be completed.";
@@ -79,7 +80,7 @@ export default function MotHistory({supabase}:{supabase:SupabaseClient}) {
       <button className="primary" onClick={lookup} disabled={!vehicle||loading||loadingVehicles}><Search size={16}/>{loading?"Checking DVSA…":"Check MOT history"}</button>
     </div>
     {error&&<div className="auth-error" role="alert" style={{marginTop:16}}>{error}</div>}
-    {loading&&<p className="muted" style={{marginTop:16}}>Contacting DVSA securely and retrieving MOT records…</p>}
+    {loading&&<p className="muted" style={{marginTop:16}}>Contacting DVSA securely and retrieving MOT records…</p>}\n    {saveNotice&&<p className={saveNotice.startsWith("MOT result saved")?"notice":"auth-error"} role="status" style={{marginTop:14}}>{saveNotice}</p>}
     {record&&<div style={{marginTop:20}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:12,flexWrap:"wrap",alignItems:"center",borderBottom:"1px solid #eee",paddingBottom:14}}>
         <div><span className="eyebrow">DVSA VEHICLE RECORD</span><h3 style={{margin:"5px 0"}}>{record.registration||lastRegistration} · {record.make||vehicle?.manufacturer||""} {record.model||vehicle?.model||""}</h3><p className="muted">{[record.primaryColour,record.fuelType,record.firstUsedDate?"First used "+date(record.firstUsedDate):""].filter(Boolean).join(" · ")}</p></div>
