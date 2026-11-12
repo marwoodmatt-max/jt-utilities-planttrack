@@ -36,6 +36,40 @@ function ascii(value: unknown): string {
  return String(value ?? "").replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/[^\x20-\x7e\n]/g," ");
 }
 export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=false):Promise<Blob>{
+ if(job.job_type==="General repair"){
+  const doc=await PDFDocument.create(),page=doc.addPage([595.28,841.89]);
+  const font=await doc.embedFont(StandardFonts.Helvetica),strong=await doc.embedFont(StandardFonts.HelveticaBold);
+  const ink=rgb(.12,.17,.23),border=rgb(.48,.53,.6),pale=rgb(.94,.95,.97);
+  const left=37,right=558,width=right-left;
+  const line=(value:unknown,x:number,top:number,maxWidth:number,size=9,boldText=false,maxLines=4)=>{
+   const face=boldText?strong:font,words=ascii(value??"").split(/\\s+/);let rows:string[]=[],current="";
+   for(const word of words){if(!word)continue;const candidate=current?current+" "+word:word;if(face.widthOfTextAtSize(candidate,size)>maxWidth&&current){rows.push(current);current=word;}else current=candidate;}
+   if(current)rows.push(current);
+   rows.slice(0,maxLines).forEach((row,i)=>page.drawText(row,{x,y:top-i*(size+4),size,font:face,color:ink}));
+  };
+  const cell=(x:number,top:number,w:number,h:number,label:string,value:unknown)=>{
+   page.drawRectangle({x,y:top-h,width:w,height:h,borderColor:border,borderWidth:.8});
+   page.drawRectangle({x,y:top-21,width:w,height:21,color:pale});
+   line(label,x+8,top-14,w-16,8,true,1);
+   line(value||"-",x+8,top-37,w-16,9,false,Math.max(1,Math.floor((h-40)/13)+1));
+  };
+  try{const response=await fetch("/jt-utilities-logo.jpg");if(response.ok){const img=await doc.embedJpg(await response.arrayBuffer());const d=img.scaleToFit(135,72);page.drawImage(img,{x:left,y:742,width:d.width,height:d.height});}}catch{}
+  line("JT UTILITIES LTD",190,799,340,15,true);
+  line("ASSET JOB CARD",190,775,340,14,true);
+  line("Job card no: "+(job.job_card_number||job.id),190,752,350,9);
+  let y=726;
+  cell(left,y,173,67,"ASSET NUMBER",assetLabel);cell(left+173,y,174,67,"DATE OF DEFECT",job.job_details?.["Date of defect"]||String(job.created_at||"").slice(0,10));cell(left+347,y,174,67,"JOB CARD NO",job.job_card_number||job.id);y-=67;
+  cell(left,y,300,73,"DESCRIPTION",job.job_details?.Description||assetLabel);cell(left+300,y,221,73,"SERIAL NUMBER",job.job_details?.["Serial number"]||job.job_details?.["Serial Number"]);y-=73;
+  cell(left,y,width,113,"JOB DETAILS",job.instructions||job.title);y-=113;
+  cell(left,y,width,89,"WORK COMPLETED",job.engineer_work);y-=89;
+  cell(left,y,width,75,"PARTS ADDED",job.engineer_parts);y-=75;
+  cell(left,y,260,67,"LOCATION",job.job_details?.Location);cell(left+260,y,261,67,"WORK COMPLETED BY",job.engineer_signature);y-=67;
+  cell(left,y,260,66,"POSITION",job.job_details?.Position);cell(left+260,y,261,66,"SIGNED",job.engineer_signature?String(job.engineer_signature)+" / "+String(job.engineer_signed_at||""):"Awaiting engineer signature");y-=66;
+  cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",job.job_details?.["Compliant as of"]);cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature||"Awaiting office approval");
+  line("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",left,55,width,8);
+  line("www.jtutilities.com   |   020 3840 4826",left,42,width,8);
+  return new Blob([new Uint8Array(await doc.save())],{type:"application/pdf"});
+ }
  const pdf=await PDFDocument.create();
  const regular=await pdf.embedFont(StandardFonts.Helvetica);
  const bold=await pdf.embedFont(StandardFonts.HelveticaBold);
