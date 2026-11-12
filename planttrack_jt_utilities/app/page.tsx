@@ -16,7 +16,7 @@ function displayStatus(status:string) {
   return labels[status] || status;
 }
 const nav = [
-  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Inspection calendar",CalendarDays],
+  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
   ["Workshop job cards",Wrench],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
@@ -106,20 +106,23 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · PLANT MANAGEMENT</div><h1>{title}</h1><p>Wednesday, 11 November 2026 · Central workshop</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> New {page==="Workshop job cards"?"job card":"record"}</button></div>
         {notice&&<div className="notice">{notice}</div>}
         {page==="Dashboard"&&<>
-          <div className="welcome"><div><span className="eyebrow light">FLEET OVERVIEW</span><h2>Plant overview, JT Utilities.</h2><p>Live asset information from the PlantTrack register.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
+          <div className="welcome"><div><span className="eyebrow light">JT UTILITIES FLEET</span><h2>Your plant, ready for the work ahead.</h2><p>A live overview of the equipment your teams rely on every day.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
           <div className="stats">
             {[
-              ["Total plant",assetsLoading?"…":String(assets.length),"Assets in live register",Truck],
-              ["Available",assetsLoading?"…":String(availableCount),"Ready for allocation",CheckCircle2],
-              ["Inspections due","Not connected","Inspection records not yet linked",CalendarDays],
-              ["Open job cards","Not connected","Live job cards not yet linked",Wrench]
+              ["Total assets",assetsLoading?"…":String(assets.length),"All vehicles, plant and equipment",Truck],
+              ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2],
+              ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
+              ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
+              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle]
             ].map(([label,value,sub,Icon]:any)=><div className="stat" key={label}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub}</small></div>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
-          <section className="panel"><div className="panel-head"><div><h3>Workshop activity</h3><p>Live job-card connection has not yet been configured.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">No live job-card records are currently displayed. No sample jobs are shown.</p></section>
-          <section className="panel"><div className="panel-head"><div><h3>Inspection and examination information</h3><p>Live inspection records have not yet been connected.</p></div><button className="text-btn" onClick={()=>setPage("LOLER & certificates")}>LOLER register</button></div><p className="muted">No invented due dates or overdue counts are displayed.</p></section>
+          <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
+          <Calendar supabase={supabase}/>
+          <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
+        {page==="Projects"&&<Projects supabase={supabase}/>}
         {page==="Workshop job cards"&&<section className="panel"><div className="toolbar"><div><h3>Workshop work queue</h3><p>Central workshop · All maintenance requests</p></div></div><p className="muted">No live job-card records are connected yet. This page will show genuine job cards once the job-card database permissions and workflow are configured.</p></section>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
@@ -140,6 +143,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [selectedDate,setSelectedDate]=useState("");
+  const [summaryFilter,setSummaryFilter]=useState<"overdue"|"upcoming"|"examined"|null>(null);
   const now=new Date();
   const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const monthLabel=month.toLocaleDateString("en-GB",{month:"long",year:"numeric"});
@@ -188,10 +192,21 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   return <section className="panel">
     <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examination history and renewal schedule · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",marginBottom:18}}>
-      <div className="stat"><div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date</small></div>
-      <div className="stat"><div className="stat-top"><span>Upcoming LOLER</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later</small></div>
-      <div className="stat"><div className="stat-top"><span>Recorded examinations</span><FileCheck2 size={18}/></div><strong>{loading?"…":events.filter(event=>event.kind==="examined").length}</strong><small>Last examination dates</small></div>
+      <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="overdue"?null:"overdue")} aria-pressed={summaryFilter==="overdue"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="overdue"?"2px solid #b91c1c":undefined}}>
+        <div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
+      </button>
+      <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="upcoming"?null:"upcoming")} aria-pressed={summaryFilter==="upcoming"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="upcoming"?"2px solid #d97706":undefined}}>
+        <div className="stat-top"><span>Upcoming LOLER</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later · Click to view</small>
+      </button>
+      <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="examined"?null:"examined")} aria-pressed={summaryFilter==="examined"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="examined"?"2px solid #2563eb":undefined}}>
+        <div className="stat-top"><span>Recorded examinations</span><FileCheck2 size={18}/></div><strong>{loading?"…":events.filter(event=>event.kind==="examined").length}</strong><small>Last examination dates · Click to view</small>
+      </button>
     </div>
+    {summaryFilter&&<div style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:18}}>
+      <div className="panel-head"><div><h3>{summaryFilter==="overdue"?"Overdue LOLER examinations":summaryFilter==="upcoming"?"Upcoming LOLER examinations":"Recorded examinations"}</h3><p>{summaryFilter==="overdue"?"These renewal dates are in the past and need checking.":summaryFilter==="upcoming"?"These are the next examination renewal dates in the register.":"These assets have a last examination date recorded."}</p></div><button type="button" className="secondary" onClick={()=>setSummaryFilter(null)}>Close</button></div>
+      {(()=>{const list=dueEvents.filter(event=>summaryFilter==="overdue"?event.date<today:summaryFilter==="upcoming"?event.date>=today:false);const rows=summaryFilter==="examined"?events.filter(event=>event.kind==="examined"):list;return rows.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.assetCode.localeCompare(b.assetCode)).map(event=><div className="attention" key={event.id}><div className="avatar">{event.assetCode.slice(0,2)}</div><div><b>{event.assetCode} · {event.description}</b><small>{summaryFilter==="examined"?"Last examination":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(summaryFilter==="overdue"?"red":summaryFilter==="upcoming"?"amber":"blue")}>{summaryFilter==="overdue"?"Overdue":summaryFilter==="upcoming"?"Upcoming":"Examined"}</span></div>);})()}
+      {((summaryFilter==="overdue"?overdueCount:summaryFilter==="upcoming"?upcomingCount:events.filter(event=>event.kind==="examined").length)===0)&&<p className="muted">There are no records in this list.</p>}
+    </div>}
     {error&&<p className="auth-error" role="alert">{error}</p>}
     <div className="calendar-legend" style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12,fontSize:12}}>
       <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#b91c1c",marginRight:6}}/>Overdue due date</span>
@@ -219,6 +234,82 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination dates are currently recorded.</p>}
   </section>;
 }
+function Projects({supabase}:{supabase:SupabaseClient}) {
+  const [projects,setProjects]=useState<any[]>([]);
+  const [allocations,setAllocations]=useState<any[]>([]);
+  const [assets,setAssets]=useState<any[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [notice,setNotice]=useState("");
+  const [showForm,setShowForm]=useState(false);
+  const [selectedProject,setSelectedProject]=useState<string|null>(null);
+  const [newProject,setNewProject]=useState({project_name:"",client_name:"",site_address:"",site_postcode:"",start_date:"",expected_end_date:"",notes:""});
+  const [assetToAllocate,setAssetToAllocate]=useState("");
+  const [allocationNote,setAllocationNote]=useState("");
+  async function load(){
+    setLoading(true);setError("");
+    const [p,a]=await Promise.all([
+      supabase.from("projects").select("*").order("project_name"),
+      supabase.from("project_allocations").select("id,project_id,asset_id,allocated_at,returned_at,notes").is("returned_at",null).order("allocated_at",{ascending:false}),
+    ]);
+    if(p.error||a.error){setError(p.error?.message||a.error?.message||"Could not load projects.");setLoading(false);return;}
+    const {data:assetRows,error:assetError}=await supabase.from("assets").select("id,asset_code,description,category,location,status").order("asset_code");
+    if(assetError){setError(assetError.message);setLoading(false);return;}
+    setProjects(p.data||[]);setAllocations(a.data||[]);setAssets(assetRows||[]);setLoading(false);
+  }
+  useEffect(()=>{void load();},[supabase]);
+  async function createProject(){
+    if(!newProject.project_name.trim()){setError("Enter a project name.");return;}
+    const {data:userData}=await supabase.auth.getUser();
+    const {error:e}=await supabase.from("projects").insert({...newProject,created_by:userData.user?.id||null});
+    if(e){setError(e.message);return;}
+    setNotice("Project created.");setShowForm(false);setNewProject({project_name:"",client_name:"",site_address:"",site_postcode:"",start_date:"",expected_end_date:"",notes:""});await load();
+  }
+  async function allocate(){
+    if(!selectedProject||!assetToAllocate)return;
+    const {data:userData}=await supabase.auth.getUser();
+    const {error:e}=await supabase.from("project_allocations").insert({project_id:selectedProject,asset_id:assetToAllocate,allocated_by:userData.user?.id||null,notes:allocationNote||null});
+    if(e){setError(e.message);return;}
+    setNotice("Equipment allocated to project.");setAssetToAllocate("");setAllocationNote("");await load();
+  }
+  async function release(allocationId:string){
+    const {data:userData}=await supabase.auth.getUser();
+    const {error:e}=await supabase.from("project_allocations").update({returned_at:new Date().toISOString(),returned_by:userData.user?.id||null}).eq("id",allocationId);
+    if(e){setError(e.message);return;}
+    setNotice("Equipment released from project.");await load();
+  }
+  const activeAssetIds=new Set(allocations.map(a=>a.asset_id));
+  const availableAssets=assets.filter(a=>!activeAssetIds.has(a.id));
+  const fmt=(d:string)=>new Date(d).toLocaleDateString("en-GB");
+  return <section className="panel">
+    <div className="panel-head"><div><h3>Projects and site equipment</h3><p>Manage your UK jobs and see which equipment is allocated to each site.</p></div><button className="primary" onClick={()=>setShowForm(!showForm)}><Plus size={16}/> New project</button></div>
+    {notice&&<p className="notice">{notice}</p>}{error&&<p className="auth-error" role="alert">{error}</p>}
+    {showForm&&<div style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:18,display:"grid",gap:10}}>
+      <h3>New project</h3>
+      <label>Project name<input value={newProject.project_name} onChange={e=>setNewProject({...newProject,project_name:e.target.value})} placeholder="e.g. Tophams"/></label>
+      <label>Client name (optional)<input value={newProject.client_name} onChange={e=>setNewProject({...newProject,client_name:e.target.value})} placeholder="Client / customer"/></label>
+      <label>Site address<input value={newProject.site_address} onChange={e=>setNewProject({...newProject,site_address:e.target.value})} placeholder="Site address"/></label>
+      <label>Postcode<input value={newProject.site_postcode} onChange={e=>setNewProject({...newProject,site_postcode:e.target.value})} placeholder="Postcode"/></label>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
+        <label>Start date<input type="date" value={newProject.start_date} onChange={e=>setNewProject({...newProject,start_date:e.target.value})}/></label>
+        <label>Expected finish<input type="date" value={newProject.expected_end_date} onChange={e=>setNewProject({...newProject,expected_end_date:e.target.value})}/></label>
+      </div>
+      <label>Notes<textarea value={newProject.notes} onChange={e=>setNewProject({...newProject,notes:e.target.value})} placeholder="Project notes..."/></label>
+      <div style={{display:"flex",gap:8}}><button className="primary" onClick={()=>void createProject()}>Save project</button><button className="secondary" onClick={()=>setShowForm(false)}>Cancel</button></div>
+    </div>}
+    {loading?<p className="muted">Loading projects and allocations…</p>:projects.length===0?<p className="muted">No projects have been added yet. Create your first project, such as Tophams, then allocate equipment to it.</p>:projects.map(project=>{
+      const rows=allocations.filter(a=>a.project_id===project.id);
+      return <div key={project.id} style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:12}}>
+        <div className="panel-head"><div><h3>{project.project_name}</h3><p>{[project.site_address,project.site_postcode].filter(Boolean).join(", ")||"Site location not yet added"} · {project.status.replace("_"," ")}</p></div><Tag tone={project.status==="active"?"green":project.status==="completed"?"neutral":"amber"}>{project.status}</Tag></div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:13,color:"#666",marginBottom:12}}><span>{rows.length} items allocated</span>{project.client_name&&<span>Client: {project.client_name}</span>}{project.start_date&&<span>Start: {fmt(project.start_date)}</span>}</div>
+        {rows.map(row=>{const asset=assets.find(a=>a.id===row.asset_id);return <div className="attention" key={row.id}><div className="avatar"><Truck size={16}/></div><div><b>{asset?.asset_code||"Asset"} · {asset?.description||"Equipment"}</b><small>{asset?.category||""} · Allocated {fmt(row.allocated_at)}</small></div><button className="secondary" onClick={()=>void release(row.id)}>Release</button></div>;})}
+        {selectedProject===project.id?<div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}><select value={assetToAllocate} onChange={e=>setAssetToAllocate(e.target.value)}><option value="">Choose available equipment</option>{availableAssets.map(a=><option key={a.id} value={a.id}>{a.asset_code} – {a.description}</option>)}</select><input value={allocationNote} onChange={e=>setAllocationNote(e.target.value)} placeholder="Allocation note (optional)"/><button className="primary" disabled={!assetToAllocate} onClick={()=>void allocate()}>Allocate</button><button className="secondary" onClick={()=>setSelectedProject(null)}>Cancel</button></div>:<button className="secondary" style={{marginTop:10}} onClick={()=>{setSelectedProject(project.id);setAssetToAllocate("");}}> <Plus size={15}/> Allocate equipment</button>}
+      </div>;
+    })}
+    {!loading&&<p className="muted" style={{marginTop:14}}>Available to allocate: {availableAssets.length} assets. Each asset can only be allocated to one active project at a time. Previous allocations remain in the database when equipment is released.</p>}
+  </section>;
+}
+
 function Checks({action}:{action:(s:string)=>void}) {const items=["Engine oil and coolant","Brakes and steering","Tyres / tracks","Hydraulic hoses and leaks","Lights and warning devices","Safety equipment","General condition"];const [answers,setAnswers]=useState<Record<string,string>>({});return <section className="panel"><div className="panel-head"><div><h3>Operator plant check</h3><p>Daily plant check template — not yet connected to live submissions</p></div><Tag tone="blue">Draft</Tag></div><p className="muted">This checklist is a template only. Live asset selection, individual sign-off and submission are not yet connected.</p>{items.map(i=><div className="check-row" key={i}><b>{i}</b><div><button className={answers[i]==="Pass"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"Pass"})}>Pass</button><button className={answers[i]==="Fail"?"choice fail selected": "choice fail"} onClick={()=>setAnswers({...answers,[i]:"Fail"})}>Fail</button><button className={answers[i]==="N/A"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"N/A"})}>N/A</button></div></div>)}<label>Comments<textarea placeholder="Record observations or defects..."/></label><button className="primary" onClick={()=>action("Demo form only. Live authenticated submission and defect escalation require backend setup.")}>Submit check for sign-off</button></section>}
 function UsersPanel({action}:{action:(s:string)=>void}) {return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Proposed role structure</p></div><Tag tone="blue">Access control</Tag></div>{["Plant Manager","Operator / Driver","Workshop Mechanic","Inspector","Director / Administrator"].map((r,i)=><div className="attention" key={r}><div className="avatar">{r.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{r}</b><small>{["Fleet, schedules, jobs and approvals","Assigned plant checks and defects","Assigned jobs, labour and parts","Assigned examinations and reports","Read-only oversight and management reports"][i]}</small></div><Tag>Role</Tag></div>)}<button className="primary" onClick={()=>action("User administration will be activated with Supabase Auth and role policies.")}><Plus size={16}/> Add user</button></section>}
 function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
