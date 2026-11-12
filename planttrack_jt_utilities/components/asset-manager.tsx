@@ -325,7 +325,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     const imports: Array<{code:string;values:Record<string,string>;calculated:string}>=[
       {code:"R500 JTU",values:{pmi_last_completed:"2026-07-16",tacho_calibration_due:"2028-08-03"},calculated:"2026-08-27"},
       {code:"WP63 PFD",values:{pmi_last_completed:"2026-10-02",mot_due:"2027-10-31",tacho_calibration_due:"2028-08-17"},calculated:"2026-11-13"},
-      {code:"C545766",values:{mot_due:"2026-10-31"},calculated:""}
+      {code:"C545766",values:{pmi_last_completed:"2026-10-02",mot_due:"2027-10-31"},calculated:"2026-11-13"}
     ];
     const outcomes:string[]=[];
     for(const item of imports){
@@ -385,9 +385,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <div className="table-wrap"><table><thead><tr><th>HGV</th><th>Last PMI</th><th>MOT expiry</th><th>Tacho due</th><th>Calculated next PMI (optional)</th></tr></thead><tbody>
           <tr><td><b>R500 JTU</b></td><td>16 Jul 2026</td><td>Not supplied</td><td>3 Aug 2028</td><td>27 Aug 2026 · overdue if no later PMI</td></tr>
           <tr><td><b>WP63 PFD</b></td><td>2 Oct 2026</td><td>31 Oct 2027</td><td>17 Aug 2028</td><td>13 Nov 2026 · schedule needs verification</td></tr>
-          <tr><td><b>C545766 · trailer</b></td><td>Not confirmed</td><td>31 Oct 2026 · expired</td><td>Not applicable</td><td>Not confirmed · disputed inspection ID</td></tr>
+          <tr><td><b>C545766 · trailer</b></td><td>2 Oct 2026 · user confirmed</td><td>31 Oct 2027 · user confirmed</td><td>Not applicable</td><td>13 Nov 2026 · provisional six-week interval</td></tr>
         </tbody></table></div>
-        <p className="muted" style={{marginTop:10}}>C545766 MOT expiry can be imported; its disputed inspection dates and PDF records remain held for review. No VOR status or return-to-service authorisation will be changed.</p>
+        <p className="muted" style={{marginTop:10}}>C545766 MOT expiry and last inspection date can be imported following your confirmation. PDFs showing C545776 remain held for identifier review. No VOR status or return-to-service authorisation will be changed.</p>
         <label style={{display:"block",marginTop:12}}><input type="checkbox" checked={includeCalculatedPmi} onChange={e=>setIncludeCalculatedPmi(e.target.checked)}/> Also import the calculated 42-day next PMI dates (only after checking the actual planned schedule)</label>
         <label style={{display:"block",marginTop:10}}><input type="checkbox" checked={importConfirmed} onChange={e=>setImportConfirmed(e.target.checked)}/> I have reviewed the source dates and authorise saving these values to the live register.</label>
         <button type="button" className="primary" style={{marginTop:14}} disabled={!importConfirmed||importing||loading} onClick={()=>void importFleetDates()}>{importing?"Saving dates…":"Approve and import to PlantTrack"}</button>
