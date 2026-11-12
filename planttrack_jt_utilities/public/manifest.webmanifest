@@ -1,0 +1,18 @@
+{
+  "name": "JT Utilities PlantTrack Workshop",
+  "short_name": "PlantTrack",
+  "description": "JT Utilities workshop jobs and asset management",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#e51d32",
+  "icons": [
+    {
+      "src": "/jt-utilities-logo.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
