@@ -85,6 +85,8 @@ function statusLabel(asset: AssetRow) {
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [showFleetImport,setShowFleetImport]=useState(false);
   const [bulkUploading,setBulkUploading]=useState(false);
+  const [vorSaving,setVorSaving]=useState(false);
+  const [vorFeedback,setVorFeedback]=useState("");
   const [bulkFeedback,setBulkFeedback]=useState("");
   const [importing,setImporting]=useState(false);
   const [importFeedback,setImportFeedback]=useState("");
@@ -289,12 +291,26 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       const storagePath=asset.id+"/"+crypto.randomUUID()+"/"+file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
       const {error:storageError}=await supabase.storage.from("asset-documents").upload(storagePath,file,{contentType:"application/pdf",upsert:false});
       if(storageError){failed++;outcomes.push(file.name+": "+storageError.message);continue;}
-      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:"Vehicle documents",description:"Bulk import · source PDF",uploaded_by:authData.user.id});
+      const {error:rowError}=await supabase.from("asset_documents").insert({asset_id:asset.id,file_name:file.name,storage_path:storagePath,document_type:file.name.toUpperCase().includes("VOR")?"VOR record":"Vehicle documents",description:file.name.toUpperCase().includes("VOR")?"VOR notice dated 26 Aug 2026 · return-to-service not documented":"Bulk import · source PDF",uploaded_by:authData.user.id});
       if(rowError){await supabase.storage.from("asset-documents").remove([storagePath]);failed++;outcomes.push(file.name+": "+rowError.message);}
       else uploaded++;
     }
     setBulkFeedback(uploaded+" uploaded · "+skipped+" skipped (duplicates, disputed trailer records or unsupported files) · "+failed+" failed"+(outcomes.length?" — "+outcomes.slice(0,4).join("; "):""));
     setBulkUploading(false);
+  }
+
+  async function setR500Vor(){
+    if(!isAdmin || vorSaving) return;
+    const asset=rows.find(a=>a.asset_code.toUpperCase()==="R500 JTU");
+    if(!asset){setVorFeedback("R500 JTU asset not found.");return;}
+    if(!window.confirm("Mark R500 JTU as VOR now? The source notice starts 26 August 2026, but does not confirm whether it has since returned to service. Only proceed if it is currently off road."))return;
+    setVorSaving(true);setVorFeedback("");
+    const {data:auth,error:authError}=await supabase.auth.getUser();
+    if(authError||!auth.user){setVorFeedback("Please sign in as Admin.");setVorSaving(false);return;}
+    const {error:writeError}=await supabase.from("assets").update({status:"out_of_service"}).eq("id",asset.id);
+    setVorFeedback(writeError?"VOR not saved: "+writeError.message:"R500 JTU marked VOR. Upload the VOR PDF using the bulk upload control above.");
+    setVorSaving(false);
+    if(!writeError)await loadAssets();
   }
 
   // Import is deliberately executed by the signed-in Admin in the app, not by a service account.
@@ -348,6 +364,13 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       </label>
       {bulkUploading&&<p role="status">Uploading documents securely… please keep this page open.</p>}
       {bulkFeedback&&<p role="status">{bulkFeedback}</p>}
+    </div>}
+    {isAdmin && categoryFilter.toLowerCase()==="hgv" && <div style={{marginBottom:16,padding:16,border:"1px solid #fca5a5",borderRadius:12}}>
+      <h3 style={{marginTop:0}}>R500 JTU · Vehicle Off Road (VOR)</h3>
+      <p>Source notice: 26 Aug 2026, 08:55 · Reason: VEHICLE NOT IN USE. The return-to-service section is blank. The notice alone does not prove the vehicle remains off road today.</p>
+      <button type="button" className="primary" disabled={vorSaving||rows.some(a=>a.asset_code.toUpperCase()==="R500 JTU"&&a.status==="out_of_service")} onClick={()=>void setR500Vor()}>{vorSaving?"Saving…":rows.some(a=>a.asset_code.toUpperCase()==="R500 JTU"&&a.status==="out_of_service")?"R500 JTU is marked VOR":"Confirm currently off road · Mark VOR"}</button>
+      <p className="muted">The VOR PDF is included in the R500_JTU folder of the bulk upload pack and will be filed as a VOR record. No return-to-service approval is assumed.</p>
+      {vorFeedback&&<p role="status">{vorFeedback}</p>}
     </div>}
     {isAdmin && <div style={{marginBottom:16}}>
       <button type="button" className="primary" onClick={()=>setShowFleetImport(v=>!v)}>{showFleetImport?"Close fleet import":"Review fleet dates for import"}</button>
