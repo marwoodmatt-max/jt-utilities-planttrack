@@ -138,7 +138,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </div>;
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
-type CalendarEvent = { id:string; date:string; kind:"examined"|"due"; assetCode:string; description:string };
+type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"mot"; assetCode:string; description:string };
 function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1));
   const [events,setEvents]=useState<CalendarEvent[]>([]);
@@ -174,6 +174,20 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         if(row.examined_at) mapped.push({id:row.id+"-examined",date:row.examined_at,kind:"examined",assetCode:asset.asset_code,description:asset.description});
         if(row.next_due) mapped.push({id:row.id+"-due",date:row.next_due,kind:"due",assetCode:asset.asset_code,description:asset.description});
       }
+      const {data:motRows,error:motError}=await supabase.from("vehicle_mot_records")
+        .select("id,asset_id,registration,expiry_date,mot_status")
+        .not("expiry_date","is",null);
+      if(motError){if(!cancelled){setError("LOLER loaded, but MOT dates could not be loaded: "+motError.message);setEvents(mapped);setLoading(false);}return;}
+      const motIds=Array.from(new Set((motRows||[]).map((r:any)=>r.asset_id).filter(Boolean)));
+      if(motIds.length){
+        const {data:motAssets,error:motAssetError}=await supabase.from("assets").select("id,asset_code,description").in("id",motIds);
+        if(motAssetError){if(!cancelled){setError("MOT dates loaded, but vehicle details could not be loaded: "+motAssetError.message);setEvents(mapped);setLoading(false);}return;}
+        const motMap=new Map((motAssets||[]).map((a:any)=>[a.id,{asset_code:a.asset_code,description:a.description}]));
+        for(const row of motRows||[]){
+          const asset=motMap.get((row as any).asset_id);
+          if(asset) mapped.push({id:(row as any).id+"-mot",date:(row as any).expiry_date,kind:"mot",assetCode:asset.asset_code,description:asset.description});
+        }
+      }
       if(!cancelled){setEvents(mapped);setLoading(false);}
     }
     void loadCalendar();
@@ -192,7 +206,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const upcomingCount=dueEvents.filter(event=>event.date>=today).length;
   const formatDate=(value:string)=>{const [y,m,d]=value.split("-");return d+" "+m+" "+y;};
   return <section className="panel">
-    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examination history and renewal schedule · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
+    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examinations and vehicle MOT expiry dates · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",marginBottom:18}}>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="overdue"?null:"overdue")} aria-pressed={summaryFilter==="overdue"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="overdue"?"2px solid #b91c1c":undefined}}>
         <div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
@@ -213,7 +227,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div className="calendar-legend" style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12,fontSize:12}}>
       <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#b91c1c",marginRight:6}}/>Overdue due date</span>
       <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#d97706",marginRight:6}}/>Upcoming due date</span>
-      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>\n      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#7c3aed",marginRight:6}}/>Vehicle MOT expiry</span>
     </div>
     <div className="calendar-grid">
       {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><b key={day}>{day}</b>)}
@@ -222,18 +236,18 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Exam":event.kind==="mot"?"MOT expiry":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
     </div>
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
-      {selectedDate&&selectedEvents.length===0&&<p className="muted">No LOLER events recorded for this date.</p>}
-      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":"LO"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":"Due"}</span></div>)}
+      {selectedDate&&selectedEvents.length===0&&<p className="muted">No LOLER or MOT events recorded for this date.</p>}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":"LO"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="mot"?"Vehicle MOT expiry":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.kind==="mot"?"MOT expiry":event.date<today?"Overdue":"Due"}</span></div>)}
     </div>
     {loading&&<p className="muted">Loading live LOLER dates…</p>}
-    {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination dates are currently recorded.</p>}
+    {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination or vehicle MOT dates are currently recorded.</p>}
   </section>;
 }
 function Projects({supabase}:{supabase:SupabaseClient}) {
