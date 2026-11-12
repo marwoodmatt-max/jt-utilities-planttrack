@@ -32,7 +32,7 @@ function plannedPmiDates(nextDue:string|null,today:string,months=13){
  return dates;
 }
 type PmiItem={id:string;asset_code:string;registration:string|null;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;tacho_calibration_due:string|null;status:string};
-function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenCalendar:()=>void}){
+function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=false}:{supabase:SupabaseClient;onOpenCalendar:()=>void;showOverview?:boolean;showSignoff?:boolean}){
   const [items,setItems]=useState<PmiItem[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -103,7 +103,7 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
   }
   return <section className="panel" style={{marginTop:18}}>
     <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open inspection calendar</button></div>
-    <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
+    {showOverview&&<><div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="overdue"?"all":"overdue")}><div className="stat-top"><span>Overdue PMI</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue.length}</strong><small>Click to filter</small></button>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="soon"?"all":"soon")}><div className="stat-top"><span>Due within 14 days</span><CalendarDays size={18}/></div><strong>{loading?"…":upcoming.length}</strong><small>Click to filter</small></button>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter("all")}><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":items.length}</strong><small>Click to show all</small></button>
@@ -112,7 +112,8 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
       {visiblePmi.map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
     </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
-    <div style={{marginTop:22}}>
+    </>}
+    {showSignoff&&<div style={{marginTop:22}}>
       <h3>Record completed PMI and sign-off</h3>
       <p className="muted">Only a passed inspection advances the next due date. Reports are stored privately.</p>
       <form onSubmit={e=>void savePmi(e)} style={{display:"grid",gap:12,maxWidth:680}}>
@@ -129,7 +130,7 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
       {feedback&&<p role="status">{feedback}</p>}
       <h3 style={{marginTop:20}}>PMI completion history</h3>
       <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Date</th><th>Result</th><th>Inspector</th><th>Signed off</th><th>Report</th></tr></thead><tbody>{history.map(r=><tr key={r.id}><td>{hgvItems.find(a=>a.id===r.asset_id)?.asset_code||r.asset_id}</td><td>{fmt(r.inspected_on)}</td><td>{r.result}</td><td>{r.inspector_name}</td><td>{r.signed_off_by}</td><td>{r.report_path?<button className="secondary" onClick={()=>void viewReport(r.report_path)}>View report</button>:"—"}</td></tr>)}</tbody></table></div>
-    </div>
+    </div>}
   </section>;
 }
 type MotVehicle={id:string;asset_code:string;registration:string|null;description:string|null;mot_due:string|null;status:string;category:string|null};
@@ -397,7 +398,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
         {page==="Projects"&&<Projects supabase={supabase}/>}
-        {page==="Workshop job cards"&&<WorkshopJobs supabase={supabase}/>}
+        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
