@@ -111,8 +111,6 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   useEffect(() => { void loadAssets(); }, [supabase]);
 
-  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} />;
-
   const filtered = useMemo(() => rows.filter((a) =>
     (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase()) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
@@ -229,6 +227,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     }
     setSaving(false);
   }
+
+  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} />;
 
   const fieldStyle: React.CSSProperties = {
     width: "100%", padding: "10px 11px", border: "1px solid #dcdce0",
