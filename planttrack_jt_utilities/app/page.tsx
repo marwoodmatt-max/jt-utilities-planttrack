@@ -228,13 +228,15 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
- const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","Defect rectification","Other / unexpected work"];
+ const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","LOLER thorough examination","Defect rectification","Other / unexpected work"];
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
   "General repair":["Fault reported","Diagnosis"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
-  "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","PMI checklist / inspection notes"],
+  "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","Inspection date","PMI checklist / inspection notes"],"LOLER thorough examination":["Equipment identification","Examination date","Competent person","Report / certificate reference"],
   "Defect rectification":["Original defect reference","Rectification and safety checks"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
  };
+ const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"]};
+ const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
@@ -262,24 +264,26 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   </div>}
   <h3>{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   <div className="table-wrap"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");}}>Open job</button></td></tr>)}
+   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});}}>Open job</button></td></tr>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p><p>{chosen.instructions}</p>
    {Object.entries(chosen.job_details||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}<p><b>Status:</b> {chosen.status}</p>
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
+   {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
    {role==="engineer"&&["Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
+    {(checklistByType[chosen.job_type]||[]).map(field=><label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <label>Parts used<input value={parts} onChange={e=>setParts(e.target.value)}/></label>
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
     <label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
-    <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
+    <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim())} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,p_checklist:checklist}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
    </>}
    {role==="office"&&chosen.status==="Awaiting office approval"&&<>
     <label>Office review comments<textarea value={comments} onChange={e=>setComments(e.target.value)}/></label>
