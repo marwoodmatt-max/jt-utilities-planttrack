@@ -266,7 +266,8 @@ function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"cha
    <p style={{fontSize:12}}>C - Observations on the condition of the equipment or accessories, comments & recommendations</p>
    <p style={{fontSize:12}}>This report complies with the requirements of the Lifting Operations and Lifting Equipment Regulations 1998</p>
   </>:<p style={{fontSize:12,marginTop:12}}><b>DECLARATION BY INSPECTOR</b><br/>I hereby certify that no critical defects were found on the equipment described on this certificate at the time of inspection and that this equipment was found to be fit for use.</p>}
-  <p style={{fontSize:12}}>Examiner signature and date are recorded separately when the engineer submits this job card.</p>
+  {!chains&&<div style={{border:"1px solid #64748b",minHeight:90,padding:10,marginTop:12}}><b>INSPECTOR SIGNATURE</b><p style={{fontSize:12}}>To be signed by the competent person carrying out the examination. Name and qualifications above do not constitute a signature.</p>{readOnly&&<p>Signature recorded at examiner sign-off stage.</p>}</div>}
+  <p style={{fontSize:12}}>Examiner sign-off is recorded separately when the engineer submits this job card.</p>
  </div>;
 }
 function createJobCertificatePdf(job:any,assetLabel:string):Blob{
@@ -302,6 +303,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
  const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Defect rectification","Other / unexpected work"];
+ const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
   "General repair":["Fault reported","Diagnosis"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
@@ -355,7 +357,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
    <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
-   {jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories"?<LolerPaperForm kind={jobType==="LOLER thorough examination"?"plant":"chains"} values={jobDetails} onChange={(key,value)=>setJobDetails(d=>({...d,[key]:value}))}/>:null}
+   {jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories"?<LolerPaperForm kind={jobType==="LOLER thorough examination"?"plant":"chains"} values={jobType==="LOLER thorough examination"?{...plantLolerDefaults,...jobDetails}:jobDetails} onChange={(key,value)=>setJobDetails(d=>({...d,[key]:value}))}/>:null}
    {jobType!=="LOLER thorough examination"&&jobType!=="LOLER chains & accessories"&&fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
    <label>Job title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Repair, service or inspection"/></label>
    <label>Work instructions<textarea value={instructions} onChange={e=>setInstructions(e.target.value)}/></label>
@@ -373,7 +375,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {Object.entries(chosen.job_details||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}<p><b>Status:</b> {chosen.status}</p>
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
-   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/>}
+   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
@@ -382,7 +384,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
    {role==="engineer"&&["Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
-    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
+    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
     {(checklistByType[chosen.job_type]||[]).map(field=><label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <label>Parts used<input value={parts} onChange={e=>setParts(e.target.value)}/></label>
