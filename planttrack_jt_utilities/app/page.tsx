@@ -172,6 +172,22 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         if(row.examined_at) mapped.push({id:row.id+"-examined",date:row.examined_at,kind:"examined",assetCode:asset.asset_code,description:asset.description});
         if(row.next_due) mapped.push({id:row.id+"-due",date:row.next_due,kind:"due",assetCode:asset.asset_code,description:asset.description});
       }
+      // HGV compliance deadlines live alongside LOLER events in the original PlantTrack calendar.
+      // Keep the date types separate so an MOT is never presented as a LOLER examination.
+      const {data:hgvs,error:hgvError}=await supabase.from("assets")
+        .select("id,asset_code,registration,description,pmi_next_due,pmi_last_completed,mot_due,tacho_calibration_due")
+        .eq("category","HGV");
+      if(hgvError){if(!cancelled){setError("Could not load HGV compliance dates: "+hgvError.message);setLoading(false);}return;}
+      for(const hgv of hgvs||[]){
+        const code=hgv.registration||hgv.asset_code;
+        const add=(date:string|null,kind:"examined"|"due",label:string)=>{
+          if(date) mapped.push({id:hgv.id+"-"+label,date:date.slice(0,10),kind,assetCode:code,description:label+" · "+(hgv.description||"HGV")});
+        };
+        add(hgv.pmi_last_completed,"examined","HGV last PMI");
+        add(hgv.pmi_next_due,"due","HGV next PMI");
+        add(hgv.mot_due,"due","HGV MOT expiry");
+        add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
+      }
       if(!cancelled){setEvents(mapped);setLoading(false);}
     }
     void loadCalendar();
@@ -190,20 +206,20 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const upcomingCount=dueEvents.filter(event=>event.date>=today).length;
   const formatDate=(value:string)=>{const [y,m,d]=value.split("-");return d+" "+m+" "+y;};
   return <section className="panel">
-    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER examination history and renewal schedule · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
+    <div className="panel-head"><div><h3>{monthLabel}</h3><p>LOLER and HGV compliance dates · Live register</p></div><div style={{display:"flex",gap:8}}><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex-1,1))}>‹</button><button className="secondary" onClick={()=>setMonth(new Date(year,monthIndex+1,1))}>›</button></div></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",marginBottom:18}}>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="overdue"?null:"overdue")} aria-pressed={summaryFilter==="overdue"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="overdue"?"2px solid #b91c1c":undefined}}>
-        <div className="stat-top"><span>Overdue LOLER</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
+        <div className="stat-top"><span>Overdue checks</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdueCount}</strong><small>Past renewal date · Click to view</small>
       </button>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="upcoming"?null:"upcoming")} aria-pressed={summaryFilter==="upcoming"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="upcoming"?"2px solid #d97706":undefined}}>
-        <div className="stat-top"><span>Upcoming LOLER</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later · Click to view</small>
+        <div className="stat-top"><span>Upcoming checks</span><CalendarDays size={18}/></div><strong>{loading?"…":upcomingCount}</strong><small>Due today or later · Click to view</small>
       </button>
       <button type="button" className="stat" onClick={()=>setSummaryFilter(summaryFilter==="examined"?null:"examined")} aria-pressed={summaryFilter==="examined"} style={{textAlign:"left",cursor:"pointer",border:summaryFilter==="examined"?"2px solid #2563eb":undefined}}>
         <div className="stat-top"><span>Recorded examinations</span><FileCheck2 size={18}/></div><strong>{loading?"…":events.filter(event=>event.kind==="examined").length}</strong><small>Last examination dates · Click to view</small>
       </button>
     </div>
     {summaryFilter&&<div style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:18}}>
-      <div className="panel-head"><div><h3>{summaryFilter==="overdue"?"Overdue LOLER examinations":summaryFilter==="upcoming"?"Upcoming LOLER examinations":"Recorded examinations"}</h3><p>{summaryFilter==="overdue"?"These renewal dates are in the past and need checking.":summaryFilter==="upcoming"?"These are the next examination renewal dates in the register.":"These assets have a last examination date recorded."}</p></div><button type="button" className="secondary" onClick={()=>setSummaryFilter(null)}>Close</button></div>
+      <div className="panel-head"><div><h3>{summaryFilter==="overdue"?"Overdue compliance dates":summaryFilter==="upcoming"?"Upcoming compliance dates":"Recorded examinations"}</h3><p>{summaryFilter==="overdue"?"These renewal dates are in the past and need checking.":summaryFilter==="upcoming"?"These are the next examination renewal dates in the register.":"These assets have a last examination date recorded."}</p></div><button type="button" className="secondary" onClick={()=>setSummaryFilter(null)}>Close</button></div>
       {(()=>{const list=dueEvents.filter(event=>summaryFilter==="overdue"?event.date<today:summaryFilter==="upcoming"?event.date>=today:false);const rows=summaryFilter==="examined"?events.filter(event=>event.kind==="examined"):list;return rows.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.assetCode.localeCompare(b.assetCode)).map(event=><div className="attention" key={event.id}><div className="avatar">{event.assetCode.slice(0,2)}</div><div><b>{event.assetCode} · {event.description}</b><small>{summaryFilter==="examined"?"Last examination":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(summaryFilter==="overdue"?"red":summaryFilter==="upcoming"?"amber":"blue")}>{summaryFilter==="overdue"?"Overdue":summaryFilter==="upcoming"?"Upcoming":"Examined"}</span></div>);})()}
       {((summaryFilter==="overdue"?overdueCount:summaryFilter==="upcoming"?upcomingCount:events.filter(event=>event.kind==="examined").length)===0)&&<p className="muted">There are no records in this list.</p>}
     </div>}
