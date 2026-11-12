@@ -461,6 +461,9 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         if (error) throw error;
         if (cancelled) return;
 
+        const {data:activeAllocations,error:allocationError}=await supabase.from("project_allocations").select("asset_id").is("returned_at",null);
+        if(allocationError)throw allocationError;
+        const allocatedIds=new Set((activeAllocations||[]).map(a=>a.asset_id));
         const mapped = ((data || []) as DbAsset[]).map((item) => ({
           id: item.asset_code,
           name: item.description || [item.manufacturer, item.model].filter(Boolean).join(" ") || "Description not recorded",
@@ -468,7 +471,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           registration: item.registration || "—",
           location: item.location || "Not recorded",
           hours: item.hour_meter == null ? "—" : String(item.hour_meter),
-          status: displayStatus(item.status),
+          status: displayStatus(item.status==="available"&&allocatedIds.has(item.id)?"in_use":item.status),
           loler: "Not recorded",
           service: "Not recorded"
         }));
@@ -486,7 +489,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
 
     loadAssets();
     return () => { cancelled = true; };
-  }, [supabase]);
+  }, [supabase,page]);
   const filtered=useMemo(()=>assets.filter(a=>
     (a.id+" "+a.name+" "+a.category+" "+a.location+" "+a.registration).toLowerCase().includes(query.trim().toLowerCase()) &&
     (assetFilter==="All"||a.status===assetFilter) &&
