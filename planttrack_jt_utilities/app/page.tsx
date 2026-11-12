@@ -1,5 +1,5 @@
  "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf } from "../lib/loler-pdf";
