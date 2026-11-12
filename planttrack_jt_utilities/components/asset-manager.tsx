@@ -211,6 +211,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     if (!window.confirm("Delete asset " + asset.asset_code + "? This cannot be undone. Assets with linked compliance records or documents must be retained.")) return;
     const confirmation = window.prompt('Type the asset code "' + asset.asset_code + '" to confirm deletion:');
     if (confirmation !== asset.asset_code) { setError("Asset deletion cancelled: asset code did not match."); return; }
+    setSelectedAsset(null);
     setSaving(true); setError(""); setMessage("");
     const {error:deleteError} = await supabase.rpc("delete_unused_asset",{p_asset:asset.id});
     if (deleteError) setError("Asset not deleted. It may have linked job cards, documents or compliance records: " + deleteError.message);
