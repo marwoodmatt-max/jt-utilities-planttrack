@@ -271,7 +271,7 @@ function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"cha
 }
 function createJobCertificatePdf(job:any,assetLabel:string):Blob{
  const lines:string[]=[];
- const add=(label:string,value:unknown)=>{lines.push(label);String(value??"Not recorded").split("\\n").forEach(v=>{const words=v.replace(/[^\\x20-\\x7E]/g,"-").split(/\\s+/);let line="";for(const word of words){if((line+" "+word).length>88){lines.push("  "+line);line=word;}else line=line?line+" "+word:word;}lines.push("  "+line);});lines.push("");};
+ const add=(label:string,value:unknown)=>{lines.push(label);String(value??"Not recorded").split("\n").forEach(v=>{const words=v.replace(/[^\x20-\x7E]/g,"-").split(/\s+/);let line="";for(const word of words){if((line+" "+word).length>88){lines.push("  "+line);line=word;}else line=line?line+" "+word:word;}lines.push("  "+line);});lines.push("");};
  lines.push("JT UTILITIES LTD","APPROVED JOB CARD / EXAMINATION RECORD",""); 
  add("Certificate / job reference",job.certificate_number||job.id);
  add("Asset",assetLabel);add("Job type",job.job_type);add("Work order",job.title);add("Instructions",job.instructions);
@@ -289,13 +289,13 @@ function createJobCertificatePdf(job:any,assetLabel:string):Blob{
  const pages=push("");
  const pageIds:number[]=[];
  for(const chunk of chunks){const stream="BT /F1 9 Tf 40 795 Td 12 TL "+chunk.map((line,i)=>(i?"T* ":"")+"("+line.replace(/\\/g,"\\\\").replace(/\\(/g,"\\(").replace(/\\)/g,"\\)")+") Tj").join(" ")+" ET";
-  const content=push("<< /Length "+stream.length+" >>\\nstream\\n"+stream+"\\nendstream");
+  const content=push("<< /Length "+stream.length+" >>\nstream\n"+stream+"\nendstream");
   pageIds.push(push("<< /Type /Page /Parent "+pages+" 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 "+font+" 0 R >> >> /Contents "+content+" 0 R >>"));
  }
  objects[pages-1]="<< /Type /Pages /Count "+pageIds.length+" /Kids ["+pageIds.map(id=>id+" 0 R").join(" ")+"] >>";
  const catalog=push("<< /Type /Catalog /Pages "+pages+" 0 R >>");
- let output="%PDF-1.4\\n";const offsets=[0];objects.forEach((o,i)=>{offsets.push(output.length);output+=(i+1)+" 0 obj\\n"+o+"\\nendobj\\n";});
- const start=output.length;output+="xref\\n0 "+(objects.length+1)+"\\n0000000000 65535 f \\n"+offsets.slice(1).map(n=>String(n).padStart(10,"0")+" 00000 n \\n").join("")+"trailer\\n<< /Size "+(objects.length+1)+" /Root "+catalog+" 0 R >>\\nstartxref\\n"+start+"\\n%%EOF";
+ let output="%PDF-1.4\n";const offsets=[0];objects.forEach((o,i)=>{offsets.push(output.length);output+=(i+1)+" 0 obj\n"+o+"\nendobj\n";});
+ const start=output.length;output+="xref\n0 "+(objects.length+1)+"\n0000000000 65535 f \n"+offsets.slice(1).map(n=>String(n).padStart(10,"0")+" 00000 n \n").join("")+"trailer\n<< /Size "+(objects.length+1)+" /Root "+catalog+" 0 R >>\nstartxref\n"+start+"\n%%EOF";
  return new Blob([output],{type:"application/pdf"});
 }
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
