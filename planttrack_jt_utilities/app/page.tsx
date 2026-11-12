@@ -73,6 +73,8 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [message,setMessage]=useState("");
   const [lookupResult,setLookupResult]=useState<any>(null);
   const [error,setError]=useState("");
+  const [statusFilter,setStatusFilter]=useState("all");
+  const [registrationSearch,setRegistrationSearch]=useState("");
   async function load(){
     setLoading(true);setError("");
     const [assetsResult,recordsResult]=await Promise.all([
@@ -114,15 +116,20 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const normaliseReg=(value:string|null|undefined)=>(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   const recordByAsset=new Map(records.map(r=>[r.asset_id,r]));
   const expiry=(v:MotVehicle)=>recordByAsset.get(v.id)?.expiry_date||v.mot_due;
+  const statusOf=(v:MotVehicle)=>{const record=recordByAsset.get(v.id);if(!record?.last_checked_at)return "unchecked";if(!record.expiry_date)return "unknown";const days=daysUntil(record.expiry_date);return days<0?"expired":days<=60?"soon":"valid";};
+  const counts={valid:vehicles.filter(v=>statusOf(v)==="valid").length,soon:vehicles.filter(v=>statusOf(v)==="soon").length,expired:vehicles.filter(v=>statusOf(v)==="expired").length,unchecked:vehicles.filter(v=>statusOf(v)==="unchecked").length,unknown:vehicles.filter(v=>statusOf(v)==="unknown").length};
+  const shownVehicles=vehicles.filter(v=>(statusFilter==="all"||statusOf(v)===statusFilter)&&(!registrationSearch||normaliseReg(v.registration).includes(normaliseReg(registrationSearch))));
   const dueSoon=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)>=0&&daysUntil(d)<=60;}).length;
   const overdue=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)<0;}).length;
   return <section className="panel">
     <div className="panel-head"><div><h3>DVSA MOT checker · All vehicles</h3><p>All vans, cars and other registered vehicles, plus separate HGV and trailer records</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary" onClick={()=>void checkAllVehicles()} disabled={loading||checking!==null}>Check all vehicles with DVSA</button><button className="secondary" onClick={()=>void load()} disabled={loading||checking!==null}>Refresh</button></div></div>
     {batchProgress&&<p role="status">{batchProgress}</p>}
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",marginBottom:16}}>
-      <div className="stat"><div className="stat-top"><span>MOT overdue</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue}</strong></div>
-      <div className="stat"><div className="stat-top"><span>Due in 60 days</span><CalendarDays size={18}/></div><strong>{loading?"…":dueSoon}</strong></div>
-      <div className="stat"><div className="stat-top"><span>Expiry missing</span><FileText size={18}/></div><strong>{loading?"…":vehicles.filter(v=>!expiry(v)).length}</strong></div>
+      {([{key:"valid",label:"Valid MOT",tone:"green"},{key:"soon",label:"Due within 60 days",tone:"amber"},{key:"expired",label:"Expired MOT",tone:"red"},{key:"unchecked",label:"Not checked",tone:"neutral"},{key:"unknown",label:"DVSA date missing",tone:"neutral"}] as const).map(item=><button type="button" className="stat" key={item.key} onClick={()=>setStatusFilter(statusFilter===item.key?"all":item.key)} aria-pressed={statusFilter===item.key} style={{textAlign:"left",cursor:"pointer",border:statusFilter===item.key?"2px solid #2563eb":undefined}}><div className="stat-top"><span>{item.label}</span><FileCheck2 size={18}/></div><strong>{loading?"…":counts[item.key]}</strong><small>Click to filter</small></button>)}
+    </div>
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:16}}>
+      <input aria-label="Search registration" placeholder="Search registration (no spaces needed)" value={registrationSearch} onChange={e=>setRegistrationSearch(e.target.value)} style={{flex:"1 1 220px",padding:10,border:"1px solid #d1d5db",borderRadius:8}}/>
+      <button className="secondary" onClick={()=>{setStatusFilter("all");setRegistrationSearch("");}}>Show all vehicles ({vehicles.length})</button>
     </div>
     {error&&<p className="auth-error" role="alert">{error}</p>}
     {message&&<p role="status">{message}</p>}
@@ -139,13 +146,13 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
       })}
     </div>}
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>MOT expiry</th><th>Warning</th><th>DVSA last checked</th><th>Action</th></tr></thead><tbody>
-      {vehicles.slice().sort((a,b)=>(expiry(a)||"9999").localeCompare(expiry(b)||"9999")).map(v=>{
-        const d=expiry(v);const days=d?daysUntil(d):null;const record=recordByAsset.get(v.id);
-        const label=days===null?"Date missing":days<0?"MOT overdue":days===0?"Expires today":days<=14?"14-day warning":days<=30?"30-day warning":days<=60?"60-day warning":"Current";
-        return <tr key={v.id}><td><b>{normaliseReg(v.registration)||v.asset_code}</b><small>{v.description||v.category||""} · Asset {v.asset_code}</small></td><td>{d?fmt(d):"Not recorded"}</td><td><Tag tone={days===null||days<0?"red":days<=60?"amber":"green"}>{label}</Tag></td><td>{record?.last_checked_at?new Date(record.last_checked_at).toLocaleString("en-GB"):"Not checked"}{record?.last_check_error&&<small>{record.last_check_error}</small>}</td><td>{v.registration?<button className="secondary" disabled={checking!==null} onClick={()=>void checkMot(normaliseReg(v.registration))}>{checking===normaliseReg(v.registration)?"Checking…":"Check DVSA"}</button>:<span className="muted">Certificate record</span>}</td></tr>;
+      {shownVehicles.slice().sort((a,b)=>(expiry(a)||"9999").localeCompare(expiry(b)||"9999")).map(v=>{
+        const record=recordByAsset.get(v.id);const d=record?.expiry_date||null;const days=d?daysUntil(d):null;
+        const label=!record?.last_checked_at?"Not checked":days===null?"DVSA date missing":days<0?"MOT overdue":days===0?"Expires today":days<=14?"14-day warning":days<=30?"30-day warning":days<=60?"60-day warning":"Current";
+        return <tr key={v.id}><td><b>{normaliseReg(v.registration)||v.asset_code}</b><small>{v.description||v.category||""} · Asset {v.asset_code}</small></td><td>{d?fmt(d):"Not recorded"}</td><td><Tag tone={!record?.last_checked_at||days===null?"neutral":days<0?"red":days<=60?"amber":"green"}>{label}</Tag></td><td>{record?.last_checked_at?new Date(record.last_checked_at).toLocaleString("en-GB"):"Not checked"}{record?.last_check_error&&<small>{record.last_check_error}</small>}</td><td>{v.registration?<button className="secondary" disabled={checking!==null} onClick={()=>void checkMot(normaliseReg(v.registration))}>{checking===normaliseReg(v.registration)?"Checking…":"Check DVSA"}</button>:<span className="muted">Certificate record</span>}</td></tr>;
       })}
     </tbody></table>{vehicles.length===0&&<p className="muted">No registered vehicles or MOT records found.</p>}</div>}
-    <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The bulk check covers the Vehicle category; HGV and trailer certificate dates remain visible. The 4 am automated schedule is separate and has not been verified here.</p>
+    <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The manual bulk check covers the Vehicle category. The daily 4am UK DVSA schedule is active; its first successful full-fleet run is still awaiting verification. Trailer certificate dates remain separate.</p>
   </section>;
 }
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
