@@ -242,7 +242,8 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div className="calendar-legend" style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:12,fontSize:12}}>
       <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#b91c1c",marginRight:6}}/>Overdue due date</span>
       <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#d97706",marginRight:6}}/>Upcoming due date</span>
-      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>\n      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#7c3aed",marginRight:6}}/>Vehicle MOT expiry</span>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#2563eb",marginRight:6}}/>Completed examination</span>
+      <span><i style={{display:"inline-block",width:9,height:9,borderRadius:9,background:"#7c3aed",marginRight:6}}/>Vehicle MOT expiry</span>
     </div>
     <div className="calendar-grid">
       {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=><b key={day}>{day}</b>)}
