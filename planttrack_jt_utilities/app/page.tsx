@@ -69,6 +69,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [records,setRecords]=useState<DvsaMotRecord[]>([]);
   const [loading,setLoading]=useState(true);
   const [checking,setChecking]=useState<string|null>(null);
+  const [batchProgress,setBatchProgress]=useState("");
   const [message,setMessage]=useState("");
   const [error,setError]=useState("");
   async function load(){
@@ -91,6 +92,20 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     else setMessage(registration+": "+(data?.saved?"DVSA result saved to PlantTrack":"DVSA result received but not saved"+(data?.saveError?": "+data.saveError:"")));
     await load();setChecking(null);
   }
+  async function checkAllVehicles(){
+    const targets=vehicles.filter(v=>v.category==="Vehicle"&&v.registration);
+    setChecking("all");setMessage("");let saved=0;let failed=0;
+    for(let i=0;i<targets.length;i++){
+      const vehicle=targets[i];
+      setBatchProgress("Checking "+(i+1)+" of "+targets.length+": "+vehicle.registration);
+      try{
+        const {data,error}=await supabase.functions.invoke("dvsa-mot-lookup",{body:{registration:vehicle.registration}});
+        if(error||data?.error||!data?.saved)failed++;else saved++;
+      }catch{failed++;}
+    }
+    setBatchProgress("");setMessage("DVSA fleet check finished: "+saved+" saved, "+failed+" not saved. Any failed vehicles can be retried individually.");
+    await load();setChecking(null);
+  }
   const now=new Date();const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const daysUntil=(date:string)=>Math.round((Date.parse(date.slice(0,10)+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
   const fmt=(d:string)=>d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4);
@@ -99,7 +114,8 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const dueSoon=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)>=0&&daysUntil(d)<=60;}).length;
   const overdue=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)<0;}).length;
   return <section className="panel">
-    <div className="panel-head"><div><h3>DVSA MOT checker · All vehicles</h3><p>Saved DVSA results, all registered fleet vehicles and PlantTrack trailer MOT records</p></div><button className="secondary" onClick={()=>void load()} disabled={loading}>Refresh</button></div>
+    <div className="panel-head"><div><h3>DVSA MOT checker · All vehicles</h3><p>All vans, cars and other registered vehicles, plus separate HGV and trailer records</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary" onClick={()=>void checkAllVehicles()} disabled={loading||checking!==null}>Check all vehicles with DVSA</button><button className="secondary" onClick={()=>void load()} disabled={loading||checking!==null}>Refresh</button></div></div>
+    {batchProgress&&<p role="status">{batchProgress}</p>}
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",marginBottom:16}}>
       <div className="stat"><div className="stat-top"><span>MOT overdue</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue}</strong></div>
       <div className="stat"><div className="stat-top"><span>Due in 60 days</span><CalendarDays size={18}/></div><strong>{loading?"…":dueSoon}</strong></div>
@@ -114,7 +130,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
         return <tr key={v.id}><td><b>{v.registration||v.asset_code}</b><small>{v.asset_code} · {v.description||v.category||""}</small></td><td>{d?fmt(d):"Not recorded"}</td><td><Tag tone={days===null||days<0?"red":days<=60?"amber":"green"}>{label}</Tag></td><td>{record?.last_checked_at?new Date(record.last_checked_at).toLocaleString("en-GB"):"Not checked"}{record?.last_check_error&&<small>{record.last_check_error}</small>}</td><td>{v.registration?<button className="secondary" disabled={checking!==null} onClick={()=>void checkMot(v.registration!)}>{checking===v.registration?"Checking…":"Check DVSA"}</button>:<span className="muted">Certificate record</span>}</td></tr>;
       })}
     </tbody></table>{vehicles.length===0&&<p className="muted">No registered vehicles or MOT records found.</p>}</div>}
-    <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The 4 am automated schedule is separate and has not been verified here.</p>
+    <p className="muted">DVSA checks use the existing secure Supabase connection. Trailer certificate dates remain in the Plant Register. The bulk check covers the Vehicle category; HGV and trailer certificate dates remain visible. The 4 am automated schedule is separate and has not been verified here.</p>
   </section>;
 }
 function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
