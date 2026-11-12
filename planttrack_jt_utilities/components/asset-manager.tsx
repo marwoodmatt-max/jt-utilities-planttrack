@@ -194,7 +194,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       return;
     }
     if (payload.hour_meter !== null && (!Number.isFinite(payload.hour_meter) || payload.hour_meter < 0)) {
-      setError("Enter a valid non-negative hours reading.");
+      setError((form.category || "").trim().toLowerCase() === "vehicle" ? "Enter a valid non-negative mileage reading." : "Enter a valid non-negative hours reading.");
       setSaving(false);
       return;
     }
@@ -258,7 +258,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Serial number<input style={fieldStyle} value={form.serial_number} onChange={(e) => setForm({ ...form, serial_number: e.target.value })}/></label>
         <label style={labelStyle}>Registration<input style={fieldStyle} value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })}/></label>
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
-        <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
+        <label style={labelStyle}>{(form.category || "").trim().toLowerCase() === "vehicle" ? "Current mileage" : "Hour meter"}<input style={fieldStyle} type="number" min="0" step={(form.category || "").trim().toLowerCase() === "vehicle" ? "1" : "0.1"} value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })} placeholder={(form.category || "").trim().toLowerCase() === "vehicle" ? "Enter current mileage" : "Enter hours reading"}/></label>
         <label style={labelStyle}>Status<select style={fieldStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{statuses.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
         {(form.category || "").trim().toLowerCase() === "lifting equipment" && editing !== "new" && <>
           <label style={labelStyle}>LOLER next examination due<input style={fieldStyle} type="date" value={form.loler_next_due} onChange={(e) => setForm({ ...form, loler_next_due: e.target.value })}/></label>
@@ -276,12 +276,12 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
-      <table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
+      <table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>{categoryFilter.toLowerCase() === "vehicle" ? "Current mileage" : categoryFilter === "All" ? "Hours / mileage" : "Hours"}</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
         <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
         <td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
-        <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
+        <td>{a.hour_meter == null ? "—" : categoryFilter.toLowerCase() === "vehicle" ? Number(a.hour_meter).toLocaleString("en-GB") : a.hour_meter}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : a.status === "available" ? "tag green" : a.status === "out_of_service" ? "tag red" : a.status === "in_workshop" ? "tag amber" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button></td>}
