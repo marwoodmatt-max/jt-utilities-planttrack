@@ -401,6 +401,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
+   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<button className="secondary" onClick={()=>void (async()=>{try{const blob=await generateApprovedJobPdf(chosen,assetName(chosen.asset_id),true);const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=(chosen.certificate_number||"LOLER")+"_DRAFT_NOT_VALID.pdf";a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);setNotice("Draft PDF downloaded. This is not a valid or approved LOLER certificate.");}catch(e){setNotice("Draft PDF failed: "+(e instanceof Error?e.message:String(e)));}})()}>Download draft PDF (NOT VALID)</button>}
    {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>View signed PDF in asset record</button>}
    {role==="office"&&chosen.status==="Approved"&&!chosen.approved_pdf_path&&<button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"PDF saved against asset")}>Retry PDF filing</button>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
