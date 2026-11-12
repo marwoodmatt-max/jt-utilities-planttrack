@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Plus, Search, Pencil, X, Save, RefreshCw } from "lucide-react";
+import AssetFolder from "./asset-folder";
+import { Plus, Search, Pencil, X, Save, RefreshCw, FolderOpen } from "lucide-react";
 
 type AssetRow = {
   id: string;
@@ -62,6 +63,7 @@ const statuses = [
 
 export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
   const [rows, setRows] = useState<AssetRow[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -108,6 +110,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   }
 
   useEffect(() => { void loadAssets(); }, [supabase]);
+
+  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} />;
 
   const filtered = useMemo(() => rows.filter((a) =>
     (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase()) &&
@@ -276,11 +280,11 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
-      <table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
+      <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
         <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
-        <td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
+        <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : a.status === "available" ? "tag green" : a.status === "out_of_service" ? "tag red" : a.status === "in_workshop" ? "tag amber" : "tag"}>{a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "Overdue · Out of service" : statuses.find((s) => s.value === a.status)?.label || a.status}</span></td>
