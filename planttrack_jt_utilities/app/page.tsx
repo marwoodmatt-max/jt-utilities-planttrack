@@ -289,7 +289,7 @@ function createJobCertificatePdf(job:any,assetLabel:string):Blob{
  const font=push("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>");
  const pages=push("");
  const pageIds:number[]=[];
- for(const chunk of chunks){const stream="BT /F1 9 Tf 40 795 Td 12 TL "+chunk.map((line,i)=>(i?"T* ":"")+"("+line.replace(/\\/g,"\\\\").replace(/\\(/g,"\\(").replace(/\\)/g,"\\)")+") Tj").join(" ")+" ET";
+ for(const chunk of chunks){const stream="BT /F1 9 Tf 40 795 Td 12 TL "+chunk.map((line,i)=>(i?"T* ":"")+"("+line.split(String.fromCharCode(92)).join(String.fromCharCode(92,92)).split("(").join(String.fromCharCode(92)+"(").split(")").join(String.fromCharCode(92)+")")+") Tj").join(" ")+" ET";
   const content=push("<< /Length "+stream.length+" >>\nstream\n"+stream+"\nendstream");
   pageIds.push(push("<< /Type /Page /Parent "+pages+" 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 "+font+" 0 R >> >> /Contents "+content+" 0 R >>"));
  }
