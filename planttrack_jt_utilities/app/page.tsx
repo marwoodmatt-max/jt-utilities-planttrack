@@ -529,7 +529,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter}/>}
-        {page==="Projects"&&<Projects supabase={supabase}/>}
+        {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
         {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
@@ -711,7 +711,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
   </section>;
 }
-function Projects({supabase}:{supabase:SupabaseClient}) {
+function Projects({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) {
   const [projects,setProjects]=useState<any[]>([]);
   const [allocations,setAllocations]=useState<any[]>([]);
   const [assets,setAssets]=useState<any[]>([]);
@@ -723,10 +723,11 @@ function Projects({supabase}:{supabase:SupabaseClient}) {
   const [newProject,setNewProject]=useState({project_name:"",client_name:"",site_address:"",site_postcode:"",start_date:"",expected_end_date:"",notes:""});
   const [assetToAllocate,setAssetToAllocate]=useState("");
   const [allocationNote,setAllocationNote]=useState("");
+  const [removingProject,setRemovingProject]=useState<string|null>(null);
   async function load(){
     setLoading(true);setError("");
     const [p,a]=await Promise.all([
-      supabase.from("projects").select("*").order("project_name"),
+      supabase.from("projects").select("*").neq("status","archived").order("project_name"),
       supabase.from("project_allocations").select("id,project_id,asset_id,allocated_at,returned_at,notes").is("returned_at",null).order("allocated_at",{ascending:false}),
     ]);
     if(p.error||a.error){setError(p.error?.message||a.error?.message||"Could not load projects.");setLoading(false);return;}
@@ -755,6 +756,21 @@ function Projects({supabase}:{supabase:SupabaseClient}) {
     if(e){setError(e.message);return;}
     setNotice("Equipment released from project.");await load();
   }
+  async function removeProject(project:any){
+    if(!isAdmin||removingProject)return;
+    const hasActive=allocations.some(a=>a.project_id===project.id);
+    const message=hasActive
+      ?'Remove project "'+project.project_name+'"? Its allocated equipment will be released and the project archived. Allocation history will be retained.'
+      :'Remove project "'+project.project_name+'"? Projects with previous allocations will be archived to retain history; empty projects will be permanently deleted.';
+    if(!window.confirm(message))return;
+    const typed=window.prompt('Type the project name to confirm:');
+    if(typed!==project.project_name){setError("Project removal cancelled: name did not match.");return;}
+    setRemovingProject(project.id);setError("");setNotice("");
+    const {data,error:removeError}=await supabase.rpc("remove_project_safely",{p_project:project.id});
+    if(removeError)setError("Project could not be removed: "+removeError.message);
+    else {setNotice(data==="archived"?"Project archived and equipment released. Allocation history retained.":"Empty project deleted.");setSelectedProject(null);await load();}
+    setRemovingProject(null);
+  }
   const activeAssetIds=new Set(allocations.map(a=>a.asset_id));
   const availableAssets=assets.filter(a=>!activeAssetIds.has(a.id));
   const fmt=(d:string)=>new Date(d).toLocaleDateString("en-GB");
@@ -777,7 +793,7 @@ function Projects({supabase}:{supabase:SupabaseClient}) {
     {loading?<p className="muted">Loading projects and allocations…</p>:projects.length===0?<p className="muted">No projects have been added yet. Create your first project, such as Tophams, then allocate equipment to it.</p>:projects.map(project=>{
       const rows=allocations.filter(a=>a.project_id===project.id);
       return <div key={project.id} style={{border:"1px solid #e5e5e8",borderRadius:12,padding:16,marginBottom:12}}>
-        <div className="panel-head"><div><h3>{project.project_name}</h3><p>{[project.site_address,project.site_postcode].filter(Boolean).join(", ")||"Site location not yet added"} · {project.status.replace("_"," ")}</p></div><Tag tone={project.status==="active"?"green":project.status==="completed"?"neutral":"amber"}>{project.status}</Tag></div>
+        <div className="panel-head"><div><h3>{project.project_name}</h3><p>{[project.site_address,project.site_postcode].filter(Boolean).join(", ")||"Site location not yet added"} · {project.status.replace("_"," ")}</p></div><div style={{display:"flex",alignItems:"center",gap:10}}><Tag tone={project.status==="active"?"green":project.status==="completed"?"neutral":"amber"}>{project.status}</Tag>{isAdmin&&<button className="secondary" disabled={removingProject!==null} onClick={()=>void removeProject(project)} style={{color:"#b91c1c"}}>{removingProject===project.id?"Removing…":"Delete project"}</button>}</div></div>
         <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:13,color:"#666",marginBottom:12}}><span>{rows.length} items allocated</span>{project.client_name&&<span>Client: {project.client_name}</span>}{project.start_date&&<span>Start: {fmt(project.start_date)}</span>}</div>
         {rows.map(row=>{const asset=assets.find(a=>a.id===row.asset_id);return <div className="attention" key={row.id}><div className="avatar"><Truck size={16}/></div><div><b>{asset?.asset_code||"Asset"} · {asset?.description||"Equipment"}</b><small>{asset?.category||""} · Allocated {fmt(row.allocated_at)}</small></div><button className="secondary" onClick={()=>void release(row.id)}>Release</button></div>;})}
         {selectedProject===project.id?<div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}><select value={assetToAllocate} onChange={e=>setAssetToAllocate(e.target.value)}><option value="">Choose available equipment</option>{availableAssets.map(a=><option key={a.id} value={a.id}>{a.asset_code} – {a.description}</option>)}</select><input value={allocationNote} onChange={e=>setAllocationNote(e.target.value)} placeholder="Allocation note (optional)"/><button className="primary" disabled={!assetToAllocate} onClick={()=>void allocate()}>Allocate</button><button className="secondary" onClick={()=>setSelectedProject(null)}>Cancel</button></div>:<button className="secondary" style={{marginTop:10}} onClick={()=>{setSelectedProject(project.id);setAssetToAllocate("");}}> <Plus size={15}/> Allocate equipment</button>}
