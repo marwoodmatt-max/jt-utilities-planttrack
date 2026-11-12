@@ -136,3 +136,22 @@ td small{color:#7c899a}
  .workshop-create-form input,.workshop-create-form select,.workshop-create-form textarea{width:100%;max-width:100%;min-height:46px}
  .workshop-create-form .primary{width:100%;min-height:50px}
 }
+
+.workshop-heading{display:flex;align-items:center;gap:13px}
+.workshop-header-logo{width:64px;height:56px;object-fit:contain;flex-shrink:0;border-radius:8px;background:#fff}
+@media(max-width:700px){
+ .workshop-job-panel{display:flex;flex-direction:column;gap:0}
+ .workshop-job-panel>.panel-head{order:0;align-items:center;gap:8px;margin-bottom:14px}
+ .workshop-job-panel>.panel-head .secondary{min-width:0;padding:8px 10px;font-size:12px}
+ .workshop-heading{gap:10px}
+ .workshop-header-logo{width:62px;height:52px}
+ .workshop-heading h3{font-size:17px;line-height:1.25;margin:0}
+ .workshop-heading p{display:none}
+ .workshop-jobs-title{order:1;font-size:19px;margin:0 0 8px}
+ .workshop-mobile-jobs{order:2;margin:0 0 14px}
+ .workshop-desktop-jobs{order:3}
+ .workshop-mobile-add{order:10;margin:8px 0 12px}
+ .workshop-create-form{order:11}
+ .workshop-job-panel>div[role="status"]{order:0}
+ .workshop-job-panel>p[role="status"]{order:0}
+}
