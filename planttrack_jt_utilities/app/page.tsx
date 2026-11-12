@@ -176,17 +176,18 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
       // Keep the date types separate so an MOT is never presented as a LOLER examination.
       const {data:hgvs,error:hgvError}=await supabase.from("assets")
         .select("id,asset_code,registration,description,pmi_next_due,pmi_last_completed,mot_due,tacho_calibration_due")
-        .eq("category","HGV");
+        .in("asset_code",["R500 JTU","WP63 PFD","C545766"]);
       if(hgvError){if(!cancelled){setError("Could not load HGV compliance dates: "+hgvError.message);setLoading(false);}return;}
       for(const hgv of hgvs||[]){
-        const code=hgv.registration||hgv.asset_code;
+        const code=hgv.asset_code==="C545766"?"C545766 · Trailer":hgv.registration||hgv.asset_code;
+        const prefix=hgv.asset_code==="C545766"?"Trailer":"HGV";
         const add=(date:string|null,kind:"examined"|"due",label:string)=>{
           if(date) mapped.push({id:hgv.id+"-"+label,date:date.slice(0,10),kind,assetCode:code,description:label+" · "+(hgv.description||"HGV")});
         };
-        add(hgv.pmi_last_completed,"examined","HGV last PMI");
-        add(hgv.pmi_next_due,"due","HGV next PMI");
-        add(hgv.mot_due,"due","HGV MOT expiry");
-        add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
+        add(hgv.pmi_last_completed,"examined",prefix+" last PMI");
+        add(hgv.pmi_next_due,"due",prefix+" next PMI");
+        add(hgv.mot_due,"due",prefix+" MOT expiry");
+        if(prefix==="HGV")add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
       }
       if(!cancelled){setEvents(mapped);setLoading(false);}
     }
@@ -236,18 +237,18 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Exam":event.date<today?"Overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":event.description.startsWith("HGV")||event.description.startsWith("Trailer")?event.description.split(" · ")[0]:"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
     </div>
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
-      {selectedDate&&selectedEvents.length===0&&<p className="muted">No LOLER events recorded for this date.</p>}
+      {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
       {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":"LO"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":"Next examination due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.date<today?"Overdue":"Due"}</span></div>)}
     </div>
-    {loading&&<p className="muted">Loading live LOLER dates…</p>}
-    {!loading&&!error&&events.length===0&&<p className="muted">No LOLER examination dates are currently recorded.</p>}
+    {loading&&<p className="muted">Loading live compliance dates…</p>}
+    {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
   </section>;
 }
 function Projects({supabase}:{supabase:SupabaseClient}) {
