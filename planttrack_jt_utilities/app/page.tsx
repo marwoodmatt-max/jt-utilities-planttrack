@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import LolerManager from "../components/loler-manager";
+import MotHistory from "../components/mot-history";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
-  Truck, Users, Wrench, X, Plus, Bell, ArrowUpRight, QrCode, History, Download
+  Truck, Users, Wrench, X, Plus, Bell, ArrowUpRight, QrCode, History, Download, CarFront
 } from "lucide-react";
 
 type Asset = { id:string; name:string; category:string; registration:string; location:string; hours:string; status:string; loler:string; service:string };
@@ -18,7 +19,7 @@ function displayStatus(status:string) {
 const nav = [
   ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
-  ["Workshop job cards",Wrench],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
+  ["Workshop job cards",Wrench],["Maintenance history",History],["MOT history",CarFront],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -127,6 +128,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
+        {page==="MOT history"&&<MotHistory supabase={supabase}/>}
         {page==="Maintenance history"&&<section className="panel"><h3>Maintenance history</h3><p className="muted">A chronological record of work, inspections, parts and approvals for each asset.</p><p className="muted">No live maintenance history records are connected yet.</p></section>}
         {page==="Users & sign-offs"&&<UsersPanel action={action}/>}
         {page==="Reports"&&<Reports/>}
