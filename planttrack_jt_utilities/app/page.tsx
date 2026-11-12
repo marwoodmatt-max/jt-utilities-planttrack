@@ -393,10 +393,10 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   {chosen&&<div style={{marginTop:20,display:"grid",gap:10}}>
    <h3>{chosen.title} · {assetName(chosen.asset_id)}</h3>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p>{chosen.certificate_number&&<p><b>Certificate number:</b> {chosen.certificate_number}</p>}<p>{chosen.instructions}</p>
-   {Object.entries(chosen.job_details||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}<p><b>Status:</b> {chosen.status}</p>
+   <p><b>Status:</b> {chosen.status}</p>
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
-   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/>}
+   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/></details>}
    {chosen.job_type==="General repair"&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
