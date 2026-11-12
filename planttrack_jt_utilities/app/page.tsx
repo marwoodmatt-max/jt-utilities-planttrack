@@ -23,7 +23,15 @@ const nav = [
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
-type PmiItem={asset_code:string;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;status:string};
+function plannedPmiDates(nextDue:string|null,today:string,months=13){
+ if(!nextDue)return [] as string[];
+ const horizon=new Date(today+"T00:00:00Z");horizon.setUTCMonth(horizon.getUTCMonth()+months);
+ const end=horizon.toISOString().slice(0,10),cursor=new Date(nextDue.slice(0,10)+"T00:00:00Z"),dates:string[]=[];
+ if(Number.isNaN(cursor.getTime()))return dates;
+ for(let i=0;i<40;i++){const d=cursor.toISOString().slice(0,10);if(d>end)break;if(d>=today)dates.push(d);cursor.setUTCDate(cursor.getUTCDate()+42);}
+ return dates;
+}
+type PmiItem={asset_code:string;registration:string|null;description:string|null;pmi_last_completed:string|null;pmi_next_due:string|null;tacho_calibration_due:string|null;status:string};
 function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenCalendar:()=>void}){
   const [items,setItems]=useState<PmiItem[]>([]);
   const [loading,setLoading]=useState(true);
@@ -32,7 +40,7 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
     let cancelled=false;
     async function load(){
       const {data,error}=await supabase.from("assets")
-        .select("asset_code,description,pmi_last_completed,pmi_next_due,status")
+        .select("asset_code,registration,description,pmi_last_completed,pmi_next_due,tacho_calibration_due,status")
         .not("pmi_next_due","is",null)
         .order("pmi_next_due",{ascending:true}).limit(100);
       if(cancelled)return;
@@ -49,6 +57,7 @@ function PmiDashboard({supabase,onOpenCalendar}:{supabase:SupabaseClient;onOpenC
   const overdue=items.filter(x=>x.pmi_next_due!<today);
   const upcoming=items.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
   const fmt=(d:string|null)=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"Not recorded";
+  const hgvItems=items.filter(item=>["R500 JTU","WP63 PFD","C545766"].includes(item.asset_code));
   return <section className="panel" style={{marginTop:18}}>
     <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open inspection calendar</button></div>
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
@@ -270,7 +279,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </div>;
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
-type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"; assetCode:string; description:string };
+type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"; assetCode:string; description:string };
 function Calendar({supabase}:{supabase:SupabaseClient}) {
   const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1));
   const [events,setEvents]=useState<CalendarEvent[]>([]);
@@ -333,6 +342,10 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         };
         add(hgv.pmi_last_completed,"examined",prefix+" PMI inspection completed");
         add(hgv.pmi_next_due,"due",prefix+" PMI inspection due");
+        for(const planned of plannedPmiDates(hgv.pmi_next_due,today,13)){
+          if(planned===hgv.pmi_next_due?.slice(0,10))continue;
+          mapped.push({id:hgv.id+"-pmi-plan-"+planned,date:planned,kind:"planned",assetCode:code,description:prefix+" PMI planned · Six-week projected slot"});
+        }
         if(!savedDvsaIds.has(hgv.id))add(hgv.mot_due,"due",prefix+" MOT expiry");
         if(hgv.mot_due&&!savedDvsaIds.has(hgv.id)){
           // Use UTC date arithmetic to avoid daylight-saving shifts in reminders.
@@ -399,7 +412,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         const key=dateKey(day);const dayEvents=byDate.get(key)||[];
         return <button type="button" key={key} className="day" onClick={()=>setSelectedDate(key)} style={{textAlign:"left",border:selectedDate===key?"2px solid #b91c1c":undefined,background:key===today?"#fff7f7":undefined,cursor:"pointer",minHeight:76}}>
           <span>{day}</span>
-          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.kind==="reminder"?"#fef3c7":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.kind==="reminder"?"#92400e":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="reminder"?"MOT reminder":event.description.includes("MOT")?"MOT due":event.kind==="examined"?"Completed":event.description.includes("PMI")?"PMI due":event.description.includes("tacho")?"Tacho due":event.date<today?"LOLER overdue":"LOLER due"} · {event.assetCode}</small>)}
+          {dayEvents.slice(0,3).map(event=><small key={event.id} style={{display:"block",marginTop:3,padding:"3px 4px",borderRadius:4,fontSize:9,background:event.kind==="examined"?"#dbeafe":event.kind==="reminder"?"#fef3c7":event.date<today?"#fee2e2":"#fef3c7",color:event.kind==="examined"?"#1d4ed8":event.kind==="reminder"?"#92400e":event.date<today?"#991b1b":"#92400e"}}>{event.kind==="reminder"?"MOT reminder":event.kind==="planned"?"PMI planned":event.description.includes("MOT")?"MOT due":event.kind==="examined"?"Completed":event.description.includes("PMI")?"PMI due":event.description.includes("tacho")?"Tacho due":event.date<today?"LOLER overdue":"LOLER due"} · {event.assetCode}</small>)}
           {dayEvents.length>3&&<small>+{dayEvents.length-3} more</small>}
         </button>;
       })}
@@ -407,7 +420,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
       {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
-      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":"Compliance due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.kind==="reminder"?"amber":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.kind==="reminder"?"Reminder":event.date<today?"Overdue":"Due"}</span></div>)}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span className={"tag "+(event.kind==="examined"?"blue":event.kind==="reminder"?"amber":event.date<today?"red":"amber")}>{event.kind==="examined"?"Completed":event.kind==="reminder"?"Reminder":event.kind==="planned"?"Planned":event.date<today?"Overdue":"Due"}</span></div>)}
     </div>
     {loading&&<p className="muted">Loading live compliance dates…</p>}
     {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
