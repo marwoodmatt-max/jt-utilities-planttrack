@@ -52,11 +52,27 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   const text=(v:unknown)=>ascii(v??"").trim();
   const date=(v:unknown)=>{const t=text(v);if(!t)return "";if(/^\\d{4}-\\d{2}-\\d{2}/.test(t)){const [yy,mm,dd]=t.slice(0,10).split("-");return dd+"/"+mm+"/"+yy;}return t;};
   const fit=(v:unknown,font:any,size:number,width:number,maxLines=2)=>{
-   const raw=text(v)||"Not recorded", words=raw.split(/\\s+/),lines:string[]=[];let line="";
-   for(const word of words){const attempt=line?line+" "+word:word;if(font.widthOfTextAtSize(attempt,size)>width&&line){lines.push(line);line=word;}else line=attempt;}
+   const raw=text(v)||"Not recorded";
+   const lines:string[]=[];let line="";
+   // Break overlong individual words as well as ordinary text, so nothing escapes its cell.
+   for(const word of raw.split(/\s+/)){
+    const candidate=line?line+" "+word:word;
+    if(font.widthOfTextAtSize(candidate,size)<=width){line=candidate;continue;}
+    if(line){lines.push(line);line="";}
+    let chunk="";
+    for(const char of word){
+     if(chunk&&font.widthOfTextAtSize(chunk+char,size)>width){lines.push(chunk);chunk="";}
+     chunk+=char;
+    }
+    line=chunk;
+   }
    if(line)lines.push(line);
    const out=lines.slice(0,maxLines);
-   if(lines.length>maxLines&&out.length){let last=out[out.length-1];while(last&&font.widthOfTextAtSize(last+"...",size)>width)last=last.slice(0,-1);out[out.length-1]=last+"...";}
+   if(lines.length>maxLines&&out.length){
+    let last=out[out.length-1];
+    while(last&&font.widthOfTextAtSize(last+"...",size)>width)last=last.slice(0,-1);
+    out[out.length-1]=last+"...";
+   }
    return out;
   };
   const draw=(value:unknown,x:number,y:number,size=8,font=regular,color=dark,width=490,maxLines=2)=>{
