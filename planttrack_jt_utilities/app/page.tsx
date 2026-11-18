@@ -324,6 +324,19 @@ function createJobCertificatePdf(job:any,assetLabel:string):Blob{
  const start=output.length;output+="xref\n0 "+(objects.length+1)+"\n0000000000 65535 f \n"+offsets.slice(1).map(n=>String(n).padStart(10,"0")+" 00000 n \n").join("")+"trailer\n<< /Size "+(objects.length+1)+" /Root "+catalog+" 0 R >>\nstartxref\n"+start+"\n%%EOF";
  return new Blob([output],{type:"application/pdf"});
 }
+function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onOpen:()=>void}){
+ const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<Record<string,string>>({}),[error,setError]=useState("");
+ useEffect(()=>{let active=true;const load=async()=>{
+  const [j,a]=await Promise.all([supabase.from("workshop_job_cards").select("id,title,status,job_card_number,asset_id,created_at").order("created_at",{ascending:false}).limit(100),supabase.from("assets").select("id,asset_code")]);
+  if(!active)return;if(j.error)setError(j.error.message);else{setError("");setJobs(j.data||[]);}if(!a.error)setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));
+ };void load();const channel=supabase.channel("workshop-dashboard-live").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();return()=>{active=false;void supabase.removeChannel(channel);};},[supabase]);
+ const groups=[{name:"Assigned / awaiting work",match:(s:string)=>["New","Assigned","In progress","Returned for correction"].includes(s)},{name:"Waiting for sign-off",match:(s:string)=>s==="Awaiting office approval"},{name:"Completed / done",match:(s:string)=>["Approved","Completed","Closed"].includes(s)}];
+ return <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Live workshop job cards, from new work through sign-off to completion.</p></div><button className="text-btn" onClick={onOpen}>Workshop job cards</button></div>
+ {error&&<p role="alert">{error}</p>}
+ {groups.map(group=>{const items=jobs.filter(j=>group.match(j.status));return <div key={group.name} style={{marginTop:14}}><h4>{group.name} · {items.length}</h4>{items.length===0?<p className="muted">No job cards in this stage.</p>:<div style={{display:"grid",gap:7}}>{items.slice(0,8).map(j=><button key={j.id} className="secondary" style={{textAlign:"left",display:"block",width:"100%"}} onClick={onOpen}><strong>{j.job_card_number||"Job card"} · {assets[j.asset_id]||"Asset"}</strong> — {j.title} <small>({j.status})</small></button>)}{items.length>8&&<p className="muted">+ {items.length-8} more — open Workshop job cards to view all.</p>}</div>}</div>})}
+ {!jobs.length&&!error&&<p className="muted">No job cards raised yet.</p>}
+ </section>;
+}
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
@@ -348,6 +361,9 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
  })();return()=>{active=false};},[supabase,refresh]);
+ const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
+ const orderedJobs=[...jobs].sort((a,b)=>jobStage(a.status)-jobStage(b.status)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
+ const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
@@ -396,7 +412,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   {notice&&<p role="status">{notice}</p>}
   <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
   {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
-    {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:jobs.map(j=><article className="workshop-mobile-job" key={j.id}>
+    {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:orderedJobs.map(j=><article className="workshop-mobile-job" key={j.id}>
       <div className="workshop-mobile-job-top"><span className="tag">{j.priority||"Normal"} priority</span><span className="tag blue">{j.status}</span></div>
       <h4>{j.title}</h4><p className="workshop-mobile-asset">{assetName(j.asset_id)}</p>
       <p className="muted">{j.job_type||"General repair"}{j.job_card_number?" · "+j.job_card_number:""}{j.certificate_number?" · "+j.certificate_number:""}</p>
@@ -404,7 +420,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     </article>)}
   </div>}
   <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {jobs.map(j=><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr>)}
+   {orderedJobs.map((j,index)=><><tr key={"stage-"+j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td>}</tr><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr></>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
@@ -578,7 +594,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
           <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Inspection calendar")}/>
           <Calendar supabase={supabase}/>
-          <section className="panel"><div className="panel-head"><div><h3>Workshop and maintenance</h3><p>Repairs, defects and servicing for your own fleet.</p></div><button className="text-btn" onClick={()=>setPage("Workshop job cards")}>Workshop job cards</button></div><p className="muted">Live job-card and plant-check activity will appear here once those workflows are connected. No sample activity is shown.</p></section>
+          <WorkshopDashboardSummary supabase={supabase} onOpen={()=>setPage("Workshop job cards")}/>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
