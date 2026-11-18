@@ -535,7 +535,54 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
   const [assetFilter,setAssetFilter]=useState("All");
   const [categoryFilter,setCategoryFilter]=useState("All");
   const [notice,setNotice]=useState("");
+  const [notificationsOpen,setNotificationsOpen]=useState(false);
+  const [notificationsLoading,setNotificationsLoading]=useState(false);
+  const [notificationsError,setNotificationsError]=useState("");
+  const [notifications,setNotifications]=useState<{key:string;label:string;details:string;page:string;priority:number}[]>([]);
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
+  async function loadNotifications(){
+    setNotificationsLoading(true);setNotificationsError("");
+    const [assetsResult,motResult,bookingsResult,lolerResult]=await Promise.all([
+      supabase.from("assets").select("id,asset_code,registration,mot_due"),
+      supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,mot_status,mot_tests,raw_response"),
+      supabase.from("mot_garage_bookings").select("id,asset_id,booking_date,booking_time,garage_name").eq("status","booked"),
+      supabase.from("examinations").select("id,asset_id,next_due").ilike("examination_type","%LOLER%")
+    ]);
+    const error=assetsResult.error||motResult.error||bookingsResult.error||lolerResult.error;
+    if(error){setNotificationsError("Could not load compliance alerts: "+error.message);setNotifications([]);setNotificationsLoading(false);return;}
+    const today=new Date().toLocaleDateString("en-CA",{timeZone:"Europe/London"});
+    const dayDiff=(date:string)=>Math.round((Date.parse(date.slice(0,10)+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
+    const fmt=(date:string)=>date.slice(8,10)+"/"+date.slice(5,7)+"/"+date.slice(0,4);
+    const found:{key:string;label:string;details:string;page:string;priority:number}[]=[];
+    const assetById=new Map((assetsResult.data||[]).map(a=>[a.id,a]));
+    const savedMotIds=new Set<string>();
+    for(const record of motResult.data||[]){
+      savedMotIds.add(record.asset_id);
+      const asset=assetById.get(record.asset_id);
+      const vehicle=asset?.registration||record.registration||asset?.asset_code||"Vehicle";
+      if(record.mot_status==="FAILED")found.push({key:"fail-"+record.asset_id,label:"FAILED MOT · "+vehicle,details:"Repairs required — check the MOT Tracker",page:"MOT Tracker",priority:0});
+      const due=motExpiryFromHistory(record)||firstMotDue(record);
+      if(!due)continue;
+      const days=dayDiff(due);
+      if(days<0)found.push({key:"mot-"+record.asset_id,label:"MOT overdue · "+vehicle,details:"Due "+fmt(due),page:"MOT Tracker",priority:1});
+      else if(days<=60)found.push({key:"mot-"+record.asset_id,label:(firstMotDue(record)?"First MOT due":"MOT due")+" · "+vehicle,details:fmt(due)+" · "+(days===0?"Today":days+" days remaining"),page:"MOT Tracker",priority:2});
+    }
+    for(const asset of assetsResult.data||[]){
+      if(savedMotIds.has(asset.id)||!asset.mot_due)continue;
+      const days=dayDiff(asset.mot_due);
+      if(days<=60)found.push({key:"manual-mot-"+asset.id,label:(days<0?"MOT overdue":"MOT due")+" · "+(asset.registration||asset.asset_code),details:"Recorded deadline "+fmt(asset.mot_due),page:"MOT Tracker",priority:days<0?1:2});
+    }
+    for(const booking of bookingsResult.data||[]){
+      const days=dayDiff(booking.booking_date);
+      if(days<0||days>14)continue;
+      const asset=assetById.get(booking.asset_id);
+      found.push({key:"booking-"+booking.id,label:"MOT booked · "+(asset?.registration||asset?.asset_code||"Vehicle"),details:fmt(booking.booking_date)+" at "+booking.booking_time.slice(0,5)+" · "+booking.garage_name,page:"MOT Tracker",priority:3});
+    }
+    const latestLoler=new Map<string,string>();
+    for(const exam of lolerResult.data||[]){if(exam.next_due){const existing=latestLoler.get(exam.asset_id);if(!existing||exam.next_due>existing)latestLoler.set(exam.asset_id,exam.next_due);}}
+    for(const [assetId,due] of latestLoler){const days=dayDiff(due);if(days>30)continue;const asset=assetById.get(assetId);found.push({key:"loler-"+assetId,label:(days<0?"LOLER overdue":"LOLER due")+" · "+(asset?.asset_code||"Equipment"),details:"Examination "+fmt(due),page:"LOLER & certificates",priority:days<0?1:4});}
+    found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found);setNotificationsLoading(false);
+  }
   useEffect(() => {
     let cancelled = false;
 
@@ -605,7 +652,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </aside>
     {mobileNav&&<div className="scrim" onClick={()=>setMobileNav(false)}/>}
     <main className="main">
-      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button><div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions"><button className="icon-btn" onClick={()=>action("No new notifications in this prototype.")}><Bell size={18}/></button><div className="avatar">JT</div></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button><div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions"><div style={{position:"relative"}}><button className="icon-btn" type="button" aria-label="Compliance notifications" aria-expanded={notificationsOpen} onClick={()=>{setNotificationsOpen(value=>!value);if(!notificationsOpen)void loadNotifications();}}><Bell size={18}/>{notifications.length>0&&<span style={{position:"absolute",top:-5,right:-6,minWidth:18,height:18,padding:"1px 4px",background:"#b91c1c",color:"#fff",borderRadius:12,fontSize:10,fontWeight:700}}>{notifications.length>99?"99+":notifications.length}</span>}</button>{notificationsOpen&&<div role="region" aria-label="Compliance notifications" style={{position:"absolute",right:0,top:42,width:"min(355px,90vw)",maxHeight:420,overflowY:"auto",zIndex:50,background:"#fff",color:"#17212b",border:"1px solid #cbd5e1",borderRadius:10,boxShadow:"0 12px 28px rgba(0,0,0,.18)",padding:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:9}}><strong>Compliance notifications</strong><button className="secondary" type="button" disabled={notificationsLoading} onClick={()=>void loadNotifications()}>Refresh</button></div>{notificationsLoading?<p>Checking live records…</p>:notificationsError?<p role="alert">{notificationsError}</p>:notifications.length===0?<p>No upcoming or overdue compliance alerts.</p>:notifications.map(item=><button type="button" key={item.key} onClick={()=>{setPage(item.page);setNotificationsOpen(false);}} style={{width:"100%",textAlign:"left",display:"block",background:item.priority<2?"#fff1f2":"#f8fafc",color:"#17212b",border:"1px solid #e2e8f0",borderRadius:7,padding:10,marginBottom:7,cursor:"pointer"}}><strong style={{display:"block",fontSize:12}}>{item.label}</strong><span style={{display:"block",fontSize:11,marginTop:3}}>{item.details}</span></button>)}</div>}</div><div className="avatar">JT</div></div></header>
       <div className="content">
         <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · PLANT MANAGEMENT</div><h1>{title}</h1><p>Wednesday, 11 November 2026 · Central workshop</p></div><button className="primary" onClick={()=>{setPage("Workshop job cards");setNotice("Complete the job details below, then click Create job card.");}}><Plus size={17}/> New job card</button></div>
         {notice&&<div className="notice">{notice}</div>}
