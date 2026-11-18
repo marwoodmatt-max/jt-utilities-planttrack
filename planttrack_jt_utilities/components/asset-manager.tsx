@@ -82,7 +82,7 @@ function statusLabel(asset: AssetRow) {
   return statuses.find((s) => s.value === asset.status)?.label || asset.status;
 }
 
-export default function AssetManager({ supabase, isAdmin, categoryFilter = "All" }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string }) {
+export default function AssetManager({ supabase, isAdmin, categoryFilter = "All", onOpenPmi }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string; onOpenPmi?: () => void }) {
   const [showFleetImport,setShowFleetImport]=useState(false);
   const [showBulkUpload,setShowBulkUpload]=useState(false);
   const [uploadAssetId,setUploadAssetId]=useState("");
@@ -490,6 +490,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
           {releaseRecords.map(p=><option key={p.id} value={p.id}>{formatDate(p.inspected_on)} · {p.result} · {p.brake_test_type}</option>)}
         </select></label>
         {releaseRecords.length===0&&<p className="muted">No eligible PMI with RBT and attached report found. Complete the PMI sign-off first in Workshop job cards.</p>}
+        {onOpenPmi&&<button type="button" className="secondary" onClick={onOpenPmi}>Complete PMI / RBT in Workshop job cards</button>}
         <label>Repairs completed and roadworthiness confirmation<textarea style={fieldStyle} rows={3} value={releaseRepairs} onChange={e=>setReleaseRepairs(e.target.value)} placeholder="Describe repairs completed and checks confirming roadworthiness"/></label>
         <label>Authorised signatory name<input style={fieldStyle} value={releaseName} onChange={e=>setReleaseName(e.target.value)} placeholder="Full name"/></label>
         <button type="button" className="primary" disabled={releaseBusy||!releasePmi||releaseRepairs.trim().length<5||releaseName.trim().length<2} onClick={()=>void releaseFromVor()}>{releaseBusy?"Checking…":"Sign off · Return to Service"}</button></>}
