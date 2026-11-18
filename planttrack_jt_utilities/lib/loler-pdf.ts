@@ -44,10 +44,30 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   const clean=(value:unknown)=>{const v=String(value??"").trim();return v&&v.toLowerCase()!=="none"?v:"";};
   const shortDate=(value:unknown)=>{const v=clean(value);if(!v)return "";const date=v.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);return date?`${date[3]}/${date[2]}/${date[1]}`:v;};
   const line=(value:unknown,x:number,top:number,maxWidth:number,size=9,boldText=false,maxLines=4)=>{
-   const face=boldText?strong:font,words=ascii(value??"").split(/\\s+/);let rows:string[]=[],current="";
-   for(const word of words){if(!word)continue;const candidate=current?current+" "+word:word;if(face.widthOfTextAtSize(candidate,size)>maxWidth&&current){rows.push(current);current=word;}else current=candidate;}
-   if(current)rows.push(current);
-   rows.slice(0,maxLines).forEach((row,i)=>page.drawText(row,{x,y:top-i*(size+4),size,font:face,color:ink}));
+   const face=boldText?strong:font,rows:string[]=[];
+   for(const paragraph of ascii(value??"").split(/\n/)){
+    let current="";
+    for(const word of paragraph.split(/\s+/)){
+     if(!word)continue;
+     let remaining=word;
+     while(remaining){
+      const candidate=current?current+" "+remaining:remaining;
+      if(face.widthOfTextAtSize(candidate,size)<=maxWidth){current=candidate;remaining="";continue;}
+      if(current){rows.push(current);current="";continue;}
+      let piece="";
+      for(const ch of remaining){if(piece&&face.widthOfTextAtSize(piece+ch,size)>maxWidth)break;piece+=ch;}
+      rows.push(piece);remaining=remaining.slice(piece.length);
+     }
+    }
+    if(current)rows.push(current);
+   }
+   const visible=rows.slice(0,maxLines);
+   if(rows.length>maxLines&&visible.length){
+    let last=visible[visible.length-1];
+    while(last&&face.widthOfTextAtSize(last+"...",size)>maxWidth)last=last.slice(0,-1);
+    visible[visible.length-1]=last+"...";
+   }
+   visible.forEach((row,i)=>page.drawText(row,{x,y:top-i*(size+4),size,font:face,color:ink}));
   };
   const cell=(x:number,top:number,w:number,h:number,label:string,value:unknown)=>{
    page.drawRectangle({x,y:top-h,width:w,height:h,borderColor:border,borderWidth:.8});
@@ -60,7 +80,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   line("ASSET JOB CARD",190,775,340,14,true);
   line("Job card no: "+(job.job_card_number||job.id),190,752,350,9);
   let y=726;
-  cell(left,y,173,67,"ASSET NUMBER",assetLabel);cell(left+173,y,174,67,"DATE OF DEFECT",shortDate(job.job_details?.["Date of defect"]||job.created_at));cell(left+347,y,174,67,"JOB CARD NO",job.job_card_number||job.id);y-=67;
+  cell(left,y,173,67,"ASSET NUMBER",job.asset_code||String(assetLabel).split(" · ")[0]);cell(left+173,y,174,67,"DATE OF DEFECT",shortDate(job.job_details?.["Date of defect"]||job.created_at));cell(left+347,y,174,67,"JOB CARD NO",job.job_card_number||job.id);y-=67;
   cell(left,y,300,73,"DESCRIPTION",job.asset_description||job.job_details?.Description||assetLabel);cell(left+300,y,221,73,"SERIAL NUMBER",job.asset_serial_number||job.job_details?.["Serial number"]||job.job_details?.["Serial Number"]);y-=73;
   cell(left,y,width,113,"JOB DETAILS",[job.instructions||job.title,job.job_details?.["Job details"]].filter(Boolean).join(" — "));y-=113;
   cell(left,y,width,89,"WORK COMPLETED",job.engineer_work);y-=89;
