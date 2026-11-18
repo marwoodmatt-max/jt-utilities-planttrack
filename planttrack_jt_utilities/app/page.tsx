@@ -141,7 +141,8 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
   </section>;
 }
 type MotVehicle={id:string;asset_code:string;registration:string|null;description:string|null;mot_due:string|null;status:string;category:string|null};
-type DvsaMotRecord={asset_id:string;registration:string;expiry_date:string|null;last_checked_at:string|null;last_check_error:string|null;mot_status:string|null};
+type DvsaMotRecord={asset_id:string;registration:string;expiry_date:string|null;last_checked_at:string|null;last_check_error:string|null;mot_status:string|null;mot_tests?:{testResult?:string;expiryDate?:string|null}[]|null};
+function motExpiryFromHistory(record:{expiry_date:string|null;mot_tests?:{testResult?:string;expiryDate?:string|null}[]|null}){return record.expiry_date||record.mot_tests?.find(test=>test.testResult==="PASSED"&&test.expiryDate)?.expiryDate||null;}
 function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [vehicles,setVehicles]=useState<MotVehicle[]>([]);
   const [records,setRecords]=useState<DvsaMotRecord[]>([]);
@@ -157,7 +158,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
     setLoading(true);setError("");
     const [assetsResult,recordsResult]=await Promise.all([
       supabase.from("assets").select("id,asset_code,registration,description,mot_due,status,category").order("asset_code"),
-      supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,last_checked_at,last_check_error,mot_status")
+      supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,last_checked_at,last_check_error,mot_status,mot_tests")
     ]);
     if(assetsResult.error)setError("Could not load vehicles: "+assetsResult.error.message);
     else setVehicles((assetsResult.data||[]).filter(v=>Boolean(v.registration)||Boolean(v.mot_due)) as MotVehicle[]);
@@ -193,8 +194,8 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const fmt=(d:string)=>d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4);
   const normaliseReg=(value:string|null|undefined)=>(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
   const recordByAsset=new Map(records.map(r=>[r.asset_id,r]));
-  const expiry=(v:MotVehicle)=>recordByAsset.get(v.id)?.expiry_date||v.mot_due;
-  const statusOf=(v:MotVehicle)=>{const record=recordByAsset.get(v.id);if(!record?.last_checked_at)return "unchecked";if(!record.expiry_date)return "unknown";const days=daysUntil(record.expiry_date);return days<0?"expired":days<=60?"soon":"valid";};
+  const expiry=(v:MotVehicle)=>{const record=recordByAsset.get(v.id);return (record?motExpiryFromHistory(record):null)||v.mot_due;};
+  const statusOf=(v:MotVehicle)=>{const record=recordByAsset.get(v.id);if(!record?.last_checked_at)return "unchecked";const expiryDate=expiry(v);if(!expiryDate)return "unknown";const days=daysUntil(expiryDate);return days<0?"expired":days<=60?"soon":"valid";};
   const counts={valid:vehicles.filter(v=>statusOf(v)==="valid").length,soon:vehicles.filter(v=>statusOf(v)==="soon").length,expired:vehicles.filter(v=>statusOf(v)==="expired").length,unchecked:vehicles.filter(v=>statusOf(v)==="unchecked").length,unknown:vehicles.filter(v=>statusOf(v)==="unknown").length};
   const shownVehicles=vehicles.filter(v=>(statusFilter==="all"||statusOf(v)===statusFilter)&&(!registrationSearch||normaliseReg(v.registration).includes(normaliseReg(registrationSearch))));
   const dueSoon=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)>=0&&daysUntil(d)<=60;}).length;
@@ -678,16 +679,17 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         .in("asset_code",["R500 JTU","WP63 PFD","C545766"]);
       if(hgvError){if(!cancelled){setError("Could not load HGV compliance dates: "+hgvError.message);setLoading(false);}return;}
       // Include MOT expiry dates already saved by the existing DVSA integration.
-      const {data:dvsaRecords}=await supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date");
+      const {data:dvsaRecords}=await supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,mot_tests");
       const savedDvsaIds=new Set<string>();
       for(const record of dvsaRecords||[]){
-        if(!record.expiry_date)continue;
+        const expiryDate=motExpiryFromHistory(record);
+        if(!expiryDate)continue;
         savedDvsaIds.add(record.asset_id);
-        mapped.push({id:record.asset_id+"-dvsa-mot",date:record.expiry_date.slice(0,10),kind:"due",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"DVSA MOT expiry · Verified MOT record"});
+        mapped.push({id:record.asset_id+"-dvsa-mot",date:expiryDate.slice(0,10),kind:"due",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"DVSA MOT expiry · Verified MOT record"});
         for(const days of [60,30,14]){
-          const reminder=new Date(record.expiry_date.slice(0,10)+"T00:00:00Z");
+          const reminder=new Date(expiryDate.slice(0,10)+"T00:00:00Z");
           reminder.setUTCDate(reminder.getUTCDate()-days);
-          mapped.push({id:record.asset_id+"-dvsa-mot-"+days,date:reminder.toISOString().slice(0,10),kind:"reminder",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"DVSA MOT reminder · "+days+" days before "+record.expiry_date.slice(0,10)});
+          mapped.push({id:record.asset_id+"-dvsa-mot-"+days,date:reminder.toISOString().slice(0,10),kind:"reminder",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"DVSA MOT reminder · "+days+" days before "+expiryDate.slice(0,10)});
         }
       }
       for(const hgv of hgvs||[]){
