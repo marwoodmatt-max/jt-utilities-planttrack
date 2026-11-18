@@ -1,18 +1,23 @@
 {
-  "name": "JT Utilities PlantTrack Workshop",
+  "id": "/",
+  "name": "JT Utilities PlantTrack",
   "short_name": "PlantTrack",
-  "description": "JT Utilities workshop jobs and asset management",
+  "description": "JT Utilities workshop, fleet, plant and compliance management",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "orientation": "any",
   "background_color": "#f3f6fa",
-  "theme_color": "#e51d32",
+  "theme_color": "#14243a",
   "icons": [
     {
-      "src": "/jt-utilities-logo.jpg",
+      "src": "/planttrack-icon.svg",
       "sizes": "any",
-      "type": "image/jpeg",
-      "purpose": "any"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
