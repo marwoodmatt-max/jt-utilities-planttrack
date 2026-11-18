@@ -225,10 +225,10 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
         </div>;
       })}
     </div>}
-    {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>MOT expiry</th><th>Warning</th><th>DVSA last checked</th><th>Action</th></tr></thead><tbody>
+    {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>MOT due / expiry</th><th>Warning</th><th>DVSA last checked</th><th>Action</th></tr></thead><tbody>
       {shownVehicles.slice().sort((a,b)=>(expiry(a)||"9999").localeCompare(expiry(b)||"9999")).map(v=>{
         const record=recordByAsset.get(v.id);const d=expiry(v);const days=d?daysUntil(d):null;
-        const isFirstMot=Boolean(firstMotDue(record));const label=record?.mot_status==="FAILED"?"FAILED MOT · repairs required":!record?.last_checked_at?"Not checked":days===null?"DVSA date missing":isFirstMot&&days>=0?"First MOT not yet due":days<0?"MOT overdue":days===0?"Expires today":days<=14?"14-day warning":days<=30?"30-day warning":days<=60?"60-day warning":"Current";
+        const isFirstMot=Boolean(firstMotDue(record));const label=record?.mot_status==="FAILED"?"FAILED MOT · repairs required":!record?.last_checked_at?"Not checked":days===null?"DVSA date missing":isFirstMot&&days>=0?(days<=60?"First MOT due soon":"First MOT not yet due"):days<0?"MOT overdue":days===0?"Expires today":days<=14?"14-day warning":days<=30?"30-day warning":days<=60?"60-day warning":"Current";
         return <tr key={v.id}><td><b>{normaliseReg(v.registration)||v.asset_code}</b><small>{v.description||v.category||""} · Asset {v.asset_code}</small></td><td>{d?fmt(d)+(isFirstMot?" · First MOT due":""):"Not recorded"}</td><td><Tag tone={record?.mot_status==="FAILED"?"red":!record?.last_checked_at||days===null?"neutral":days<0?"red":days<=60?"amber":"green"}>{label}</Tag></td><td>{record?.last_checked_at?new Date(record.last_checked_at).toLocaleString("en-GB"):"Not checked"}{record?.last_check_error&&<small>{record.last_check_error}</small>}</td><td>{v.registration?<button className="secondary" disabled={checking!==null} onClick={()=>void checkMot(normaliseReg(v.registration))}>{checking===normaliseReg(v.registration)?"Checking…":"Check DVSA"}</button>:<span className="muted">Certificate record</span>}</td></tr>;
       })}
     </tbody></table>{vehicles.length===0&&<p className="muted">No registered vehicles or MOT records found.</p>}</div>}
