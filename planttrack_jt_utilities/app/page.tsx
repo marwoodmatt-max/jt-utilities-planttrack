@@ -20,7 +20,7 @@ function displayStatus(status:string,category?:string|null) {
 const nav = [
   ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],["MOT checker",FileCheck2],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
-  ["Workshop job cards",Wrench],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
+  ["Workshop job cards",Wrench],["Vehicle VOR management",AlertTriangle],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
 function Tag({children,tone="neutral"}:{children:React.ReactNode;tone?:string}) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -598,6 +598,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           <WorkshopDashboardSummary supabase={supabase} onOpen={()=>setPage("Workshop job cards")}/>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
+        {page==="Vehicle VOR management"&&<AssetManager supabase={supabase} isAdmin={isAdmin} vorOnly onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
         {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></div></>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
