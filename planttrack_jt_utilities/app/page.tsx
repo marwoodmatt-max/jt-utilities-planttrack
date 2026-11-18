@@ -12,7 +12,7 @@ import {
 
 type Asset = { id:string; name:string; category:string; registration:string; location:string; hours:string; status:string; loler:string; service:string };
 type DbAsset = { id:string; asset_code:string; description:string; category:string|null; manufacturer:string|null; model:string|null; serial_number:string|null; registration:string|null; location:string|null; hour_meter:number|string|null; status:string };
-function displayStatus(status:string,category?:string) {
+function displayStatus(status:string,category?:string|null) {
   const labels:Record<string,string> = { available:"Available", in_use:"In use", in_workshop:"In workshop", out_of_service:"Out of service", off_hire:"Off hire" };
   if(status==="out_of_service"&&["hgv","vehicle","trailer"].includes((category||"").toLowerCase()))return "VOR";
   return labels[status] || status;
