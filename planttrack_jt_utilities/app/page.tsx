@@ -561,7 +561,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<WorkshopJobs supabase={supabase}/>}
-        {page==="Users & sign-offs"&&<UsersPanel action={action}/>}
+        {page==="Users & sign-offs"&&<UsersPanel supabase={supabase} isAdmin={isAdmin}/>}
         {page==="Reports"&&<Reports/>}
       </div>
     </main>
@@ -827,7 +827,38 @@ function Projects({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) 
 }
 
 function Checks({action}:{action:(s:string)=>void}) {const items=["Engine oil and coolant","Brakes and steering","Tyres / tracks","Hydraulic hoses and leaks","Lights and warning devices","Safety equipment","General condition"];const [answers,setAnswers]=useState<Record<string,string>>({});return <section className="panel"><div className="panel-head"><div><h3>Operator plant check</h3><p>Daily plant check template — not yet connected to live submissions</p></div><Tag tone="blue">Draft</Tag></div><p className="muted">This checklist is a template only. Live asset selection, individual sign-off and submission are not yet connected.</p>{items.map(i=><div className="check-row" key={i}><b>{i}</b><div><button className={answers[i]==="Pass"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"Pass"})}>Pass</button><button className={answers[i]==="Fail"?"choice fail selected": "choice fail"} onClick={()=>setAnswers({...answers,[i]:"Fail"})}>Fail</button><button className={answers[i]==="N/A"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"N/A"})}>N/A</button></div></div>)}<label>Comments<textarea placeholder="Record observations or defects..."/></label><button className="primary" onClick={()=>action("Demo form only. Live authenticated submission and defect escalation require backend setup.")}>Submit check for sign-off</button></section>}
-function UsersPanel({action}:{action:(s:string)=>void}) {return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Proposed role structure</p></div><Tag tone="blue">Access control</Tag></div>{["Plant Manager","Operator / Driver","Workshop Mechanic","Inspector","Director / Administrator"].map((r,i)=><div className="attention" key={r}><div className="avatar">{r.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><div><b>{r}</b><small>{["Fleet, schedules, jobs and approvals","Assigned plant checks and defects","Assigned jobs, labour and parts","Assigned examinations and reports","Read-only oversight and management reports"][i]}</small></div><Tag>Role</Tag></div>)}<button className="primary" onClick={()=>action("User administration will be activated with Supabase Auth and role policies.")}><Plus size={16}/> Add user</button></section>}
+function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}){
+ const [users,setUsers]=useState<{id:string;email:string;full_name:string;role:string;active:boolean}[]>([]);
+ const [name,setName]=useState("");const [email,setEmail]=useState("");const [role,setRole]=useState("operator");
+ const [busy,setBusy]=useState(false);const [feedback,setFeedback]=useState("");
+ const roles=[["admin","Administrator"],["plant_manager","Plant Manager"],["supervisor","Supervisor"],["mechanic","Mechanic"],["inspector","Inspector"],["operator","Operator / Driver"],["director","Director"]];
+ async function request(body:Record<string,unknown>){
+  const {data:{session}}=await supabase.auth.getSession();
+  if(!session)throw Error("Please sign in again");
+  const {data,error}=await supabase.functions.invoke("manage-planttrack-users",{body,headers:{Authorization:"Bearer "+session.access_token}});
+  if(error)throw Error((data&&typeof data.error==="string"?data.error:error.message));
+  if(data?.error)throw Error(data.error);
+  return data;
+ }
+ async function load(){if(!isAdmin)return;try{const data=await request({action:"list"});setUsers(data.users||[]);}catch(e){setFeedback(e instanceof Error?e.message:String(e));}}
+ useEffect(()=>{void load();},[isAdmin,supabase]);
+ async function invite(e:React.FormEvent){e.preventDefault();setBusy(true);setFeedback("");try{const d=await request({action:"invite",name,email,role});setFeedback(d.message);setName("");setEmail("");await load();}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function update(id:string,patch:{role?:string;active?:boolean}){const u=users.find(x=>x.id===id);if(!u)return;setBusy(true);setFeedback("");try{const d=await request({action:"update",id,role:patch.role??u.role,active:patch.active??u.active});setFeedback(d.message);await load();}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ if(!isAdmin)return <section className="panel"><h3>Users and permissions</h3><p>Only administrators can invite users or change account permissions.</p></section>;
+ return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Invite staff to PlantTrack and manage access</p></div></div>
+ <form onSubmit={e=>void invite(e)} style={{display:"grid",gap:12,maxWidth:620,marginBottom:24}}>
+ <h4>Invite a new user</h4>
+ <label>Full name<input required minLength={2} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/></label>
+ <label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
+ <label>Job role<select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+ <button className="primary" type="submit" disabled={busy}><Plus size={16}/>{busy?"Please wait…":"Send email invitation"}</button>
+ <p className="muted">The new user receives an activation email and sets their own password. Do not share passwords.</p>
+ </form>
+ {feedback&&<p role="status">{feedback}</p>}
+ <h4>Existing users</h4>
+ <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.full_name}</td><td>{u.email}</td><td><select disabled={busy} value={u.role} onChange={e=>void update(u.id,{role:e.target.value})}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td><td><button type="button" className="secondary" disabled={busy} onClick={()=>void update(u.id,{active:!u.active})}>{u.active?"Deactivate":"Reactivate"}</button></td></tr>)}</tbody></table></div>
+ </section>;
+}
 function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
 
 
