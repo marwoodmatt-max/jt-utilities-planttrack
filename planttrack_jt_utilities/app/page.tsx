@@ -76,7 +76,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
   const vorPmi=items.filter(x=>x.status==="out_of_service");
   const overdue=activePmi.filter(x=>x.pmi_next_due!<today);
   const upcoming=activePmi.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
-  const visiblePmi=pmiFilter==="overdue"?overdue:pmiFilter==="soon"?upcoming:[...overdue,...upcoming];
+  const visiblePmi=pmiFilter==="overdue"?overdue:pmiFilter==="soon"?upcoming:activePmi;
   const fmt=(d:string|null)=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"Not recorded";
   const hgvItems=items.filter(item=>["R500 JTU","WP63 PFD","C545766"].includes(item.asset_code));
   async function savePmi(e:React.FormEvent){
@@ -111,13 +111,13 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
     {showOverview&&<><div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="overdue"?"all":"overdue")}><div className="stat-top"><span>Overdue PMI</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue.length}</strong><small>Click to filter</small></button>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="soon"?"all":"soon")}><div className="stat-top"><span>Due within 14 days</span><CalendarDays size={18}/></div><strong>{loading?"…":upcoming.length}</strong><small>Click to filter</small></button>
-      <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter("all")}><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":activePmi.length}</strong><small>Click to show all</small></button>
+      <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter("all")}><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":activePmi.length}</strong><small>{pmiFilter==="all"?"Showing all scheduled":"Click to show all"}</small></button>
     </div>
     {error&&<p className="auth-error" role="alert">Could not load PMI inspections: {error}</p>}
     {!loading&&!error&&vorPmi.length>0&&<p className="muted">{vorPmi.length} vehicle(s) VOR: routine PMI reminders paused; due dates retained for return-to-service checks.</p>}
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
-      {visiblePmi.map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
-    </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
+      {visiblePmi.map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":item.pmi_next_due!<=cutoff?"Due soon":"Scheduled"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
+    </tbody></table>{visiblePmi.length===0&&<p className="muted">{pmiFilter==="overdue"?"No overdue PMI inspections.":pmiFilter==="soon"?"No PMI inspections due within 14 days.":"No scheduled PMI inspections."}</p>}</div>}
     </>}
     {showSignoff&&<div style={{marginTop:22}}>
       <h3>Record completed PMI and sign-off</h3>
