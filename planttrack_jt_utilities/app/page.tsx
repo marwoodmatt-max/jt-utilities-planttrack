@@ -12,8 +12,9 @@ import {
 
 type Asset = { id:string; name:string; category:string; registration:string; location:string; hours:string; status:string; loler:string; service:string };
 type DbAsset = { id:string; asset_code:string; description:string; category:string|null; manufacturer:string|null; model:string|null; serial_number:string|null; registration:string|null; location:string|null; hour_meter:number|string|null; status:string };
-function displayStatus(status:string) {
+function displayStatus(status:string,category?:string) {
   const labels:Record<string,string> = { available:"Available", in_use:"In use", in_workshop:"In workshop", out_of_service:"Out of service", off_hire:"Off hire" };
+  if(status==="out_of_service"&&["hgv","vehicle","trailer"].includes((category||"").toLowerCase()))return "VOR";
   return labels[status] || status;
 }
 const nav = [
@@ -494,7 +495,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
           registration: item.registration || "—",
           location: item.location || "Not recorded",
           hours: item.hour_meter == null ? "—" : String(item.hour_meter),
-          status: displayStatus(item.status==="available"&&allocatedIds.has(item.id)?"in_use":item.status),
+          status: displayStatus(item.status==="available"&&allocatedIds.has(item.id)?"in_use":item.status,item.category),
           loler: "Not recorded",
           service: "Not recorded"
         }));
@@ -542,9 +543,9 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
               ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2],
               ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
               ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
-              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle],
-              ["HGV VOR",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service"&&a.category.toLowerCase()==="hgv").length),"Off road · PMI dates retained",AlertTriangle]
-            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="HGV VOR"?"Out of service":label);setCategoryFilter(label==="HGV VOR"?"HGV":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
+              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Plant and machinery",AlertTriangle],
+              ["Vehicle VOR",assetsLoading?"…":String(assets.filter(a=>a.status==="VOR").length),"HGVs, vehicles and trailers",AlertTriangle]
+            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="Vehicle VOR"?"VOR":label);setCategoryFilter("All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
