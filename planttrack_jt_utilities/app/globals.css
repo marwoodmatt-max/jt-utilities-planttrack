@@ -248,3 +248,55 @@ button:focus-visible,a:focus-visible{outline:2px solid #d91f32;outline-offset:2p
   .workshop-mobile-job{border-radius:6px}
   .workshop-create-form.mobile-open{border-radius:6px}
 }
+
+
+/* JT Utilities brand contrast: black navigation, red highlights, light working surfaces. */
+:root{--red:#e31b36;--black:#111318;--ink:#171b22;--muted:#646b77;--line:#dce0e6}
+.sidebar{background:#15171b;color:#f8fafc;border-right:1px solid #292c31;box-shadow:3px 0 18px rgba(0,0,0,.09)}
+.brand{border-bottom:1px solid #34373e}
+.brand-logo{background:#fff;padding:8px 10px;border-radius:4px;max-width:220px}
+.brand b{color:#fff}
+.brand small{color:#ff4d61}
+.nav-caption{color:#a8abb4}
+.nav-item{color:#d0d2d8}
+.nav-item:hover{background:#292c32;color:#fff}
+.nav-item.active{background:#382025;color:#fff;box-shadow:inset 4px 0 var(--red)}
+.nav-item.active svg{color:#ff5366}
+.sidebar-bottom{border-color:#383a40;color:#c2c4cb}
+.sidebar-bottom small{color:#999ca6}
+.online-dot{background:var(--red)}
+.topbar{background:#181a20;color:#fff;border-bottom:2px solid var(--red);box-shadow:0 2px 14px rgba(0,0,0,.12);backdrop-filter:none}
+.crumb{color:#fff;font-weight:650}
+.crumb span{color:#ef6070}
+.topbar .icon-btn{color:#fff}
+.topbar .icon-btn:hover{background:#30333a;border-radius:4px}
+.topbar .avatar{background:#e31b36;color:#fff;border-radius:5px}
+.page-head .eyebrow{color:#d51c34}
+.page-head h1{color:#171b22}
+.panel-head h3,.panel h3{color:#171b22}
+.panel-head h3:before{content:"";display:inline-block;width:4px;height:14px;background:var(--red);margin-right:9px;vertical-align:-2px;border-radius:1px}
+.stat{border-top:3px solid #252932}
+.stat-top svg{color:var(--red)}
+.stat strong{color:#15171b}
+.primary{background:var(--red);border-color:var(--red);color:#fff}
+.primary:hover:not(:disabled){background:#bc152b;border-color:#bc152b}
+.secondary{border-color:#b9c0cb;color:#171b22}
+.secondary:hover:not(:disabled){border-color:#272b33;background:#f3f4f6}
+table th{background:#252932;color:#fff}
+table th:first-child{border-top-left-radius:3px}
+table th:last-child{border-top-right-radius:3px}
+tbody tr:hover{background:#fff5f6}
+.welcome{background:linear-gradient(115deg,#111318 0%,#292b31 77%,#421f29 100%);border-left:4px solid var(--red)}
+.welcome:after{display:none}
+.text-btn{color:#c8162c}
+.text-btn:hover{text-decoration:underline}
+.calendar-grid>button.day{border:1px solid #d9dde4;border-radius:4px}
+.calendar-grid>button.day:hover{border-color:var(--red)}
+.tag.red{background:#fce8eb;color:#ad132a;border:1px solid #f4a8b4}
+.tag.green{background:#eaf7ef;color:#176b35}
+.auth-card{border-top:4px solid var(--red)}
+.signed-in-strip button{background:#181a20}
+@media(max-width:700px){
+  .topbar{border-bottom-width:2px}
+  .workshop-mobile-job{border-left:3px solid var(--red)}
+}
