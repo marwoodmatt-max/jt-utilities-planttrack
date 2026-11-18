@@ -71,8 +71,10 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
   const today=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
   const soon=new Date(today+"T00:00:00Z");soon.setUTCDate(soon.getUTCDate()+14);
   const cutoff=soon.toISOString().slice(0,10);
-  const overdue=items.filter(x=>x.pmi_next_due!<today);
-  const upcoming=items.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
+  const activePmi=items.filter(x=>x.status!=="out_of_service");
+  const vorPmi=items.filter(x=>x.status==="out_of_service");
+  const overdue=activePmi.filter(x=>x.pmi_next_due!<today);
+  const upcoming=activePmi.filter(x=>x.pmi_next_due!>=today&&x.pmi_next_due!<=cutoff);
   const visiblePmi=pmiFilter==="overdue"?overdue:pmiFilter==="soon"?upcoming:[...overdue,...upcoming];
   const fmt=(d:string|null)=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"Not recorded";
   const hgvItems=items.filter(item=>["R500 JTU","WP63 PFD","C545766"].includes(item.asset_code));
@@ -108,9 +110,10 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
     {showOverview&&<><div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="overdue"?"all":"overdue")}><div className="stat-top"><span>Overdue PMI</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue.length}</strong><small>Click to filter</small></button>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="soon"?"all":"soon")}><div className="stat-top"><span>Due within 14 days</span><CalendarDays size={18}/></div><strong>{loading?"…":upcoming.length}</strong><small>Click to filter</small></button>
-      <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter("all")}><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":items.length}</strong><small>Click to show all</small></button>
+      <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter("all")}><div className="stat-top"><span>Scheduled PMI</span><ClipboardCheck size={18}/></div><strong>{loading?"…":activePmi.length}</strong><small>Click to show all</small></button>
     </div>
     {error&&<p className="auth-error" role="alert">Could not load PMI inspections: {error}</p>}
+    {!loading&&!error&&vorPmi.length>0&&<p className="muted">{vorPmi.length} vehicle(s) VOR: routine PMI reminders paused; due dates retained for return-to-service checks.</p>}
     {!loading&&!error&&<div className="table-wrap"><table><thead><tr><th>Vehicle / trailer</th><th>Last PMI</th><th>Next PMI</th><th>Status</th></tr></thead><tbody>
       {visiblePmi.map(item=><tr key={item.asset_code}><td><b>{item.asset_code}</b><small>{item.description||""}</small></td><td>{fmt(item.pmi_last_completed)}</td><td>{fmt(item.pmi_next_due)}</td><td><Tag tone={item.pmi_next_due!<today?"red":"amber"}>{item.pmi_next_due!<today?"Overdue":item.pmi_next_due===today?"Due today":"Due soon"}{item.status==="out_of_service"?" · VOR":""}</Tag></td></tr>)}
     </tbody></table>{overdue.length+upcoming.length===0&&<p className="muted">No PMI inspections overdue or due in the next 14 days.</p>}</div>}
@@ -539,8 +542,9 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
               ["Available",assetsLoading?"…":String(availableCount),"Ready for your own teams",CheckCircle2],
               ["In use",assetsLoading?"…":String(assets.filter(a=>a.status==="In use").length),"Currently allocated to work",Activity],
               ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
-              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle]
-            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label);setCategoryFilter("All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
+              ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Requires attention",AlertTriangle],
+              ["HGV VOR",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service"&&a.category.toLowerCase()==="hgv").length),"Off road · PMI dates retained",AlertTriangle]
+            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="HGV VOR"?"Out of service":label);setCategoryFilter(label==="HGV VOR"?"HGV":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
@@ -624,7 +628,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
       // HGV compliance deadlines live alongside LOLER events in the original PlantTrack calendar.
       // Keep the date types separate so an MOT is never presented as a LOLER examination.
       const {data:hgvs,error:hgvError}=await supabase.from("assets")
-        .select("id,asset_code,registration,description,pmi_next_due,pmi_last_completed,mot_due,tacho_calibration_due")
+        .select("id,asset_code,registration,description,pmi_next_due,pmi_last_completed,mot_due,tacho_calibration_due,status")
         .in("asset_code",["R500 JTU","WP63 PFD","C545766"]);
       if(hgvError){if(!cancelled){setError("Could not load HGV compliance dates: "+hgvError.message);setLoading(false);}return;}
       // Include MOT expiry dates already saved by the existing DVSA integration.
@@ -647,8 +651,8 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
           if(date) mapped.push({id:hgv.id+"-"+label,date:date.slice(0,10),kind,assetCode:code,description:label+" · "+(hgv.description||"HGV")});
         };
         add(hgv.pmi_last_completed,"examined",prefix+" PMI inspection completed");
-        add(hgv.pmi_next_due,"due",prefix+" PMI inspection due");
-        for(const planned of plannedPmiDates(hgv.pmi_next_due,today,13)){
+        if(hgv.status!=="out_of_service")add(hgv.pmi_next_due,"due",prefix+" PMI inspection due");
+        for(const planned of hgv.status==="out_of_service"?[]:plannedPmiDates(hgv.pmi_next_due,today,13)){
           if(planned===hgv.pmi_next_due?.slice(0,10))continue;
           mapped.push({id:hgv.id+"-pmi-plan-"+planned,date:planned,kind:"planned",assetCode:code,description:prefix+" PMI planned · Six-week projected slot"});
         }
