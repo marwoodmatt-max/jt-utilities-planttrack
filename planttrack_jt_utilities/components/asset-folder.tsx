@@ -6,7 +6,7 @@ import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lu
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
-type PmiReport = { id:string; inspected_on:string; result:string; defects:string|null; inspector_name:string; signed_off_by:string; report_path:string|null };
+type PmiReport = { id:string; inspected_on:string; result:string; defects:string|null; inspector_name:string; signed_off_by:string; report_path:string|null; brake_test_type:string|null };
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
@@ -28,7 +28,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
 
   async function load() {
     setLoading(true); setError("");
-    const pmi=await supabase.from("hgv_pmi_records").select("id,inspected_on,result,defects,inspector_name,signed_off_by,report_path").eq("asset_id",asset.id).order("inspected_on",{ascending:false});
+    const pmi=await supabase.from("hgv_pmi_records").select("id,inspected_on,result,defects,inspector_name,signed_off_by,report_path,brake_test_type").eq("asset_id",asset.id).order("inspected_on",{ascending:false});
     if(pmi.error)setError("Could not load PMI history: "+pmi.error.message);
     else setPmiReports((pmi.data||[]) as PmiReport[]);
     const {data,error:err}=await supabase.from("asset_documents").select("id,asset_id,file_name,storage_path,document_type,description,uploaded_at,uploaded_by").eq("asset_id",asset.id).order("uploaded_at",{ascending:false});
@@ -117,7 +117,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     <h3>Generated job certificates ({certificates.length})</h3>
     {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Filed at</th><th>Filed by</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td>{cert.pdf_filed_at?dateLabel(cert.pdf_filed_at):"Not recorded (older certificate)"}</td><td>{cert.pdf_filed_by_email|| (cert.pdf_filed_by?"User "+cert.pdf_filed_by.slice(0,8):"Not recorded")}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
     <h3>PMI inspection reports ({pmiReports.length})</h3>
-    {pmiReports.length===0?<p className="muted">No PMI inspection records for this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Inspection date</th><th>Result</th><th>Inspector</th><th>Signed off by</th><th>Report</th></tr></thead><tbody>{pmiReports.map(p=><tr key={p.id}><td>{p.inspected_on.split("-").reverse().join("/")}</td><td>{p.result}{p.defects?<small style={{display:"block"}}>{p.defects}</small>:null}</td><td>{p.inspector_name}</td><td>{p.signed_off_by}</td><td>{p.report_path?<button className="secondary" onClick={()=>void openPmiReport(p)}><Download size={14}/> Open PMI report</button>:"No report attached"}</td></tr>)}</tbody></table></div>}
+    {pmiReports.length===0?<p className="muted">No PMI inspection records for this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Inspection date</th><th>Result</th><th>Brake test</th><th>Inspector</th><th>Signed off by</th><th>Report</th></tr></thead><tbody>{pmiReports.map(p=><tr key={p.id}><td>{p.inspected_on.split("-").reverse().join("/")}</td><td>{p.result}{p.defects?<small style={{display:"block"}}>{p.defects}</small>:null}</td><td>{p.brake_test_type||"—"}</td><td>{p.inspector_name}</td><td>{p.signed_off_by}</td><td>{p.report_path?<button className="secondary" onClick={()=>void openPmiReport(p)}><Download size={14}/> Open PMI report</button>:"No report attached"}</td></tr>)}</tbody></table></div>}
     <h3>Saved documents ({docs.length})</h3>
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
