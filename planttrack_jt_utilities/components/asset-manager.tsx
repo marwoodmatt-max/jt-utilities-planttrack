@@ -149,7 +149,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   useEffect(() => { void loadAssets(); }, [supabase]);
 
   const filtered = useMemo(() => rows.filter((a) =>
-    (categoryFilter === "All" || (a.category || "").toLowerCase() === categoryFilter.toLowerCase() || (categoryFilter.toLowerCase() === "hgv" && a.asset_code.toUpperCase() === "C545766")) &&
+    (categoryFilter === "All" || (categoryFilter === "Vehicle VOR" && ["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (categoryFilter === "Plant Out of Service" && !["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (a.category || "").toLowerCase() === categoryFilter.toLowerCase() || (categoryFilter.toLowerCase() === "hgv" && a.asset_code.toUpperCase() === "C545766")) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
       .filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
   ), [rows, search, categoryFilter]);
