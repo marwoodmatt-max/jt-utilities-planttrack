@@ -831,6 +831,8 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
  const [users,setUsers]=useState<{id:string;email:string;full_name:string;role:string;active:boolean}[]>([]);
  const [name,setName]=useState("");const [email,setEmail]=useState("");const [role,setRole]=useState("operator");
  const [busy,setBusy]=useState(false);const [feedback,setFeedback]=useState("");
+ const [manual,setManual]=useState(true);const [tempPassword,setTempPassword]=useState("");
+ const [resetUser,setResetUser]=useState("");const [resetPassword,setResetPassword]=useState("");
  const roles=[["admin","Administrator"],["plant_manager","Plant Manager"],["supervisor","Supervisor"],["mechanic","Mechanic"],["inspector","Inspector"],["operator","Operator / Driver"],["director","Director"]];
  async function request(body:Record<string,unknown>){
   const {data:{session}}=await supabase.auth.getSession();
@@ -842,21 +844,22 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
  }
  async function load(){if(!isAdmin)return;try{const data=await request({action:"list"});setUsers(data.users||[]);}catch(e){setFeedback(e instanceof Error?e.message:String(e));}}
  useEffect(()=>{void load();},[isAdmin,supabase]);
- async function invite(e:React.FormEvent){e.preventDefault();setBusy(true);setFeedback("");try{const d=await request({action:"invite",name,email,role});setFeedback(d.message);setName("");setEmail("");await load();}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function invite(e:React.FormEvent){e.preventDefault();setBusy(true);setFeedback("");try{const d=await request(manual?{action:"create_manual",name,email,role,password:tempPassword}:{action:"invite",name,email,role});setFeedback(d.message);setName("");setEmail("");setTempPassword("");await load();}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
  async function update(id:string,patch:{role?:string;active?:boolean}){const u=users.find(x=>x.id===id);if(!u)return;setBusy(true);setFeedback("");try{const d=await request({action:"update",id,role:patch.role??u.role,active:patch.active??u.active});setFeedback(d.message);await load();}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
  if(!isAdmin)return <section className="panel"><h3>Users and permissions</h3><p>Only administrators can invite users or change account permissions.</p></section>;
  return <section className="panel"><div className="panel-head"><div><h3>Users and permissions</h3><p>Invite staff to PlantTrack and manage access</p></div></div>
  <form onSubmit={e=>void invite(e)} style={{display:"grid",gap:12,maxWidth:620,marginBottom:24}}>
- <h4>Invite a new user</h4>
+ <h4>Add a new user</h4><label><input type="checkbox" checked={manual} onChange={e=>setManual(e.target.checked)}/> Create manually (no email required)</label>
  <label>Full name<input required minLength={2} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/></label>
  <label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
  <label>Job role<select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
- <button className="primary" type="submit" disabled={busy}><Plus size={16}/>{busy?"Please wait…":"Send email invitation"}</button>
- <p className="muted">The new user receives an activation email and sets their own password. Do not share passwords.</p>
+ {manual&&<label>Temporary password (minimum 12 characters)<input type="password" required minLength={12} autoComplete="new-password" value={tempPassword} onChange={e=>setTempPassword(e.target.value)}/></label>}<button className="primary" type="submit" disabled={busy}><Plus size={16}/>{busy?"Please wait…":manual?"Create user":"Send email invitation"}</button>
+ <p className="muted">{manual?"Give the temporary password privately. The user must choose a new password at first sign-in.":"The user receives an activation email to set their own password."}</p>
  </form>
  {feedback&&<p role="status">{feedback}</p>}
+ {resetUser&&<form onSubmit={async e=>{e.preventDefault();setBusy(true);setFeedback("");try{const d=await request({action:"set_temporary_password",id:resetUser,password:resetPassword});setFeedback(d.message);setResetUser("");setResetPassword("");}catch(err){setFeedback(err instanceof Error?err.message:String(err));}finally{setBusy(false);}}} style={{display:"grid",gap:10,maxWidth:500,marginBottom:20}}><h4>Set temporary password for {users.find(u=>u.id===resetUser)?.full_name}</h4><input type="password" required minLength={12} value={resetPassword} onChange={e=>setResetPassword(e.target.value)} placeholder="Temporary password (12+ characters)"/><button type="submit" disabled={busy}>Save temporary password</button><button type="button" onClick={()=>setResetUser("")}>Cancel</button></form>}
  <h4>Existing users</h4>
- <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.full_name}</td><td>{u.email}<div><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setFeedback("");try{const d=await request({action:"resend",id:u.id,email:u.email});setFeedback(d.message);}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}}>Resend setup email</button></div></td><td><select disabled={busy} value={u.role} onChange={e=>void update(u.id,{role:e.target.value})}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td><td><button type="button" className="secondary" disabled={busy} onClick={()=>void update(u.id,{active:!u.active})}>{u.active?"Deactivate":"Reactivate"}</button></td></tr>)}</tbody></table></div>
+ <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.full_name}</td><td>{u.email}<div><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setFeedback("");try{const d=await request({action:"resend",id:u.id,email:u.email});setFeedback(d.message);}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}}>Resend setup email</button> <button type="button" disabled={busy} onClick={()=>{setResetUser(u.id);setResetPassword("");}}>Set temporary password</button></div></td><td><select disabled={busy} value={u.role} onChange={e=>void update(u.id,{role:e.target.value})}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td><td><button type="button" className="secondary" disabled={busy} onClick={()=>void update(u.id,{active:!u.active})}>{u.active?"Deactivate":"Reactivate"}</button></td></tr>)}</tbody></table></div>
  </section>;
 }
 function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
@@ -879,6 +882,9 @@ export default function Home() {
   const [signedIn, setSignedIn] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [roleName, setRoleName] = useState("");
+  const [mustChangePassword,setMustChangePassword]=useState(false);
+  const [newPassword,setNewPassword]=useState("");
+  const [confirmPassword,setConfirmPassword]=useState("");
 
   useEffect(() => {
     if (!supabase) { setSessionReady(true); return; }
@@ -903,13 +909,14 @@ export default function Home() {
   async function loadProfile(userId: string) {
     if (!supabase) return;
     const { data, error: profileError } = await supabase
-      .from("profiles").select("full_name, role, active").eq("id", userId).single();
+      .from("profiles").select("full_name, role, active, must_change_password").eq("id", userId).single();
     if (profileError || !data || !data.active) {
       await supabase.auth.signOut();
       setError("Your login is not linked to an active PlantTrack profile. Please contact the Plant Manager.");
       setSessionReady(true);
       return;
     }
+    setMustChangePassword(!!data.must_change_password);
     setDisplayName(data.full_name);
     setRoleName(String(data.role).replaceAll("_", " "));
     setSignedIn(true);
@@ -943,5 +950,6 @@ export default function Home() {
     <button className="primary auth-submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
     <small>Access is provided through your individual JT Utilities account.</small>
   </form></main>;
+  if(mustChangePassword)return <main className="auth-screen"><form className="auth-card" onSubmit={async e=>{e.preventDefault();if(newPassword.length<12||newPassword!==confirmPassword){setError("Use at least 12 characters and make sure both passwords match.");return;}setBusy(true);setError("");const {error:passwordError}=await supabase.auth.updateUser({password:newPassword});if(passwordError){setError(passwordError.message);setBusy(false);return;}const {error:flagError}=await supabase.rpc("complete_first_password_change");if(flagError){setError("Password changed, but activation could not finish: "+flagError.message);setBusy(false);return;}setMustChangePassword(false);setNewPassword("");setConfirmPassword("");setBusy(false);}}><h1>Change your temporary password</h1><p>Before accessing PlantTrack, choose your own password.</p><label>New password<input type="password" required minLength={12} value={newPassword} onChange={e=>setNewPassword(e.target.value)}/></label><label>Confirm new password<input type="password" required minLength={12} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button className="primary" type="submit" disabled={busy}>Save password and continue</button><button type="button" onClick={signOut}>Sign out</button></form></main>;
   return <><div className="signed-in-strip"><span>Signed in: <b>{displayName}</b> · {roleName}</span><button onClick={signOut}>Sign out</button></div><Dashboard supabase={supabase} isAdmin={roleName === "admin"} /></>;
 }
