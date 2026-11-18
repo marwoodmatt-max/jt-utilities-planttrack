@@ -327,11 +327,11 @@ function createJobCertificatePdf(job:any,assetLabel:string):Blob{
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
- const jobTypes=["General repair","Breakdown","Service","HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Defect rectification","Other / unexpected work"];
+ const jobTypes=[["General repair","Job Card"],["HGV / trailer PMI","PMI"],["LOLER thorough examination","LOLERs"]];
  const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
-  "General repair":["Fault reported","Diagnosis","Date of defect","Location","Position","Compliant as of"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
+  "General repair":["Date of defect","Job details","Location","Position","Compliant as of"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
   "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","Inspection date","PMI checklist / inspection notes"],"LOLER thorough examination":["Equipment identification","Examination date","Competent person","Report / certificate reference"],
   "Defect rectification":["Original defect reference","Rectification and safety checks"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
  };
@@ -400,7 +400,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
    <label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Select asset</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}</select></label>
    {asset&&<div className="workshop-asset-summary"><strong>Machine details (filled automatically)</strong><span>Asset: {assets.find(a=>a.id===asset)?.asset_code}</span><span>Description: {assets.find(a=>a.id===asset)?.description||"Not recorded"}</span><span>Serial number: {assets.find(a=>a.id===asset)?.serial_number||"Not recorded"}</span><span>Location: {assets.find(a=>a.id===asset)?.location||"Not recorded"}</span></div>}
-   <label>Job type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(t=><option key={t}>{t}</option>)}</select></label>
+   <label>Job type<select value={jobType.startsWith("LOLER")?"LOLER thorough examination":jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}>{jobTypes.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{jobType.startsWith("LOLER")&&<label>LOLER examination type<select value={jobType} onChange={e=>{setJobType(e.target.value);setJobDetails({});}}><option value="LOLER thorough examination">Plant and machinery</option><option value="LOLER chains & accessories">Chains and accessories</option></select></label>
    {(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")&&asset&&<p className="muted">Suggested next LOLER date is prefilled (12 months for plant or 6 months for accessories). The competent examiner must confirm or amend it to match the examination scheme and equipment use.</p>}
    {jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories"?<LolerPaperForm kind={jobType==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}} onChange={(key,value)=>setJobDetails(d=>({...d,[key]:value}))}/>:null}
    {jobType!=="LOLER thorough examination"&&jobType!=="LOLER chains & accessories"&&fieldsByType[jobType].map(field=><label key={field}>{field}<textarea value={jobDetails[field]||""} onChange={e=>setJobDetails(d=>({...d,[field]:e.target.value}))}/></label>)}
