@@ -616,7 +616,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </div>;
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
-type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"; assetCode:string; description:string };
+type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"|"failed"; assetCode:string; description:string };
 const calendarCategory=(event:CalendarEvent):"loler"|"mot"|"pmi"|"tacho"=>{
   if(event.kind==="reminder"||/\bMOT\b/i.test(event.description))return "mot";
   if(/\bPMI\b/i.test(event.description)||event.kind==="planned")return "pmi";
@@ -635,6 +635,7 @@ const calendarStyle=(event:CalendarEvent)=>{
 const calendarLabel=(event:CalendarEvent)=>{
   const category=calendarCategory(event);
   const type=category==="loler"?"LOLER":category==="mot"?"MOT":category==="pmi"?"PMI":"Tacho";
+  if(event.kind==="failed")return "MOT FAILED";
   const action=event.kind==="reminder"?"reminder":event.kind==="planned"?"planned":event.kind==="examined"?"completed":event.date<new Date().toISOString().slice(0,10)?"overdue":"due";
   return type+" "+action;
 };
@@ -684,7 +685,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
       const savedDvsaIds=new Set<string>();
       for(const record of dvsaRecords||[]){
         if(record.mot_status==="FAILED"&&record.latest_test_date){
-          mapped.push({id:record.asset_id+"-dvsa-mot-failed-"+record.latest_test_date,date:record.latest_test_date.slice(0,10),kind:"due",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"FAILED MOT · Repair defects and arrange retest · Not a passing certificate"});
+          mapped.push({id:record.asset_id+"-dvsa-mot-failed-"+record.latest_test_date,date:record.latest_test_date.slice(0,10),kind:"failed",assetCode:(record.registration||"").replace(/[^A-Za-z0-9]/g,"").toUpperCase(),description:"FAILED MOT · Repair defects and arrange retest · Not a passing certificate"});
         }
         const isFirstMot=Boolean(firstMotDue(record));
         const expiryDate=motExpiryFromHistory(record)||firstMotDue(record);
@@ -733,7 +734,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
   const dateKey=(day:number)=>year+"-"+String(monthIndex+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
   const byDate=new Map<string,CalendarEvent[]>();
   for(const event of events){const current=byDate.get(event.date)||[];current.push(event);byDate.set(event.date,current);}
-  const selectedEvents=(byDate.get(selectedDate)||[]).slice().sort((a,b)=>a.kind===b.kind? a.assetCode.localeCompare(b.assetCode):a.kind==="due"?-1:1);
+  const selectedEvents=(byDate.get(selectedDate)||[]).slice().sort((a,b)=>a.kind===b.kind? a.assetCode.localeCompare(b.assetCode):a.kind==="failed"?-1:a.kind==="due"?-1:1);
   const dueEvents=events.filter(event=>event.kind==="due");
   const motReminders=events.filter(event=>event.kind==="reminder" && event.date<=today && event.description.includes("MOT reminder"));
   const currentMotReminders=motReminders.filter(event=>{const expiry=event.description.split(" before ")[1];return expiry>=today;});
@@ -782,7 +783,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
       {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
-      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span style={{...calendarStyle(event),borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{calendarLabel(event)}</span></div>)}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="failed"?"FAIL":event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="failed"?"MOT failed on this date · Repairs required":event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span style={{...calendarStyle(event),borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{calendarLabel(event)}</span></div>)}
     </div>
     {loading&&<p className="muted">Loading live compliance dates…</p>}
     {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
