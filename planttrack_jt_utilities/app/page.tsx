@@ -375,6 +375,15 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   }catch(e){setNotice("Approval or PDF filing needs attention: "+(e instanceof Error?e.message:String(e))+". If approved, use Retry PDF filing.");}
   finally{setBusy(false);setRefresh(n=>n+1);}
  }
+ async function downloadJobCardPdf(job:any){
+  try{
+   const selectedAsset=assets.find(a=>a.id===job.asset_id);
+   const pdf=await generateApprovedJobPdf({...job,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},selectedAsset?.asset_code||assetName(job.asset_id),true);
+   const url=URL.createObjectURL(pdf);
+   const link=document.createElement("a");link.href=url;link.download=(job.job_card_number||"JT-Job-Card")+".pdf";document.body.appendChild(link);link.click();link.remove();
+   window.setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(e){setNotice("Could not generate job card PDF: "+(e instanceof Error?e.message:String(e)));}
+ }
  async function viewArchivedPdf(path:string){
   const {data,error}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(path,120);
   if(error||!data?.signedUrl){setNotice(error?.message||"Could not open PDF");return;}
@@ -419,7 +428,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/></details>}
-   {chosen.job_type==="General repair"&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}
+   {chosen.job_type==="General repair"&&<><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> Download Job Card PDF</button><GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/></>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
