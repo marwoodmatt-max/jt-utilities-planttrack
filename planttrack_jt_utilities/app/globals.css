@@ -170,3 +170,81 @@ td small{color:#7c899a}
 }
 
 .workshop-asset-summary{display:grid;gap:5px;padding:12px 14px;background:#f3f6fa;border:1px solid #dce4ee;border-radius:10px;font-size:13px;color:#273747}.workshop-asset-summary strong{font-size:14px;color:#17212b}
+
+
+/* November 2026 refresh: stronger JT Utilities branding and crisp, square form fields. */
+:root{
+  --red:#d91f32;
+  --ink:#17212b;
+  --muted:#637181;
+  --line:#dbe2e9;
+  --bg:#f3f5f7;
+  --shadow:0 3px 15px rgba(17,31,46,.035);
+}
+body{font-family:Inter,"Segoe UI",Arial,Helvetica,sans-serif;font-size:14px;letter-spacing:-.08px}
+@media(min-width:1001px){
+  .sidebar{width:270px}
+  .main{margin-left:270px;width:calc(100% - 270px)}
+}
+.sidebar{padding:19px 14px;border-right:1px solid #dce2e8}
+.brand{display:flex;flex-direction:column;align-items:stretch;gap:5px;padding:8px 10px 24px;border-bottom:1px solid #eef0f3;margin-bottom:18px}
+.brand-logo{width:100%;max-width:205px;height:95px;object-fit:contain;object-position:left center;padding:0;background:transparent;border:none;border-radius:0}
+.brand b{font-size:13px;letter-spacing:.6px;color:#1b2633}
+.brand small{font-size:11px;font-weight:700;letter-spacing:2px;margin-top:2px}
+.nav-item{border-radius:5px;padding:11px 13px;margin:2px 0}
+.nav-item.active{background:#fff1f2;box-shadow:inset 3px 0 var(--red)}
+.topbar{height:70px}
+.content{max-width:1540px;padding:28px 32px 48px}
+.page-head h1{font-weight:800;letter-spacing:-.75px}
+.panel,.stat{border-radius:7px;box-shadow:var(--shadow)}
+.panel{padding:22px}
+.stat{padding:19px}
+.welcome{border-radius:7px}
+.table-wrap{border-radius:5px}
+th{background:#f5f7f9}
+td,th{padding:12px 13px}
+tbody tr:hover{background:#f7f9fb}
+.primary,.secondary{border-radius:5px;min-height:40px;font-weight:700;box-shadow:none}
+.primary:hover:not(:disabled),.secondary:hover:not(:disabled){transform:none}
+.tag{border-radius:5px}
+.search{border-radius:4px}
+.modal,.auth-card,.report-card,.notice{border-radius:7px}
+.auth-card>img{width:250px;height:126px}
+.workshop-header-logo{width:96px;height:74px;border-radius:0}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,textarea,
+label input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+label select,label textarea,
+.auth-card input{
+  border-radius:4px!important;
+  border:1px solid #bec9d4;
+  background:#fff;
+  color:#192737;
+  padding:10px 12px;
+  min-height:41px;
+  font-size:13px;
+}
+textarea,label textarea{min-height:96px;line-height:1.5;resize:vertical}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+select:focus,textarea:focus{
+  outline:2px solid rgba(217,31,50,.18);
+  outline-offset:0;
+  border-color:#d91f32;
+  box-shadow:none;
+}
+label{font-size:12px;font-weight:700;color:#273547}
+button:focus-visible,a:focus-visible{outline:2px solid #d91f32;outline-offset:2px}
+@media(min-width:701px) and (max-width:1000px){
+  .sidebar{width:235px}
+  .main{margin-left:235px;width:calc(100% - 235px)}
+  .brand-logo{max-width:180px;height:82px}
+}
+@media(max-width:700px){
+  .brand{padding:8px 12px 18px}
+  .brand-logo{max-width:200px;height:88px}
+  .content{padding:16px 13px 32px}
+  .panel,.stat{border-radius:6px}
+  .workshop-header-logo{width:80px;height:65px}
+  .workshop-mobile-job{border-radius:6px}
+  .workshop-create-form.mobile-open{border-radius:6px}
+}
