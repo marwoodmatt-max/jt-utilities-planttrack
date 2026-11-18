@@ -80,7 +80,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
     const asset=hgvItems.find(a=>a.asset_code===selected);
     if(!asset||!inspector.trim()||!signer.trim())return setFeedback("Select a vehicle, inspector and signatory.");
     if(inspectedOn>today)return setFeedback("Completion date cannot be in the future.");
-    if(result!=="Pass"&&!defects.trim())return setFeedback("Describe the defects before saving.");
+    if(result!=="Pass"&&!defects.trim())return setFeedback("Describe the defects and any repairs before saving.");
     setSaving(true);
     try{
       let path:string|null=null;
@@ -92,7 +92,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
       }
       const {error}=await supabase.from("hgv_pmi_records").insert({asset_id:asset.id,inspected_on:inspectedOn,result,mileage:mileage?Number(mileage):null,defects:defects||null,inspector_name:inspector.trim(),signed_off_by:signer.trim(),report_path:path});
       if(error)throw error;
-      setFeedback(result==="Pass"?"Signed PMI saved; next PMI advanced by six weeks.":"Inspection saved with defects; next PMI was not advanced.");
+      setFeedback(result==="Pass"||result==="Pass - defects rectified"?"Roadworthy PMI signed off; next PMI advanced by six weeks. The uploaded report is available in the asset folder.":"Inspection saved with outstanding defects; next PMI was not advanced.");
       setDefects("");setMileage("");setReport(null);setReload(n=>n+1);
     }catch(e){setFeedback("Could not save: "+(e instanceof Error?e.message:String(e)));}
     finally{setSaving(false);}
@@ -116,13 +116,13 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
     </>}
     {showSignoff&&<div style={{marginTop:22}}>
       <h3>Record completed PMI and sign-off</h3>
-      <p className="muted">Only a passed inspection advances the next due date. Reports are stored privately.</p>
+      <p className="muted">A roadworthy pass (including defects fully rectified and checked) advances the next due date. Outstanding defects do not. Uploaded reports also appear in the asset folder.</p>
       <form onSubmit={e=>void savePmi(e)} style={{display:"grid",gap:12,maxWidth:680}}>
         <label>Vehicle<select required value={selected} onChange={e=>setSelected(e.target.value)}><option value="">Select HGV or trailer</option>{hgvItems.map(a=><option key={a.id} value={a.asset_code}>{a.asset_code} · {a.description}</option>)}</select></label>
         <label>Inspection date<input type="date" required max={today} value={inspectedOn} onChange={e=>setInspectedOn(e.target.value)}/></label>
         <label>Mileage / odometer<input type="number" min="0" value={mileage} onChange={e=>setMileage(e.target.value)}/></label>
-        <label>Result<select value={result} onChange={e=>setResult(e.target.value)}><option>Pass</option><option>Defects noted</option><option>Fail</option></select></label>
-        <label>Defects / remedial work<textarea value={defects} onChange={e=>setDefects(e.target.value)}/></label>
+        <label>Result<select value={result} onChange={e=>setResult(e.target.value)}><option>Pass</option><option value="Pass - defects rectified">Pass – defects rectified and roadworthy</option><option value="Defects noted">Outstanding defects – not roadworthy</option><option>Fail</option></select></label>
+        <label>Defects found, repairs completed and checks (required for any defects)<textarea value={defects} onChange={e=>setDefects(e.target.value)}/></label>
         <label>Inspector name<input required value={inspector} onChange={e=>setInspector(e.target.value)}/></label>
         <label>Signed off by<input required value={signer} onChange={e=>setSigner(e.target.value)}/></label>
         <label>PMI report (PDF, JPG, PNG, max 10MB)<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e=>setReport(e.target.files?.[0]||null)}/></label>
