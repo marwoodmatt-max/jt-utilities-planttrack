@@ -339,6 +339,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
+ const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
@@ -428,6 +429,16 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/></details>}
+   {chosen.job_type==="General repair"&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&(role==="office"||role==="engineer")&&<div style={{marginBottom:12}}>
+    <button className="secondary" type="button" onClick={()=>{if(editCard){setEditCard(false);return;}setEditTitle(chosen.title||"");setEditInstructions(chosen.instructions||"");setEditDetails({...chosen.job_details});setEditCard(true);}}>{editCard?"Cancel editing":"Edit Asset Job Card"}</button>
+    {editCard&&<div style={{display:"grid",gap:12,padding:14,marginTop:10,border:"1px solid #cbd5e1",borderRadius:8}}>
+     <p className="muted">Asset details and job card number are filled automatically and cannot be changed here.</p>
+     <label>Job title<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label>
+     <label>Job details / instructions<textarea rows={5} value={editInstructions} onChange={e=>setEditInstructions(e.target.value)}/></label>
+     {["Date of defect","Job details","Location","Position","Compliant as of"].map(key=><label key={key}>{key}{key==="Date of defect"||key==="Compliant as of"?<input type="date" value={editDetails[key]||""} onChange={e=>setEditDetails(d=>({...d,[key]:e.target.value}))}/>:<textarea rows={key==="Job details"?5:2} value={editDetails[key]||""} onChange={e=>setEditDetails(d=>({...d,[key]:e.target.value}))}/>}</label>)}
+     <button className="primary" type="button" disabled={busy} onClick={()=>void perform(async()=>{const result=await supabase.rpc("update_open_workshop_job_card",{p_job:chosen.id,p_title:editTitle,p_instructions:editInstructions,p_details:editDetails});if(!result.error)setEditCard(false);return result;},"Job card updated — download a fresh PDF to see changes")}>Save job card changes</button>
+    </div>}
+   </div>}
    {chosen.job_type==="General repair"&&<><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> Download Job Card PDF</button><GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/></>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
