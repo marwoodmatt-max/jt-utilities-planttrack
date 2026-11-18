@@ -1,5 +1,5 @@
  "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf } from "../lib/loler-pdf";
@@ -420,7 +420,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     </article>)}
   </div>}
   <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {orderedJobs.map((j,index)=><><tr key={"stage-"+j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td>}</tr><tr key={j.id}><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr></>)}
+   {orderedJobs.map((j,index)=><Fragment key={j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td>{j.title}<small>{j.job_type||"General repair"}{j.certificate_number?" · "+j.certificate_number:""}{j.job_card_number?" · "+j.job_card_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
