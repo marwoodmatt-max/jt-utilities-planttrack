@@ -82,7 +82,7 @@ function statusLabel(asset: AssetRow) {
   return statuses.find((s) => s.value === asset.status)?.label || asset.status;
 }
 
-export default function AssetManager({ supabase, isAdmin, categoryFilter = "All", onOpenPmi }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string; onOpenPmi?: () => void }) {
+export default function AssetManager({ supabase, isAdmin, categoryFilter = "All", onOpenPmi, vorOnly = false }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string; onOpenPmi?: () => void; vorOnly?: boolean }) {
   const [showFleetImport,setShowFleetImport]=useState(false);
   const [showBulkUpload,setShowBulkUpload]=useState(false);
   const [uploadAssetId,setUploadAssetId]=useState("");
@@ -386,6 +386,29 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   };
   const labelStyle: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 700, margin: "12px 0" };
 
+  if(vorOnly) return <section className="panel"><div className="panel-head"><div><h3>Vehicle VOR management</h3><p>One place for HGV, vehicle and trailer return-to-service approvals.</p></div></div>
+    {isAdmin&&<section className="panel" style={{padding:18,marginBottom:18}}>
+      <h3>Vehicle VOR · Return to Service</h3>
+      <p className="muted">An administrator must confirm completed repairs and select a new signed passing PMI with RBT or Laden RBT and an uploaded report. The database checks the inspection was recorded after the vehicle went VOR.</p>
+      <div style={{display:"grid",gap:10,maxWidth:650}}>
+        <label>VOR vehicle<select style={fieldStyle} value={releaseAsset} onChange={e=>{setReleaseAsset(e.target.value);setReleaseFeedback("");}}>
+          <option value="">Select VOR HGV, vehicle or trailer</option>
+          {rows.filter(a=>a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase())).map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}
+        </select></label>
+        {releaseAsset&&<><label>Passing PMI and brake test<select style={fieldStyle} value={releasePmi} onChange={e=>setReleasePmi(e.target.value)}>
+          <option value="">Select signed PMI / RBT record</option>
+          {releaseRecords.map(p=><option key={p.id} value={p.id}>{formatDate(p.inspected_on)} · {p.result} · {p.brake_test_type}</option>)}
+        </select></label>
+        {releaseRecords.length===0&&<p className="muted">No eligible PMI with RBT and attached report found. Complete the PMI sign-off first in Workshop job cards.</p>}
+        {onOpenPmi&&<button type="button" className="secondary" onClick={onOpenPmi}>Complete PMI / RBT in Workshop job cards</button>}
+        <label>Repairs completed and roadworthiness confirmation<textarea style={fieldStyle} rows={3} value={releaseRepairs} onChange={e=>setReleaseRepairs(e.target.value)} placeholder="Describe repairs completed and checks confirming roadworthiness"/></label>
+        <label>Authorised signatory name<input style={fieldStyle} value={releaseName} onChange={e=>setReleaseName(e.target.value)} placeholder="Full name"/></label>
+        <button type="button" className="primary" disabled={releaseBusy||!releasePmi||releaseRepairs.trim().length<5||releaseName.trim().length<2} onClick={()=>void releaseFromVor()}>{releaseBusy?"Checking…":"Sign off · Return to Service"}</button></>}
+        {releaseFeedback&&<p role="status">{releaseFeedback}</p>}
+      </div>
+    </section>}
+  </section>;
+
   return <section className="panel">
     <div className="panel-head">
       <div><h3>Live asset register</h3><p>{rows.length} assets · {isAdmin ? "Admin asset management enabled" : "View only"}</p></div>
@@ -477,26 +500,6 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <p className="fine">Asset numbers are entered manually. Existing asset records are retained when edited; changes are recorded in the audit log.</p>
     </form>}
 
-    {isAdmin&&<section className="panel" style={{padding:18,marginBottom:18}}>
-      <h3>Vehicle VOR · Return to Service</h3>
-      <p className="muted">An administrator must confirm completed repairs and select a new signed passing PMI with RBT or Laden RBT and an uploaded report. The database checks the inspection was recorded after the vehicle went VOR.</p>
-      <div style={{display:"grid",gap:10,maxWidth:650}}>
-        <label>VOR vehicle<select style={fieldStyle} value={releaseAsset} onChange={e=>{setReleaseAsset(e.target.value);setReleaseFeedback("");}}>
-          <option value="">Select VOR HGV, vehicle or trailer</option>
-          {rows.filter(a=>a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase())).map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}
-        </select></label>
-        {releaseAsset&&<><label>Passing PMI and brake test<select style={fieldStyle} value={releasePmi} onChange={e=>setReleasePmi(e.target.value)}>
-          <option value="">Select signed PMI / RBT record</option>
-          {releaseRecords.map(p=><option key={p.id} value={p.id}>{formatDate(p.inspected_on)} · {p.result} · {p.brake_test_type}</option>)}
-        </select></label>
-        {releaseRecords.length===0&&<p className="muted">No eligible PMI with RBT and attached report found. Complete the PMI sign-off first in Workshop job cards.</p>}
-        {onOpenPmi&&<button type="button" className="secondary" onClick={onOpenPmi}>Complete PMI / RBT in Workshop job cards</button>}
-        <label>Repairs completed and roadworthiness confirmation<textarea style={fieldStyle} rows={3} value={releaseRepairs} onChange={e=>setReleaseRepairs(e.target.value)} placeholder="Describe repairs completed and checks confirming roadworthiness"/></label>
-        <label>Authorised signatory name<input style={fieldStyle} value={releaseName} onChange={e=>setReleaseName(e.target.value)} placeholder="Full name"/></label>
-        <button type="button" className="primary" disabled={releaseBusy||!releasePmi||releaseRepairs.trim().length<5||releaseName.trim().length<2} onClick={()=>void releaseFromVor()}>{releaseBusy?"Checking…":"Sign off · Return to Service"}</button></>}
-        {releaseFeedback&&<p role="status">{releaseFeedback}</p>}
-      </div>
-    </section>}
     <div className="toolbar">
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
