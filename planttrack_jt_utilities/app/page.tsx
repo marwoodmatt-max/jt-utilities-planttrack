@@ -18,7 +18,7 @@ function displayStatus(status:string,category?:string|null) {
   return labels[status] || status;
 }
 const nav = [
-  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],["MOT Tracker",FileCheck2],
+  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Calander",CalendarDays],["MOT Tracker",FileCheck2],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
   ["Workshop job cards",Wrench],["Vehicle VOR management",AlertTriangle],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
@@ -107,7 +107,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
   return <section className="panel" style={{marginTop:18}}>
-    <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open inspection calendar</button></div>
+    <div className="panel-head"><div><h3>PMI inspections · Fleet</h3><p>Live due dates from your plant register · Overdue and next 14 days</p></div><button className="text-btn" onClick={onOpenCalendar}>Open Calander</button></div>
     {showOverview&&<><div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",marginBottom:14}}>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="overdue"?"all":"overdue")}><div className="stat-top"><span>Overdue PMI</span><AlertTriangle size={18}/></div><strong>{loading?"…":overdue.length}</strong><small>Click to filter</small></button>
       <button type="button" className="stat" style={{textAlign:"left",cursor:"pointer"}} onClick={()=>setPmiFilter(pmiFilter==="soon"?"all":"soon")}><div className="stat-top"><span>Due within 14 days</span><CalendarDays size={18}/></div><strong>{loading?"…":upcoming.length}</strong><small>Click to filter</small></button>
@@ -669,16 +669,16 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
             ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="Vehicle VOR"?"VOR":label);setCategoryFilter(label==="Vehicle VOR"?"Vehicle VOR":label==="Out of service"?"Plant Out of Service":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
-          <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Inspection calendar")}>Open inspection calendar</button></div>
-          <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Inspection calendar")}/>
+          <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Calander")}>Open Calander</button></div>
+          <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Calander")}/>
           <Calendar supabase={supabase}/>
           <WorkshopDashboardSummary supabase={supabase} onOpen={()=>setPage("Workshop job cards")}/>
         </>}
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} statusFilter={assetFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Vehicle VOR management"&&<AssetManager supabase={supabase} isAdmin={isAdmin} vorOnly onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></div></>}
-        {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
+        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
+        {page==="Calander"&&<Calendar supabase={supabase}/>}
         {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
