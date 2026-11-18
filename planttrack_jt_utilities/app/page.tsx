@@ -41,6 +41,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
   const [selected,setSelected]=useState("");
   const [inspectedOn,setInspectedOn]=useState(new Date().toISOString().slice(0,10));
   const [result,setResult]=useState("Pass");
+  const [brakeTestType,setBrakeTestType]=useState("");
   const [mileage,setMileage]=useState("");
   const [defects,setDefects]=useState("");
   const [inspector,setInspector]=useState("");
@@ -59,7 +60,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
         .order("pmi_next_due",{ascending:true}).limit(100);
       if(cancelled)return;
       if(error)setError(error.message);else setItems((data||[]) as PmiItem[]);
-      const {data:past}=await supabase.from("hgv_pmi_records").select("id,asset_id,inspected_on,result,inspector_name,signed_off_by,report_path").order("inspected_on",{ascending:false}).limit(100);
+      const {data:past}=await supabase.from("hgv_pmi_records").select("id,asset_id,inspected_on,result,inspector_name,signed_off_by,report_path,brake_test_type").order("inspected_on",{ascending:false}).limit(100);
       if(!cancelled)setHistory(past||[]);
       setLoading(false);
     }
@@ -90,7 +91,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
         const {error}=await supabase.storage.from("hgv-pmi-reports").upload(path,report);
         if(error)throw error;
       }
-      const {error}=await supabase.from("hgv_pmi_records").insert({asset_id:asset.id,inspected_on:inspectedOn,result,mileage:mileage?Number(mileage):null,defects:defects||null,inspector_name:inspector.trim(),signed_off_by:signer.trim(),report_path:path});
+      const {error}=await supabase.from("hgv_pmi_records").insert({asset_id:asset.id,inspected_on:inspectedOn,result,brake_test_type:brakeTestType||null,mileage:mileage?Number(mileage):null,defects:defects||null,inspector_name:inspector.trim(),signed_off_by:signer.trim(),report_path:path});
       if(error)throw error;
       setFeedback(result==="Pass"||result==="Pass - defects rectified"?"Roadworthy PMI signed off; next PMI advanced by six weeks. The uploaded report is available in the asset folder.":"Inspection saved with outstanding defects; next PMI was not advanced.");
       setDefects("");setMileage("");setReport(null);setReload(n=>n+1);
@@ -122,6 +123,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
         <label>Inspection date<input type="date" required max={today} value={inspectedOn} onChange={e=>setInspectedOn(e.target.value)}/></label>
         <label>Mileage / odometer<input type="number" min="0" value={mileage} onChange={e=>setMileage(e.target.value)}/></label>
         <label>Result<select value={result} onChange={e=>setResult(e.target.value)}><option>Pass</option><option value="Pass - defects rectified">Pass – defects rectified and roadworthy</option><option value="Defects noted">Outstanding defects – not roadworthy</option><option>Fail</option></select></label>
+        <label>Brake test type<select value={brakeTestType} onChange={e=>setBrakeTestType(e.target.value)}><option value="">Not included / not recorded</option><option value="RBT">RBT – Roller Brake Test</option><option value="Laden RBT">Laden RBT – Laden Roller Brake Test</option></select></label>
         <label>Defects found, repairs completed and checks (required for any defects)<textarea value={defects} onChange={e=>setDefects(e.target.value)}/></label>
         <label>Inspector name<input required value={inspector} onChange={e=>setInspector(e.target.value)}/></label>
         <label>Signed off by<input required value={signer} onChange={e=>setSigner(e.target.value)}/></label>
@@ -130,7 +132,7 @@ function PmiDashboard({supabase,onOpenCalendar,showOverview=true,showSignoff=fal
       </form>
       {feedback&&<p role="status">{feedback}</p>}
       <h3 style={{marginTop:20}}>PMI completion history</h3>
-      <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Date</th><th>Result</th><th>Inspector</th><th>Signed off</th><th>Report</th></tr></thead><tbody>{history.map(r=><tr key={r.id}><td>{hgvItems.find(a=>a.id===r.asset_id)?.asset_code||r.asset_id}</td><td>{fmt(r.inspected_on)}</td><td>{r.result}</td><td>{r.inspector_name}</td><td>{r.signed_off_by}</td><td>{r.report_path?<button className="secondary" onClick={()=>void viewReport(r.report_path)}>View report</button>:"—"}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>Vehicle</th><th>Date</th><th>Result</th><th>Brake test</th><th>Inspector</th><th>Signed off</th><th>Report</th></tr></thead><tbody>{history.map(r=><tr key={r.id}><td>{hgvItems.find(a=>a.id===r.asset_id)?.asset_code||r.asset_id}</td><td>{fmt(r.inspected_on)}</td><td>{r.result}</td><td>{r.brake_test_type||"—"}</td><td>{r.inspector_name}</td><td>{r.signed_off_by}</td><td>{r.report_path?<button className="secondary" onClick={()=>void viewReport(r.report_path)}>View report</button>:"—"}</td></tr>)}</tbody></table></div>
     </div>}
   </section>;
 }
