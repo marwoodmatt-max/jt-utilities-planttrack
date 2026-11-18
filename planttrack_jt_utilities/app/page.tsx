@@ -836,7 +836,7 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
   const {data:{session}}=await supabase.auth.getSession();
   if(!session)throw Error("Please sign in again");
   const {data,error}=await supabase.functions.invoke("manage-planttrack-users",{body,headers:{Authorization:"Bearer "+session.access_token}});
-  if(error)throw Error((data&&typeof data.error==="string"?data.error:error.message));
+  if(error){let detail=data?.error;const context=(error as {context?:Response}).context;if(!detail&&context){try{const body=await context.json();detail=body?.error||body?.message;}catch{}}throw Error(typeof detail==="string"?detail:error.message);}
   if(data?.error)throw Error(data.error);
   return data;
  }
