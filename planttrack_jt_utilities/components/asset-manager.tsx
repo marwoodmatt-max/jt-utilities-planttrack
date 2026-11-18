@@ -89,6 +89,31 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [bulkUploading,setBulkUploading]=useState(false);
   const [vorSaving,setVorSaving]=useState(false);
   const [vorFeedback,setVorFeedback]=useState("");
+  const [releaseAsset,setReleaseAsset]=useState("");
+  const [releasePmi,setReleasePmi]=useState("");
+  const [releaseRepairs,setReleaseRepairs]=useState("");
+  const [releaseName,setReleaseName]=useState("");
+  const [releaseRecords,setReleaseRecords]=useState<{id:string;inspected_on:string;result:string;brake_test_type:string|null;report_path:string|null;created_at:string}[]>([]);
+  const [releaseBusy,setReleaseBusy]=useState(false);
+  const [releaseFeedback,setReleaseFeedback]=useState("");
+  useEffect(()=>{
+    let cancelled=false;
+    setReleasePmi("");setReleaseRecords([]);
+    if(!releaseAsset)return;
+    void (async()=>{
+      const {data,error}=await supabase.from("hgv_pmi_records").select("id,inspected_on,result,brake_test_type,report_path,created_at").eq("asset_id",releaseAsset).in("result",["Pass","Pass - defects rectified"]).in("brake_test_type",["RBT","Laden RBT"]).not("report_path","is",null).order("created_at",{ascending:false}).limit(20);
+      if(!cancelled){if(error)setReleaseFeedback(error.message);else setReleaseRecords(data||[]);}
+    })();
+    return ()=>{cancelled=true};
+  },[releaseAsset,supabase]);
+  async function releaseFromVor(){
+    if(!releaseAsset||!releasePmi||releaseRepairs.trim().length<5||releaseName.trim().length<2)return;
+    setReleaseBusy(true);setReleaseFeedback("");
+    const {error}=await supabase.rpc("release_vehicle_from_vor",{p_asset_id:releaseAsset,p_pmi_record_id:releasePmi,p_repairs:releaseRepairs.trim(),p_signatory:releaseName.trim()});
+    if(error)setReleaseFeedback("Release refused: "+error.message);
+    else{setReleaseFeedback("Vehicle released from VOR. The PMI calendar is active again.");setReleaseAsset("");setReleasePmi("");setReleaseRepairs("");setReleaseName("");await loadAssets();}
+    setReleaseBusy(false);
+  }
   const [bulkFeedback,setBulkFeedback]=useState("");
   const [importing,setImporting]=useState(false);
   const [importFeedback,setImportFeedback]=useState("");
@@ -433,7 +458,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Registration<input style={fieldStyle} value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })}/></label>
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
-        <label style={labelStyle}>Status<select style={fieldStyle} value={["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{(["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) ? vehicleStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+        <label style={labelStyle}>Status<select disabled={editing!=="new"&&rows.some(a=>a.id===editing&&a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()))} style={fieldStyle} value={["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{(["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) ? vehicleStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
         {(form.category || "").trim().toLowerCase() === "hgv" && <>
           <label style={labelStyle}>Next PMI<input style={fieldStyle} type="date" value={form.pmi_next_due} onChange={(e) => setForm({ ...form, pmi_next_due: e.target.value })}/></label>
           <label style={labelStyle}>Last PMI<input style={fieldStyle} type="date" value={form.pmi_last_completed} onChange={(e) => setForm({ ...form, pmi_last_completed: e.target.value })}/></label>
@@ -452,6 +477,25 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <p className="fine">Asset numbers are entered manually. Existing asset records are retained when edited; changes are recorded in the audit log.</p>
     </form>}
 
+    {isAdmin&&<section className="panel" style={{padding:18,marginBottom:18}}>
+      <h3>Vehicle VOR · Return to Service</h3>
+      <p className="muted">An administrator must confirm completed repairs and select a new signed passing PMI with RBT or Laden RBT and an uploaded report. The database checks the inspection was recorded after the vehicle went VOR.</p>
+      <div style={{display:"grid",gap:10,maxWidth:650}}>
+        <label>VOR vehicle<select style={fieldStyle} value={releaseAsset} onChange={e=>{setReleaseAsset(e.target.value);setReleaseFeedback("");}}>
+          <option value="">Select VOR HGV, vehicle or trailer</option>
+          {rows.filter(a=>a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase())).map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description}</option>)}
+        </select></label>
+        {releaseAsset&&<><label>Passing PMI and brake test<select style={fieldStyle} value={releasePmi} onChange={e=>setReleasePmi(e.target.value)}>
+          <option value="">Select signed PMI / RBT record</option>
+          {releaseRecords.map(p=><option key={p.id} value={p.id}>{formatDate(p.inspected_on)} · {p.result} · {p.brake_test_type}</option>)}
+        </select></label>
+        {releaseRecords.length===0&&<p className="muted">No eligible PMI with RBT and attached report found. Complete the PMI sign-off first in Workshop job cards.</p>}
+        <label>Repairs completed and roadworthiness confirmation<textarea style={fieldStyle} rows={3} value={releaseRepairs} onChange={e=>setReleaseRepairs(e.target.value)} placeholder="Describe repairs completed and checks confirming roadworthiness"/></label>
+        <label>Authorised signatory name<input style={fieldStyle} value={releaseName} onChange={e=>setReleaseName(e.target.value)} placeholder="Full name"/></label>
+        <button type="button" className="primary" disabled={releaseBusy||!releasePmi||releaseRepairs.trim().length<5||releaseName.trim().length<2} onClick={()=>void releaseFromVor()}>{releaseBusy?"Checking…":"Sign off · Return to Service"}</button></>}
+        {releaseFeedback&&<p role="status">{releaseFeedback}</p>}
+      </div>
+    </section>}
     <div className="toolbar">
       <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
     </div>
