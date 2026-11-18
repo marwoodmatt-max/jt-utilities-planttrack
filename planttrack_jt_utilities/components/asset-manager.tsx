@@ -70,13 +70,13 @@ const statuses = [
   { value: "off_hire", label: "Off hire" }
 ];
 
-const hgvStatuses = [
+const vehicleStatuses = [
   { value: "available", label: "Active" },
   { value: "out_of_service", label: "VOR" }
 ];
 
 function statusLabel(asset: AssetRow) {
-  if ((asset.category || "").toLowerCase() === "hgv") {
+  if (["hgv","vehicle","trailer"].includes((asset.category || "").toLowerCase())) {
     return asset.status === "out_of_service" ? "VOR" : "Active";
   }
   return statuses.find((s) => s.value === asset.status)?.label || asset.status;
@@ -433,7 +433,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Registration<input style={fieldStyle} value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })}/></label>
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
-        <label style={labelStyle}>Status<select style={fieldStyle} value={(form.category || "").toLowerCase() === "hgv" && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{((form.category || "").toLowerCase() === "hgv" ? hgvStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+        <label style={labelStyle}>Status<select style={fieldStyle} value={["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{(["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) ? vehicleStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
         {(form.category || "").trim().toLowerCase() === "hgv" && <>
           <label style={labelStyle}>Next PMI<input style={fieldStyle} type="date" value={form.pmi_next_due} onChange={(e) => setForm({ ...form, pmi_next_due: e.target.value })}/></label>
           <label style={labelStyle}>Last PMI<input style={fieldStyle} type="date" value={form.pmi_last_completed} onChange={(e) => setForm({ ...form, pmi_last_completed: e.target.value })}/></label>
