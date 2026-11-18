@@ -373,7 +373,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  async function archiveApprovedPdf(job:any){
   const path=job.asset_id+"/"+job.id+".pdf";
   const selectedAsset=assets.find(a=>a.id===job.asset_id);
-  const pdf=await generateApprovedJobPdf({...job,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},assetName(job.asset_id),selectedAsset?.asset_code==="TEST-LOLER-001");
+  const pdf=await generateApprovedJobPdf({...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},assetName(job.asset_id),selectedAsset?.asset_code==="TEST-LOLER-001");
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
   const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
@@ -460,7 +460,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB")}</p>}
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
-   {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>View filed PDF in asset record</button>}
+   {chosen.approved_pdf_path&&<><button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>View original filed PDF</button>{chosen.job_type==="General repair"&&<p className="muted">The original filed PDF is preserved as signed. Use Download Job Card PDF above for a newly generated copy with the corrected layout.</p>}</>}
    {role==="office"&&chosen.status==="Approved"&&!chosen.approved_pdf_path&&<button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"PDF saved against asset")}>Retry PDF filing</button>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB")}</p>}
