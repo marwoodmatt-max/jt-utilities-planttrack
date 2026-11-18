@@ -18,7 +18,7 @@ function displayStatus(status:string,category?:string|null) {
   return labels[status] || status;
 }
 const nav = [
-  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],["MOT checker",FileCheck2],
+  ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Inspection calendar",CalendarDays],["MOT Tracker",FileCheck2],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
   ["Workshop job cards",Wrench],["Vehicle VOR management",AlertTriangle],["Maintenance history",History],["Users & sign-offs",Users],["Reports",Activity]
 ] as const;
@@ -144,8 +144,14 @@ type MotVehicle={id:string;asset_code:string;registration:string|null;descriptio
 type DvsaMotRecord={asset_id:string;registration:string;expiry_date:string|null;last_checked_at:string|null;last_check_error:string|null;mot_status:string|null;raw_response?:{motTestDueDate?:string;registrationDate?:string}|null;mot_tests?:{testResult?:string;expiryDate?:string|null}[]|null};
 function firstMotDue(record:{mot_tests?:unknown[]|null;raw_response?:{motTestDueDate?:string}|null}|null|undefined){return record&&!record.mot_tests?.length&&/^\d{4}-\d{2}-\d{2}$/.test(record.raw_response?.motTestDueDate||"")?record.raw_response!.motTestDueDate!:null;}
 function motExpiryFromHistory(record:{expiry_date:string|null;mot_tests?:{testResult?:string;expiryDate?:string|null}[]|null}){return record.expiry_date||record.mot_tests?.find(test=>test.testResult==="PASSED"&&test.expiryDate)?.expiryDate||null;}
+type MotBooking={id:string;asset_id:string;booking_date:string;booking_time:string;garage_name:string;status:string};
 function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [vehicles,setVehicles]=useState<MotVehicle[]>([]);
+  const [bookings,setBookings]=useState<MotBooking[]>([]);
+  const [showBooking,setShowBooking]=useState(false);
+  const [bookingForm,setBookingForm]=useState({asset_id:"",booking_date:"",booking_time:"09:00",garage_name:""});
+  const [savingBooking,setSavingBooking]=useState(false);
+  const [bookingMessage,setBookingMessage]=useState("");
   const [records,setRecords]=useState<DvsaMotRecord[]>([]);
   const [loading,setLoading]=useState(true);
   const [checking,setChecking]=useState<string|null>(null);
@@ -157,17 +163,36 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const [registrationSearch,setRegistrationSearch]=useState("");
   async function load(){
     setLoading(true);setError("");
-    const [assetsResult,recordsResult]=await Promise.all([
+    const [assetsResult,recordsResult,bookingsResult]=await Promise.all([
       supabase.from("assets").select("id,asset_code,registration,description,mot_due,status,category").order("asset_code"),
-      supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,last_checked_at,last_check_error,mot_status,mot_tests,raw_response")
+      supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,last_checked_at,last_check_error,mot_status,mot_tests,raw_response"),
+      supabase.from("mot_garage_bookings").select("id,asset_id,booking_date,booking_time,garage_name,status").order("booking_date",{ascending:true})
     ]);
     if(assetsResult.error)setError("Could not load vehicles: "+assetsResult.error.message);
     else setVehicles((assetsResult.data||[]).filter(v=>Boolean(v.registration)||Boolean(v.mot_due)) as MotVehicle[]);
     if(recordsResult.error)setError("Could not load saved DVSA MOT records: "+recordsResult.error.message);
     else setRecords((recordsResult.data||[]) as DvsaMotRecord[]);
+    if(bookingsResult.error)setError("Could not load MOT bookings: "+bookingsResult.error.message);
+    else setBookings((bookingsResult.data||[]) as MotBooking[]);
     setLoading(false);
   }
   useEffect(()=>{void load();},[supabase]);
+  async function saveBooking(event:React.FormEvent<HTMLFormElement>){
+    event.preventDefault();if(savingBooking)return;
+    setSavingBooking(true);setBookingMessage("");
+    const {data:userResult,error:userError}=await supabase.auth.getUser();
+    if(userError||!userResult.user){setBookingMessage("Sign in again to save the MOT booking.");setSavingBooking(false);return;}
+    const {error:saveError}=await supabase.from("mot_garage_bookings").insert({...bookingForm,garage_name:bookingForm.garage_name.trim(),created_by:userResult.user.id});
+    if(saveError)setBookingMessage("Could not save MOT booking: "+saveError.message);
+    else{setBookingMessage("MOT booking saved and added to the inspection calendar.");setShowBooking(false);setBookingForm({asset_id:"",booking_date:"",booking_time:"09:00",garage_name:""});await load();}
+    setSavingBooking(false);
+  }
+  async function cancelBooking(id:string){
+    if(!window.confirm("Cancel this MOT booking?"))return;
+    const {error:cancelError}=await supabase.from("mot_garage_bookings").update({status:"cancelled",updated_at:new Date().toISOString()}).eq("id",id);
+    if(cancelError)setBookingMessage("Could not cancel booking: "+cancelError.message);
+    else{setBookingMessage("MOT booking cancelled.");await load();}
+  }
   async function checkMot(registration:string){
     setChecking(registration);setMessage("");setLookupResult(null);
     const {data,error}=await supabase.functions.invoke("dvsa-mot-lookup",{body:{registration}});
@@ -202,7 +227,10 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   const dueSoon=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)>=0&&daysUntil(d)<=60;}).length;
   const overdue=vehicles.filter(v=>{const d=expiry(v);return d&&daysUntil(d)<0;}).length;
   return <section className="panel">
-    <div className="panel-head"><div><h3>DVSA MOT checker · All vehicles</h3><p>All vans, cars and other registered vehicles, plus separate HGV and trailer records</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary" onClick={()=>void checkAllVehicles()} disabled={loading||checking!==null}>Check all vehicles with DVSA</button><button className="secondary" onClick={()=>void load()} disabled={loading||checking!==null}>Refresh</button></div></div>
+    <div className="panel-head"><div><h3>MOT Tracker · All vehicles</h3><p>All vans, cars and other registered vehicles, plus separate HGV and trailer records</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary" onClick={()=>void checkAllVehicles()} disabled={loading||checking!==null}>Check all vehicles with DVSA</button><button className="secondary" onClick={()=>void load()} disabled={loading||checking!==null}>Refresh</button><button className="primary" type="button" onClick={()=>setShowBooking(value=>!value)}>{showBooking?"Close booking form":"+ Book MOT"}</button></div></div>
+    {showBooking&&<form onSubmit={e=>void saveBooking(e)} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,padding:16,background:"#f8fafc",border:"1px solid #cbd5e1",borderRadius:10,marginBottom:16}}><label>Asset<select required value={bookingForm.asset_id} onChange={e=>setBookingForm(v=>({...v,asset_id:e.target.value}))}><option value="">Select vehicle</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.registration||v.asset_code} · {v.asset_code}</option>)}</select></label><label>Date<input type="date" required value={bookingForm.booking_date} onChange={e=>setBookingForm(v=>({...v,booking_date:e.target.value}))}/></label><label>Time<input type="time" required value={bookingForm.booking_time} onChange={e=>setBookingForm(v=>({...v,booking_time:e.target.value}))}/></label><label>Garage / where<input required maxLength={200} placeholder="Garage name or location" value={bookingForm.garage_name} onChange={e=>setBookingForm(v=>({...v,garage_name:e.target.value}))}/></label><button className="primary" type="submit" disabled={savingBooking||!bookingForm.asset_id||!bookingForm.booking_date||!bookingForm.booking_time||!bookingForm.garage_name.trim()}>{savingBooking?"Saving…":"Save MOT booking"}</button></form>}
+    {bookingMessage&&<p role="status">{bookingMessage}</p>}
+    {bookings.some(b=>b.status==="booked")&&<div style={{marginBottom:18}}><h3>Garage MOT bookings</h3><div className="table-wrap"><table><thead><tr><th>Asset</th><th>Date</th><th>Time</th><th>Garage / where</th><th>Action</th></tr></thead><tbody>{bookings.filter(b=>b.status==="booked").map(b=><tr key={b.id}><td>{vehicles.find(v=>v.id===b.asset_id)?.registration||vehicles.find(v=>v.id===b.asset_id)?.asset_code||"Vehicle"}</td><td>{b.booking_date.slice(8,10)+"/"+b.booking_date.slice(5,7)+"/"+b.booking_date.slice(0,4)}</td><td>{b.booking_time.slice(0,5)}</td><td>{b.garage_name}</td><td><button type="button" className="secondary" onClick={()=>void cancelBooking(b.id)}>Cancel booking</button></td></tr>)}</tbody></table></div></div>}
     {batchProgress&&<p role="status">{batchProgress}</p>}
     <div className="stats" style={{gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",marginBottom:16}}>
       {([{key:"first",label:"First MOT not yet due",tone:"green"},{key:"failed",label:"FAILED MOT",tone:"red"},{key:"valid",label:"Valid MOT",tone:"green"},{key:"soon",label:"Due within 60 days",tone:"amber"},{key:"expired",label:"Expired MOT",tone:"red"},{key:"unchecked",label:"Not checked",tone:"neutral"},{key:"unknown",label:"DVSA date missing",tone:"neutral"}] as const).map(item=><button type="button" className="stat" key={item.key} onClick={()=>setStatusFilter(statusFilter===item.key?"all":item.key)} aria-pressed={statusFilter===item.key} style={{textAlign:"left",cursor:"pointer",border:statusFilter===item.key?"2px solid #2563eb":undefined}}><div className="stat-top"><span>{item.label}</span><FileCheck2 size={18}/></div><strong>{loading?"…":counts[item.key]}</strong><small>Click to filter</small></button>)}
@@ -604,7 +632,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
         {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Inspection calendar")}/></div></>}
         {page==="Inspection calendar"&&<Calendar supabase={supabase}/>}
-        {page==="MOT checker"&&<MotChecker supabase={supabase}/>}
+        {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&<Checks action={action}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<WorkshopJobs supabase={supabase}/>}
@@ -616,7 +644,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
     </div>;
 }
 function AssetTable({rows}:{rows:Asset[]}) {return <div className="table-wrap"><table><thead><tr><th>Asset code</th><th>Description</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER Examination</th><th>Status</th></tr></thead><tbody>{rows.map(a=><tr key={a.id}><td><b>{a.id}</b></td><td>{a.name}<small>{a.category}</small></td><td>{a.registration}</td><td>{a.location}</td><td>{a.hours}</td><td>{a.loler}</td><td><Tag tone={a.status==="Available"?"green":a.status==="In workshop"?"amber":"red"}>{a.status}</Tag></td></tr>)}</tbody></table>{!rows.length&&<p className="empty">No matching assets.</p>}</div>}
-type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"|"failed"; assetCode:string; description:string };
+type CalendarEvent = { id:string; date:string; kind:"examined"|"due"|"reminder"|"planned"|"failed"|"booked"; assetCode:string; description:string };
 const calendarCategory=(event:CalendarEvent):"loler"|"mot"|"pmi"|"tacho"=>{
   if(event.kind==="reminder"||/\bMOT\b/i.test(event.description))return "mot";
   if(/\bPMI\b/i.test(event.description)||event.kind==="planned")return "pmi";
@@ -636,6 +664,7 @@ const calendarLabel=(event:CalendarEvent)=>{
   const category=calendarCategory(event);
   const type=category==="loler"?"LOLER":category==="mot"?"MOT":category==="pmi"?"PMI":"Tacho";
   if(event.kind==="failed")return "MOT FAILED";
+  if(event.kind==="booked")return "MOT booked";
   const action=event.kind==="reminder"?"reminder":event.kind==="planned"?"planned":event.kind==="examined"?"completed":event.date<new Date().toISOString().slice(0,10)?"overdue":"due";
   return type+" "+action;
 };
@@ -722,6 +751,12 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
         }
         if(prefix==="HGV")add(hgv.tacho_calibration_due,"due","HGV tacho calibration");
       }
+      const {data:garageBookings,error:garageError}=await supabase.from("mot_garage_bookings").select("id,asset_id,booking_date,booking_time,garage_name,status,assets(asset_code,registration)").eq("status","booked");
+      if(garageError){if(!cancelled){setError("Could not load MOT garage bookings: "+garageError.message);setLoading(false);}return;}
+      for(const booking of garageBookings||[]){
+        const asset=booking.assets as unknown as {asset_code:string;registration:string|null}|null;
+        mapped.push({id:"mot-booking-"+booking.id,date:booking.booking_date,kind:"booked",assetCode:asset?.registration||asset?.asset_code||"Vehicle",description:"MOT booked · "+booking.booking_time.slice(0,5)+" · "+booking.garage_name});
+      }
       if(!cancelled){setEvents(mapped);setLoading(false);}
     }
     void loadCalendar();
@@ -783,7 +818,7 @@ function Calendar({supabase}:{supabase:SupabaseClient}) {
     <div style={{marginTop:18,borderTop:"1px solid #e5e5e8",paddingTop:16}}>
       <div className="panel-head"><div><h3>{selectedDate? "Events for "+formatDate(selectedDate):"Select a date"}</h3><p>{selectedDate?"Recorded examination dates and due dates":"Choose a day on the calendar to see its records"}</p></div></div>
       {selectedDate&&selectedEvents.length===0&&<p className="muted">No compliance events recorded for this date.</p>}
-      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="failed"?"FAIL":event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="failed"?"MOT failed on this date · Repairs required":event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span style={{...calendarStyle(event),borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{calendarLabel(event)}</span></div>)}
+      {selectedEvents.map(event=><div className="attention" key={event.id}><div className="avatar">{event.kind==="failed"?"FAIL":event.kind==="booked"?"MOT":event.kind==="examined"?"EX":event.kind==="reminder"?"MOT":event.kind==="planned"?"PMI":"DU"}</div><div><b>{event.assetCode} · {event.description}</b><small>{event.kind==="failed"?"MOT failed on this date · Repairs required":event.kind==="booked"?"Garage appointment":event.kind==="examined"?"Examination completed":event.kind==="reminder"?"MOT advance reminder":event.kind==="planned"?"Projected PMI date — not booked":"Compliance due"} · {formatDate(event.date)}</small></div><span style={{...calendarStyle(event),borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{calendarLabel(event)}</span></div>)}
     </div>
     {loading&&<p className="muted">Loading live compliance dates…</p>}
     {!loading&&!error&&events.length===0&&<p className="muted">No compliance dates are currently recorded.</p>}
