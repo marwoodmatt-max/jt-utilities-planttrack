@@ -455,8 +455,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <div style={{display:"grid",gap:8}}>
      <strong>Parts added</strong>
      {partItems.map((item,index)=><div key={index} style={{display:"flex",gap:8,alignItems:"center"}}>
-       <label style={{flex:1}}>Part {index+1}<input value={item} onChange={e=>{const updated=[...partItems];updated[index]=e.target.value;setPartItems(updated);setParts(updated.filter(v=>v.trim()).join("\\n"));}} placeholder="Enter part description"/></label>
-       <button className="secondary" type="button" disabled={partItems.length===1} onClick={()=>{const updated=partItems.filter((_,i)=>i!==index);setPartItems(updated);setParts(updated.filter(v=>v.trim()).join("\\n"));}}>Remove</button>
+       <label style={{flex:1}}>Part {index+1}<input value={item} onChange={e=>{const updated=[...partItems];updated[index]=e.target.value;setPartItems(updated);setParts(updated.filter(v=>v.trim()).join("\n"));}} placeholder="Enter part description"/></label>
+       <button className="secondary" type="button" disabled={partItems.length===1} onClick={()=>{const updated=partItems.filter((_,i)=>i!==index);setPartItems(updated);setParts(updated.filter(v=>v.trim()).join("\n"));}}>Remove</button>
      </div>)}
      <button className="secondary" type="button" onClick={()=>setPartItems(items=>[...items,""])}>+ Add another part</button>
     </div>
