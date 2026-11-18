@@ -426,6 +426,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <label>Parts used<input value={parts} onChange={e=>setParts(e.target.value)}/></label>
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
     <label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
+    {(work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim()))&&<p role="status" style={{color:"#92400e",background:"#fffbeb",padding:"10px 12px",borderRadius:6,fontSize:13}}><strong>Before you can sign and submit:</strong>{" "}{[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])].join(", ")}. Complete these fields below the examination form.</p>}
     <button className="primary" disabled={busy||work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim())} onClick={()=>void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,p_checklist:{...checklist,...lolerFields}}),"Signed and submitted to office inbox")}>Sign and submit to office</button>
    </>}
    {role==="office"&&chosen.status==="Awaiting office approval"&&<>
