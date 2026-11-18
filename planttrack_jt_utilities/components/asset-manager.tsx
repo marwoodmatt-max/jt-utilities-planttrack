@@ -82,7 +82,8 @@ function statusLabel(asset: AssetRow) {
   return statuses.find((s) => s.value === asset.status)?.label || asset.status;
 }
 
-export default function AssetManager({ supabase, isAdmin, categoryFilter = "All", onOpenPmi, vorOnly = false }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string; onOpenPmi?: () => void; vorOnly?: boolean }) {
+export default function AssetManager({ supabase, isAdmin, categoryFilter = "All", statusFilter = "All", onOpenPmi, vorOnly = false }: { supabase: SupabaseClient; isAdmin: boolean; categoryFilter?: string; statusFilter?: string; onOpenPmi?: () => void; vorOnly?: boolean }) {
+  const [allocatedAssetIds,setAllocatedAssetIds]=useState<Set<string>>(new Set());
   const [showFleetImport,setShowFleetImport]=useState(false);
   const [showBulkUpload,setShowBulkUpload]=useState(false);
   const [uploadAssetId,setUploadAssetId]=useState("");
@@ -173,11 +174,13 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   useEffect(() => { void loadAssets(); }, [supabase]);
 
+  useEffect(()=>{let cancelled=false;void supabase.from("project_allocations").select("asset_id").is("returned_at",null).then(({data})=>{if(!cancelled)setAllocatedAssetIds(new Set((data||[]).map(row=>row.asset_id)));});return ()=>{cancelled=true;};},[supabase]);
   const filtered = useMemo(() => rows.filter((a) =>
+    (statusFilter==="All" || (statusFilter==="In use" ? (a.status==="in_use" || (a.status==="available"&&allocatedAssetIds.has(a.id))) : statusFilter==="Available" ? (a.status==="available"&&!allocatedAssetIds.has(a.id)) : statusFilter==="In workshop" ? a.status==="in_workshop" : statusFilter==="Out of service" ? a.status==="out_of_service"&&!["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) : statusFilter==="VOR" ? a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) : true)) &&
     (categoryFilter === "All" || (categoryFilter === "Vehicle VOR" && ["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (categoryFilter === "Plant Out of Service" && !["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (a.category || "").toLowerCase() === categoryFilter.toLowerCase() || (categoryFilter.toLowerCase() === "hgv" && a.asset_code.toUpperCase() === "C545766")) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
       .filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
-  ), [rows, search, categoryFilter]);
+  ), [rows, search, categoryFilter, statusFilter, allocatedAssetIds]);
 
   const categoryOptions = useMemo(
     () => Array.from(new Set([...categories, ...rows.map((r) => r.category || "").filter(Boolean)])).sort(),
@@ -411,7 +414,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   return <section className="panel">
     <div className="panel-head">
-      <div><h3>Live asset register</h3><p>{rows.length} assets · {isAdmin ? "Admin asset management enabled" : "View only"}</p></div>
+      <div><h3>{statusFilter==="All"?"Live asset register":statusFilter+" assets"}</h3><p>{filtered.length} matching of {rows.length} assets · {isAdmin ? "Admin asset management enabled" : "View only"}</p></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="secondary" onClick={() => void loadAssets()}><RefreshCw size={15}/> Refresh</button>
         {isAdmin && <button className="primary" onClick={startNew}><Plus size={16}/> Add new asset</button>}
