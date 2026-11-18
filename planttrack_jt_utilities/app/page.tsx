@@ -304,13 +304,14 @@ function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"cha
  ["FURTHER DETAILS OR REMEDIAL ACTION REQUIRED"],
  ["NAME OF INSPECTOR","QUALIFICATIONS","COMPANY"]
  ];
- const choice=(key:string)=>chains&&(["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"].includes(key));
+ const plantIntervalKeys=["ACCESSORIES 6 MONTHLY","LIFTING PERSONS 6 MONTHLY","APPLIANCES 12 MONTHLY","EXAMINATION SCHEME","EXCEPTIONAL CIRCUMSTANCES"];
+ const choice=(key:string)=>(chains&&["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"].includes(key))||(!chains&&plantIntervalKeys.includes(key));
  return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:18,margin:"14px 0",borderRadius:4}}>
   <h3 style={{textAlign:"center",color:"#17212b"}}>{chains?"REPORT OF A THOROUGH EXAMINATION OF LIFTING EQUIPMENT & ACCESSORIES":"Report of Thorough Examination and/or Test of Equipment"}</h3>
   {!chains&&<p style={{textAlign:"center",fontSize:12}}>Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307<br/>Provision and Use of Work Equipment Regulations P.U.W.E.R 1998 SI 2306<br/>Supply of Machinery (Safety) Regulations 2008</p>}
   {fields.map((group,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
    {group.map(key=><label key={key} style={{borderRight:"1px solid #cbd5e1",padding:8,fontSize:12,fontWeight:600,color:"#17212b"}}>{key}
-    {choice(key)?<select disabled={readOnly} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6}}><option value="">Select</option><option>Yes</option><option>No</option></select>:
+    {choice(key)?<select disabled={readOnly} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6}}><option value="">Not selected</option><option value="Yes">{chains?"Yes":"Selected (X)"}</option><option value="No">{chains?"No":"Not applicable"}</option></select>:
     <textarea readOnly={readOnly} rows={key.length>70?3:2} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6,background:readOnly?"#f1f5f9":"#fff"}}/>}
    </label>)}
   </div>)}
