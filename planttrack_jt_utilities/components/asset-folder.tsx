@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
+import PlantSafetyLockouts from "./plant-safety-lockouts";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
@@ -129,6 +130,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
       <div><button className="secondary" onClick={onBack}><ArrowLeft size={15}/> Back to asset register</button> {isAdmin&&<><button className="secondary" onClick={onEdit} style={{marginLeft:8}}>Edit asset</button><button className="secondary" onClick={onDelete} disabled={deleting} style={{marginLeft:8,color:"#b91c1c"}}>{deleting?"Deleting…":"Delete asset"}</button></>}<h2 style={{marginTop:14,display:"flex",alignItems:"center",gap:9}}><FolderOpen color="#c62828"/> {asset.asset_code} – Asset folder</h2><p>{asset.description} · {asset.category||"Uncategorised"}{asset.registration?" · "+asset.registration:""}</p></div>
       <button className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCw size={15}/> Refresh</button>
     </div>
+    <PlantSafetyLockouts supabase={supabase} isAdmin={isAdmin} assetId={asset.id}/>
     {notice&&<div className="notice" role="status">{notice}</div>}
     {error&&<div className="auth-error" role="alert">{error}</div>}
     {canUpload&&uploadAllowed&&<div style={{padding:16,border:"1px dashed #c9c9ce",borderRadius:8,marginBottom:18,background:"#fafafa"}}>
