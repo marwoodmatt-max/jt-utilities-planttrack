@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
-type Input={assetName:string;operator:string;location:string;submittedAt:string;meterReading:number|null;answers:Record<string,string>;comments:string;result:string};
+type Input={assetName:string;operator:string;location:string;submittedAt:string;meterReading:number|null;answers:Record<string,string>;comments:string;result:string;photos?:{prompt:string;bytes:Uint8Array;mimeType:string}[]};
 const checks=[
 "Operator understands machine","Check fire extinguisher","Check steps and handrails","Check seating and seatbelts","Check hydraulic hoses","Check engine bay is clean","Check for fuel, coolant or oil leaks","Check engine and hydraulic oil level","Check engine coolant",
 "Check spray bar (Roller)","Check drums (Roller)","Abrasive wheel bearings (Trencher)","Mirrors, CCTV reversing system","Abrasive wheel, teeth and picks (Top Cutter & Trencher)","Check exhaust system","Check booms/boom pins/cracks","Check frame and body cracks","Check visible wiring protected","Check tracks / tyres","Check blade","Check signs/ labels/SWL are displayed","Check bucket and teeth that is in use","Abrasive wheel","Check warning alarms","Steering gear","Park lock brake","Greased points and greased?","Check lights / warning lights / beacon are working","Check horn is working","Check tracks and final drives","Instruments and gauges","Lights-flashing and vehicle"];
@@ -35,32 +35,35 @@ function row(page:PDFPage,font:PDFFont,bold:PDFFont,name:string,answer:string,y:
  const value=answer||"Not recorded",sz=9;
  page.drawText(value,{x:546-bold.widthOfTextAtSize(value,sz),y:y-height/2-3,font:bold,size:sz,color:rgb(1,1,1)});
 }
-function footer(page:PDFPage,font:PDFFont,n:number){write(page,font,n+"/3",right-30,28,9,50);}
+function footer(page:PDFPage,font:PDFFont,n:number,total=3){write(page,font,n+"/"+total,right-30,28,9,50);}
 export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
  const when=new Date(input.submittedAt);
- const date=when.toLocaleDateString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric"}).replaceAll("/","." );
+ const date=when.toLocaleDateString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric"}).replaceAll("/","-");
  const time=when.toLocaleTimeString("en-GB",{timeZone:"Europe/London",hour:"2-digit",minute:"2-digit"});
  const passCount=checks.filter(k=>["Safe","Yes","N/A"].includes(input.answers?.[k])).length;
  const flags=checks.filter(k=>["Unsafe","No"].includes(input.answers?.[k])).length;
  const p1=pdf.addPage([W,H]);
- write(p1,bold,"JT Utilities - Plant & Machinery Pre Start",left,788,17,510,22,2);
- write(p1,bold,"Inspection",left,761,17,510);
- p1.drawRectangle({x:left,y:708,width:515,height:28,color:grey});
- write(p1,bold,input.result==="fail"?"Flagged - defects recorded":"Complete",right-190,717,12,176);
- write(p1,bold,"Score",left+6,680,9,90);write(p1,bold,passCount+" / 32 ("+Math.round(passCount/32*100)+"%)",left+88,679,12,145);
- write(p1,bold,"Flagged items",left+245,680,9,85);write(p1,bold,String(flags),left+347,679,12,30);
- write(p1,bold,"Actions",left+393,680,9,68);write(p1,bold,String(flags),left+471,679,12,30);
- p1.drawLine({start:{x:left,y:657},end:{x:right,y:657},color:line,thickness:.8});
- write(p1,bold,"Prepared by",left,609,10,140);
- write(p1,regular,input.operator,left+260,608,11,250,15,3);
- write(p1,bold,"Location",left,517,10,140);
- write(p1,regular,input.location||"Not recorded",left+260,516,10,245,14,5);
- write(p1,bold,"Select Asset",left,409,10,140);
- write(p1,regular,input.assetName,left+260,407,10,245,14,6);
- write(p1,bold,"Inspection",left,303,10,140);
- write(p1,regular,date+" "+time+" BST/GMT (UK time)",left+260,303,10,245);
- footer(p1,regular,1);
+ try{const response=await fetch("/jt-utilities-logo.jpg");if(response.ok){const logo=await pdf.embedJpg(new Uint8Array(await response.arrayBuffer()));const dims=logo.scaleToFit(148,78);p1.drawImage(logo,{x:left,y:741,width:dims.width,height:dims.height});}}catch{/* A missing logo must not block the safety record. */}
+ write(p1,bold,"PLANT & MACHINERY",left+165,788,15,345);
+ write(p1,bold,"PRE START INSPECTION",left+165,765,15,345);
+ p1.drawLine({start:{x:left,y:728},end:{x:right,y:728},thickness:2,color:rgb(.85,.12,.2)});
+ p1.drawRectangle({x:left,y:682,width:515,height:30,color:grey});
+ write(p1,bold,input.result==="fail"?"Flagged - defects recorded":"Complete",right-200,692,12,190);
+ write(p1,bold,"Score",left+5,648,9,90);write(p1,bold,passCount+" / 32 ("+Math.round(passCount/32*100)+"%)",left+85,647,12,147);
+ write(p1,bold,"Flagged items",left+245,648,9,95);write(p1,bold,String(flags),left+346,647,12,40);
+ write(p1,bold,"Actions",left+394,648,9,64);write(p1,bold,String(flags),left+469,647,12,38);
+ const details:[string,string][]=[["Prepared by",input.operator],["Location",input.location||"Not recorded"],["Select Asset",input.assetName],["Inspection date",date],["Inspection time",time+" UK"],["Hours reading",input.meterReading==null?"Not recorded":String(input.meterReading)+" hr"]];
+ let yDetail=609;
+ for(let i=0;i<details.length;i++){
+  const [label,value]=details[i];
+  p1.drawRectangle({x:left,y:yDetail-29,width:right-left,height:34,color:i%2===0?rgb(.97,.97,.98):rgb(1,1,1)});
+  write(p1,bold,label,left+10,yDetail-15,10,150);
+  write(p1,regular,value,left+168,yDetail-15,10,334,13,2);
+  yDetail-=38;
+ }
+ write(p1,bold,"Safety-critical defects: lock/tag out, report and do not operate until rectified.",left+8,yDetail-26,9,500,12,2,rgb(.65,.1,.15));
+ footer(p1,regular,1,input.photos?.length?4:3);
  const p2=pdf.addPage([W,H]);
  headerBar(p2,bold,"1. Audit","32 / 32 ("+Math.round(passCount/32*100)+"%)",809);
  write(p2,bold,"Date:",left+12,751,9,95);
@@ -75,7 +78,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  headerBar(p2,bold,"1.1. Conditional Checks","",y-5);
  y-=43;
  for(const key of checks.slice(9,17)){row(p2,regular,bold,key,input.answers?.[key]||"",y,29);y-=29;}
- footer(p2,regular,2);
+ footer(p2,regular,2,input.photos?.length?4:3);
  const p3=pdf.addPage([W,H]);
  let y3=813;
  for(const key of checks.slice(17)){row(p3,regular,bold,key,input.answers?.[key]||"",y3,35);y3-=35;}
@@ -93,6 +96,24 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  }
  write(p3,regular,input.operator,left+195,y3-33,11,295);
  write(p3,regular,date+" "+time+" UK - electronic acknowledgement",left+95,y3-50,9,410);
- footer(p3,regular,3);
+ footer(p3,regular,3,input.photos?.length?4:3);
+ if(input.photos?.length){
+  const p4=pdf.addPage([W,H]);
+  write(p4,bold,"JT UTILITIES - INSPECTION PHOTO EVIDENCE",left,801,15,520);
+  write(p4,regular,input.assetName,left,782,9,500);
+  write(p4,regular,date+" "+time+" UK",left,766,9,500);
+  p4.drawLine({start:{x:left,y:753},end:{x:right,y:753},thickness:1.5,color:rgb(.85,.12,.2)});
+  let photoY=731;
+  for(let i=0;i<Math.min(3,input.photos.length);i++){
+   const photo=input.photos[i];write(p4,bold,(i+1)+". "+photo.prompt,left+8,photoY,10,490);
+   try{
+    const embedded=photo.mimeType==="image/png"?await pdf.embedPng(photo.bytes):await pdf.embedJpg(photo.bytes);
+    const size=embedded.scaleToFit(320,192);
+    p4.drawImage(embedded,{x:left+9,y:photoY-202,width:size.width,height:size.height});
+   }catch{write(p4,regular,"Photo stored separately with the inspection.",left+9,photoY-24,9,470);}
+   photoY-=228;
+  }
+  footer(p4,regular,4,4);
+ }
  return new Blob([new Uint8Array(await pdf.save())],{type:"application/pdf"});
 }
