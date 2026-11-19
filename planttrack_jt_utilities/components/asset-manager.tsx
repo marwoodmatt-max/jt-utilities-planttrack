@@ -8,6 +8,8 @@ import { Plus, Search, Pencil, X, Save, RefreshCw, FolderOpen, Trash2 } from "lu
 type AssetRow = {
   id: string;
   asset_code: string;
+  ownership_type: "owned"|"hired_in";
+  hire_supplier: string|null;
   description: string;
   category: string | null;
   manufacturer: string | null;
@@ -27,6 +29,8 @@ type AssetRow = {
 
 type AssetForm = {
   asset_code: string;
+  ownership_type: "owned"|"hired_in";
+  hire_supplier: string;
   description: string;
   category: string;
   manufacturer: string;
@@ -45,7 +49,7 @@ type AssetForm = {
 };
 
 const emptyForm: AssetForm = {
-  asset_code: "", description: "", category: "", manufacturer: "", model: "",
+  asset_code: "", ownership_type:"owned",hire_supplier:"",description: "", category: "", manufacturer: "", model: "",
   serial_number: "", registration: "", location: "", hour_meter: "", status: "available",
   loler_next_due: "", loler_examined_at: "",
   pmi_next_due: "", pmi_last_completed: "", mot_due: "", tacho_calibration_due: ""
@@ -124,6 +128,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [ownershipFilter,setOwnershipFilter]=useState("all");
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<AssetForm>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -136,7 +141,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setError("");
     const { data, error: loadError } = await supabase
       .from("assets")
-      .select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due")
+      .select("id, asset_code, ownership_type, hire_supplier, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due")
       .order("asset_code", { ascending: true })
       .limit(1000);
     if (loadError) setError("Could not load assets: " + loadError.message);
@@ -176,11 +181,12 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   useEffect(()=>{let cancelled=false;void supabase.from("project_allocations").select("asset_id").is("returned_at",null).then(({data})=>{if(!cancelled)setAllocatedAssetIds(new Set((data||[]).map(row=>row.asset_id)));});return ()=>{cancelled=true;};},[supabase]);
   const filtered = useMemo(() => rows.filter((a) =>
+    (ownershipFilter==="all"||(a.ownership_type||"owned")===ownershipFilter) &&
     (statusFilter==="All" || (statusFilter==="In use" ? (a.status==="in_use" || (a.status==="available"&&allocatedAssetIds.has(a.id))) : statusFilter==="Available" ? (a.status==="available"&&!allocatedAssetIds.has(a.id)) : statusFilter==="In workshop" ? a.status==="in_workshop" : statusFilter==="Out of service" ? a.status==="out_of_service"&&!["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) : statusFilter==="VOR" ? a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) : true)) &&
     (categoryFilter === "All" || (categoryFilter === "Vehicle VOR" && ["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (categoryFilter === "Plant Out of Service" && !["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()) && a.status==="out_of_service") || (a.category || "").toLowerCase() === categoryFilter.toLowerCase() || (categoryFilter.toLowerCase() === "hgv" && a.asset_code.toUpperCase() === "C545766")) &&
     [a.asset_code, a.description, a.category, a.registration, a.location, a.manufacturer, a.model]
       .filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
-  ), [rows, search, categoryFilter, statusFilter, allocatedAssetIds]);
+  ), [rows, search, categoryFilter, statusFilter, allocatedAssetIds, ownershipFilter]);
 
   const categoryOptions = useMemo(
     () => Array.from(new Set([...categories, ...rows.map((r) => r.category || "").filter(Boolean)])).sort(),
@@ -199,6 +205,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setLolerRecordId(null);
     setForm({
       asset_code: asset.asset_code || "",
+      ownership_type:asset.ownership_type||"owned",
+      hire_supplier:asset.hire_supplier||"",
       description: asset.description || "",
       category: asset.category || "",
       manufacturer: asset.manufacturer || "",
@@ -261,6 +269,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
     const payload = {
       asset_code: form.asset_code.trim(),
+      ownership_type:form.ownership_type,
+      hire_supplier:form.ownership_type==="hired_in"?(form.hire_supplier.trim()||null):null,
       description: form.description.trim(),
       category: form.category.trim() || null,
       manufacturer: form.manufacturer.trim() || null,
@@ -276,6 +286,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       tacho_calibration_due: (form.category || "").trim().toLowerCase() === "hgv" ? form.tacho_calibration_due || null : null
     };
 
+    if (payload.ownership_type==="hired_in"&&!payload.hire_supplier){setError("Enter the hire company for hired-in plant.");setSaving(false);return;}
     if (!payload.asset_code || !payload.description) {
       setError("Enter an asset code and description.");
       setSaving(false);
@@ -288,7 +299,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     }
 
     const result = editing === "new"
-      ? await supabase.from("assets").insert(payload).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due").single()
+      ? await supabase.from("assets").insert(payload).select("id, asset_code, ownership_type, hire_supplier, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due").single()
       : await supabase.from("assets").update(payload).eq("id", editing).select("id, asset_code, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status").single();
 
     let saveError = result.error;
@@ -477,6 +488,8 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "0 14px" }}>
         <label style={labelStyle}>Asset code *<input style={fieldStyle} required value={form.asset_code} onChange={(e) => setForm({ ...form, asset_code: e.target.value })} placeholder="Enter JT Utilities asset number"/></label>
         <label style={labelStyle}>Description *<input style={fieldStyle} required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Asset description"/></label>
+        <label style={labelStyle}>Ownership<select style={fieldStyle} value={form.ownership_type} onChange={e=>setForm({...form,ownership_type:e.target.value as "owned"|"hired_in"})}><option value="owned">JT Utilities owned</option><option value="hired_in">Hired-in plant</option></select></label>
+        {form.ownership_type==="hired_in"&&<label style={labelStyle}>Hire company<input required style={fieldStyle} value={form.hire_supplier} onChange={e=>setForm({...form,hire_supplier:e.target.value})} placeholder="Name of hire supplier"/></label>}
         <label style={labelStyle}>Category<select style={fieldStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="">Select category</option>{categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
         <label style={labelStyle}>Manufacturer<input style={fieldStyle} value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}/></label>
         <label style={labelStyle}>Model<input style={fieldStyle} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}/></label>
@@ -504,7 +517,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     </form>}
 
     <div className="toolbar">
-      <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
+      <div className="search"><Search size={17}/><input placeholder="Search asset code, description, registration or location…" value={search} onChange={(e) => setSearch(e.target.value)}/></div><select aria-label="Filter assets by ownership" value={ownershipFilter} onChange={e=>setOwnershipFilter(e.target.value)}><option value="all">All plant ownership</option><option value="owned">JT Utilities owned</option><option value="hired_in">Hired-in plant</option></select>
     </div>
     {categoryFilter.toLowerCase() === "hgv" && <div style={{background:"linear-gradient(115deg,#111827,#253449)",borderRadius:16,padding:"22px 24px",color:"#fff",marginBottom:18,display:"flex",justifyContent:"space-between",gap:16,flexWrap:"wrap",alignItems:"center"}}>
       <div><div style={{fontSize:11,fontWeight:800,letterSpacing:2,color:"#fda4af"}}>JT UTILITIES · FLEET COMPLIANCE</div><h2 style={{fontSize:25,margin:"7px 0"}}>HGV & trailer control centre</h2><div style={{color:"#cbd5e1",fontSize:13}}>HGVs and trailer C545766 · PMI · MOT · Tacho · VOR</div></div>
