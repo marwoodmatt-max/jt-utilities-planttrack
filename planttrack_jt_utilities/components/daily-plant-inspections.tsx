@@ -161,7 +161,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   async function download(row:InspectionRow){
     setError("");
     try{
-      const related=assetMap.get(row.asset_id);
+      const related=row.asset_id?assetMap.get(row.asset_id):undefined;
       const blob=await generateDailyInspectionPdf({
         assetName:related?[related.asset_code,related.description,related.serial_number].filter(Boolean).join(" - "):row.hired_plant_name||"Hired plant",
         operator:String(row.answers?._operator||"Not recorded"),
@@ -219,7 +219,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:12}}>
         {randomPhotoQuestions.map((prompt,i)=><label key={prompt} style={{margin:0,background:"#fff",border:"1px solid #d7dfe8",padding:12}}>
           <strong>{i+1}. {prompt}</strong>
-          <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required onChange={e=>uploadPhotoSelection(prompt,e.target.files?.[0])} style={{display:"block",width:"100%",marginTop:8,fontSize:12}}/>
+          <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required={!photos[prompt]} onChange={e=>uploadPhotoSelection(prompt,e.target.files?.[0])} style={{display:"block",width:"100%",marginTop:8,fontSize:12}}/>
           <small style={{display:"block",marginTop:7,color:photos[prompt]?"#176b35":"#9a3412"}}>{photos[prompt]?"Photo ready: "+photos[prompt].name:"Required photograph missing"}</small>
         </label>)}
         </div>
