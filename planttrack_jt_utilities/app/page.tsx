@@ -5,6 +5,7 @@ import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf } from "../lib/loler-pdf";
 import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
+import PlantDefectReview from "../components/plant-defect-review";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -672,6 +673,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Calander")}>Open Calander</button></div>
+          {isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}
           <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Calander")}/>
           <Calendar supabase={supabase}/>
           <WorkshopDashboardSummary supabase={supabase} onOpen={()=>setPage("Workshop job cards")}/>
@@ -679,7 +681,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} statusFilter={assetFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Vehicle VOR management"&&<AssetManager supabase={supabase} isAdmin={isAdmin} vorOnly onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
+        {page==="Workshop job cards"&&<>{isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}<WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
         {page==="Calander"&&<Calendar supabase={supabase}/>}
         {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&(isOperator||isAdmin)&&<DailyPlantInspections supabase={supabase}/>}
