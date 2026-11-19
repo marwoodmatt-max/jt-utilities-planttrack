@@ -44,7 +44,7 @@ const yesNoChecks = new Set([
   "Check lights / warning lights / beacon are working",
   "Check horn is working", "Lights-flashing and vehicle"
 ]);
-type PlantAsset={id:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
+type PlantAsset={id:string;status:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
 type InspectionRow={id:string;report_path:string|null;asset_id:string|null;project_id:string|null;hired_plant_name:string|null;hired_plant_reference:string|null;submitted_at:string;submitted_by:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null;status:string};
 const showDate=(date:string)=>new Date(date).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 const failAnswer=(answer:string)=>answer==="Unsafe"||answer==="No";
@@ -59,6 +59,7 @@ type Allocation={project_id:string;asset_id:string};
 
 export default function DailyPlantInspections({supabase}:{supabase:SupabaseClient}){
   const [assets,setAssets]=useState<PlantAsset[]>([]);
+  const [lockedAssets,setLockedAssets]=useState<Set<string>>(new Set());
   const [projects,setProjects]=useState<Project[]>([]);
   const [allocations,setAllocations]=useState<Allocation[]>([]);
   const [projectId,setProjectId]=useState("");
@@ -89,19 +90,23 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const [filter,setFilter]=useState("");
   const assetMap=new Map(assets.map(a=>[a.id,a]));
   const asset=assetMap.get(assetId);
+  const assetLocked=Boolean(assetId&&lockedAssets.has(assetId));
   const answered=dailyPlantChecks.filter(k=>Boolean(answers[k])).length;
   const defects=dailyPlantChecks.filter(k=>failAnswer(answers[k]));
   const score=dailyPlantChecks.filter(k=>isSuccess(answers[k])||answers[k]==="N/A").length;
   async function load(){
     setLoading(true);setError("");
     const [a,r,p,alloc]=await Promise.all([
-      supabase.from("assets").select("id,asset_code,ownership_type,hire_supplier,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
+      supabase.from("assets").select("id,asset_code,status,ownership_type,hire_supplier,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
       supabase.from("inspections").select("id,report_path,asset_id,project_id,hired_plant_name,hired_plant_reference,submitted_at,submitted_by,meter_reading,result,answers,comments,status").eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}).limit(200),
       supabase.from("projects").select("id,project_name,site_address,site_postcode").neq("status","archived").order("project_name"),
       supabase.from("project_allocations").select("project_id,asset_id").is("returned_at",null)
     ]);
     if(a.error||r.error||p.error||alloc.error)setError("Unable to load inspection records: "+(a.error||r.error||p.error||alloc.error)?.message);
     else{setAssets((a.data||[]) as PlantAsset[]);setRecords((r.data||[]) as InspectionRow[]);setProjects((p.data||[]) as Project[]);setAllocations((alloc.data||[]) as Allocation[]);}
+    const {data:locks,error:lockError}=await supabase.from("plant_safety_lockouts").select("asset_id").is("released_at",null);
+    if(lockError)setError("Unable to load safety holds: "+lockError.message);
+    else setLockedAssets(new Set((locks||[]).map(l=>l.asset_id)));
     setLoading(false);
   }
   useEffect(()=>{void load();},[supabase]);
@@ -261,6 +266,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         <label style={{margin:0}}>Date and time<input value={showDate(new Date().toISOString())} readOnly style={{width:"100%",marginTop:5}}/></label>
         <label style={{margin:0}}>Records hours reading<input required type="number" min="0" step="0.1" value={hours} onChange={e=>setHours(e.target.value)} placeholder="Hours" style={{width:"100%",marginTop:5}}/></label>
       </div>
+      {assetLocked&&<div role="alert" style={{padding:14,background:"#fee2e2",border:"2px solid #dc2626",fontWeight:700,color:"#991b1b"}}>SAFETY LOCKOUT — This machine is out of service. Do not operate it. You may record an inspection, but only an administrator can authorise its return to use after recorded defects are resolved.</div>}
       <div style={{padding:"12px 15px",background:"#fff5e9",borderTop:"1px solid #e7e8eb",borderBottom:"1px solid #e7e8eb",color:"#6e3214",fontSize:13,fontWeight:650}}>
         If any of the following critical components are found to be defective the equipment is to be Locked and Tagged out and reported immediately. it shall not be operated until the fault has been rectified.
       </div>
