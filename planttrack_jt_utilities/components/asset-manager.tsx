@@ -125,6 +125,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [includeCalculatedPmi,setIncludeCalculatedPmi]=useState(false);
   const [importConfirmed,setImportConfirmed]=useState(false);
   const [rows, setRows] = useState<AssetRow[]>([]);
+  const [lockedAssets,setLockedAssets]=useState<Set<string>>(new Set());
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -147,6 +148,9 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     if (loadError) setError("Could not load assets: " + loadError.message);
     else {
       const assetRows = (data || []) as AssetRow[];
+      const {data:locks,error:lockError}=await supabase.from("plant_safety_lockouts").select("asset_id").is("released_at",null);
+      if(lockError)setError("Asset safety holds could not be checked: "+lockError.message);
+      else setLockedAssets(new Set((locks||[]).map(l=>l.asset_id)));
       const {data:activeAllocations,error:allocationError}=await supabase.from("project_allocations").select("asset_id").is("returned_at",null);
       if(allocationError)setError("Assets loaded but allocations could not be checked: "+allocationError.message);
       const allocatedIds=new Set((activeAllocations||[]).map(a=>a.asset_id));
@@ -497,7 +501,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <label style={labelStyle}>Registration<input style={fieldStyle} value={form.registration} onChange={(e) => setForm({ ...form, registration: e.target.value })}/></label>
         <label style={labelStyle}>Location<input style={fieldStyle} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}/></label>
         <label style={labelStyle}>Hour meter<input style={fieldStyle} type="number" min="0" step="0.1" value={form.hour_meter} onChange={(e) => setForm({ ...form, hour_meter: e.target.value })}/></label>
-        <label style={labelStyle}>Status<select disabled={editing!=="new"&&rows.some(a=>a.id===editing&&a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase()))} style={fieldStyle} value={["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{(["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) ? vehicleStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
+        <label style={labelStyle}>Status<select disabled={editing!=="new"&&(lockedAssets.has(editing)||rows.some(a=>a.id===editing&&a.status==="out_of_service"&&["hgv","vehicle","trailer"].includes((a.category||"").toLowerCase())))} style={fieldStyle} value={["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) && form.status !== "out_of_service" ? "available" : form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{(["hgv","vehicle","trailer"].includes((form.category || "").toLowerCase()) ? vehicleStatuses : statuses).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
         {(form.category || "").trim().toLowerCase() === "hgv" && <>
           <label style={labelStyle}>Next PMI<input style={fieldStyle} type="date" value={form.pmi_next_due} onChange={(e) => setForm({ ...form, pmi_next_due: e.target.value })}/></label>
           <label style={labelStyle}>Last PMI<input style={fieldStyle} type="date" value={form.pmi_last_completed} onChange={(e) => setForm({ ...form, pmi_last_completed: e.target.value })}/></label>
@@ -533,7 +537,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
         <td><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
-        <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span></td>
+        <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span>{lockedAssets.has(a.id)&&<span className="tag red" style={{marginLeft:6}}>SAFETY LOCKOUT</span>}</td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button> <button className="secondary" disabled={saving} onClick={() => void deleteAsset(a)}><Trash2 size={14}/> Delete</button></td>}
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
