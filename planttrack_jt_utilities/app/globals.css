@@ -300,3 +300,23 @@ tbody tr:hover{background:#fff5f6}
   .topbar{border-bottom-width:2px}
   .workshop-mobile-job{border-left:3px solid var(--red)}
 }
+
+
+/* Operator-only daily inspections; administrators retain the complete mobile workspace. */
+.operator-shell .sidebar,.operator-shell .scrim{display:none!important}
+.operator-shell .main{margin-left:0!important;width:100%!important;min-width:0}
+.operator-shell .topbar{justify-content:flex-start;padding-left:clamp(12px,3vw,32px)}
+.operator-shell .content{max-width:1120px;margin:0 auto}
+.operator-shell .page-head>.primary{display:none}
+@media(max-width:700px){
+  .shell.office-shell .sidebar{display:flex!important}
+  .shell.office-shell .sidebar:not(.open){transform:translateX(-100%)}
+  .shell.office-shell .sidebar.open{transform:translateX(0)}
+  .shell.office-shell .scrim{display:block!important}
+  .shell.office-shell .topbar .mobile-menu{display:block!important;color:#fff;margin-right:9px;cursor:pointer}
+  .shell.office-shell .topbar .top-actions{display:flex!important}
+  .operator-shell .topbar{padding:8px 12px;min-height:58px}
+  .operator-shell .content{padding:15px 12px 90px}
+  .operator-shell .page-head .eyebrow{display:block!important}
+  .operator-shell .page-head p{display:block!important}
+}
