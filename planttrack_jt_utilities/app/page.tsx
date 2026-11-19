@@ -547,6 +547,33 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   const [notificationsLoading,setNotificationsLoading]=useState(false);
   const [notificationsError,setNotificationsError]=useState("");
   const [notifications,setNotifications]=useState<{key:string;label:string;details:string;page:string;priority:number}[]>([]);
+  const [jobCounts,setJobCounts]=useState({new:0,assigned:0,approval:0});
+  const [jobsLoading,setJobsLoading]=useState(true);
+  const [jobsError,setJobsError]=useState("");
+  useEffect(()=>{
+    if(!isAdmin)return;
+    let active=true;
+    const loadJobs=async()=>{
+      const {data,error}=await supabase.from("workshop_job_cards").select("status").in("status",["New","Assigned","In progress","Returned for correction","Awaiting office approval"]);
+      if(!active)return;
+      if(error)setJobsError("Could not load job card counts: "+error.message);
+      else{
+        setJobsError("");
+        setJobCounts({
+          new:(data||[]).filter(j=>j.status==="New").length,
+          assigned:(data||[]).filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length,
+          approval:(data||[]).filter(j=>j.status==="Awaiting office approval").length
+        });
+      }
+      setJobsLoading(false);
+    };
+    void loadJobs();
+    const channel=supabase.channel("dashboard-job-card-counts").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void loadJobs()).subscribe();
+    const onFocus=()=>void loadJobs();
+    window.addEventListener("focus",onFocus);
+    return()=>{active=false;window.removeEventListener("focus",onFocus);void supabase.removeChannel(channel);};
+  },[supabase,isAdmin]);
+
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
   async function loadNotifications(){
     setNotificationsLoading(true);setNotificationsError("");
@@ -680,6 +707,15 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
             ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="Vehicle VOR"?"VOR":label);setCategoryFilter(label==="Vehicle VOR"?"Vehicle VOR":label==="Out of service"?"Plant Out of Service":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
+          {isAdmin&&<div className="stats" style={{marginTop:16}}>
+            {[
+              ["Job cards to review",jobsLoading?"…":String(jobCounts.new),"New jobs and plant defects waiting for admin review",ClipboardCheck],
+              ["Jobs with mechanics",jobsLoading?"…":String(jobCounts.assigned),"Assigned or in progress",Wrench],
+              ["Awaiting sign-off",jobsLoading?"…":String(jobCounts.approval),"Completed work needing office approval",FileCheck2]
+            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer",borderTopColor:label==="Job cards to review"&&jobCounts.new>0?"#e31b36":undefined}} onClick={()=>setPage("Workshop job cards")}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
+          </div>}
+          {jobsError&&<p className="auth-error" role="alert">{jobsError}</p>}
+
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Calander")}>Open Calander</button></div>
           {isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}
           <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Calander")}/>
