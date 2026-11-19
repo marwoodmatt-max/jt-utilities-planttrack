@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateDailyInspectionPdf } from "../lib/daily-inspection-pdf";
 
@@ -62,6 +62,9 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const [comments,setComments]=useState("");
   const [operator,setOperator]=useState("");
   const [confirmed,setConfirmed]=useState(false);
+  const [signature,setSignature]=useState("");
+  const signatureRef=useRef<HTMLCanvasElement|null>(null);
+  const drawingRef=useRef(false);
   const [saving,setSaving]=useState(false);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -90,12 +93,17 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     if(active)setOperator(profile?.full_name||data.user?.email||"");
   });return ()=>{active=false};},[supabase]);
   function chooseAsset(id:string){setAssetId(id);const a=assetMap.get(id);setHours(a?.hour_meter==null?"":String(a.hour_meter));setSite(a?.location||"");}
+  function pointerPosition(e:React.PointerEvent<HTMLCanvasElement>){const canvas=e.currentTarget,rect=canvas.getBoundingClientRect();return {x:(e.clientX-rect.left)*canvas.width/rect.width,y:(e.clientY-rect.top)*canvas.height/rect.height};}
+  function beginSignature(e:React.PointerEvent<HTMLCanvasElement>){const canvas=e.currentTarget,ctx=canvas.getContext("2d");if(!ctx)return;canvas.setPointerCapture(e.pointerId);const p=pointerPosition(e);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.strokeStyle="#17212b";ctx.lineWidth=2.5;ctx.lineCap="round";ctx.lineJoin="round";drawingRef.current=true;}
+  function drawSignature(e:React.PointerEvent<HTMLCanvasElement>){if(!drawingRef.current)return;const ctx=e.currentTarget.getContext("2d");if(!ctx)return;const p=pointerPosition(e);ctx.lineTo(p.x,p.y);ctx.stroke();}
+  function endSignature(e:React.PointerEvent<HTMLCanvasElement>){if(!drawingRef.current)return;drawingRef.current=false;setSignature(e.currentTarget.toDataURL("image/png"));}
+  function clearSignature(){const canvas=signatureRef.current;if(canvas)canvas.getContext("2d")?.clearRect(0,0,canvas.width,canvas.height);setSignature("");}
   function updateAnswer(key:string,value:string){setAnswers(old=>({...old,[key]:value}));setMessage("");}
   async function save(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();if(saving)return;
     setError("");setMessage("");
     if(answered!==32){setError("Complete all 32 checks. Select N/A for items that do not apply.");return;}
-    if(!assetId||!operator.trim()||!confirmed){setError("Select a machine and confirm the operator declaration.");return;}
+    if(!assetId||!operator.trim()||!confirmed||!signature){setError("Select a machine, draw your signature and confirm the operator declaration.");return;}
     if(hours.trim()===""||!Number.isFinite(Number(hours))||Number(hours)<0){setError("Enter a valid hours reading.");return;}
     if(defects.length&&!comments.trim()){setError("Describe all unsafe items in the comments. Defective critical equipment must not be operated.");return;}
     setSaving(true);
@@ -103,14 +111,14 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     if(userError||!data.user){setError("Session expired. Please sign in again.");setSaving(false);return;}
     const {error:saveError}=await supabase.from("inspections").insert({
       asset_id:assetId,inspection_type:"daily_plant_pre_start",result:defects.length?"fail":"pass",
-      answers:{...answers,_template:"JT Utilities Plant & Machinery Pre Start Inspection",_template_version:"2026-09",_operator:operator.trim(),_location:site.trim(),_signed:true,_score:score},
+      answers:{...answers,_template:"JT Utilities Plant & Machinery Pre Start Inspection",_template_version:"2026-09",_operator:operator.trim(),_location:site.trim(),_signed:true,_signature:signature,_score:score},
       comments:comments.trim()||null,meter_reading:Number(hours),submitted_by:data.user.id,
       status:defects.length?"defect_reported":"submitted"
     });
     if(saveError)setError("Unable to save inspection: "+saveError.message);
     else{
       setMessage(defects.length?"Inspection saved with defects. STOP: lock/tag out defective critical equipment and report it immediately. This submission does not automatically change the asset's availability.":"Inspection saved successfully. You can download its report from the history below.");
-      setAnswers({});setComments("");setConfirmed(false);setHours("");setAssetId("");setSite("");await load();
+      setAnswers({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setSite("");await load();
     }
     setSaving(false);
   }
@@ -171,9 +179,9 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         {defects.length>0&&<p role="alert" style={{color:"#b91c1c",fontWeight:750}}>Unsafe / No selected on {defects.length} check(s). Equipment with critical defects must not be operated. Report faults immediately.</p>}
         <label>Comments / defect details{defects.length>0?" (required)":""}<textarea rows={3} required={defects.length>0} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Enter observations, faults or remedial action" style={{width:"100%",marginTop:7}}/></label>
         <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>Signed by operator</p>
-        <div style={{border:"1px solid #cbd5e1",padding:12,background:"#f8fafc",fontSize:13}}>{operator||"Signed-in operator"}<div style={{color:"#64748b",fontSize:11}}>Electronic acknowledgement on submission · Date/time automatically recorded</div></div>
+        <div style={{border:"1px solid #cbd5e1",padding:12,background:"#f8fafc",fontSize:13}}><strong>{operator||"Signed-in operator"}</strong><div style={{fontSize:12,margin:"7px 0"}}>Draw your signature in the box below (finger, mouse or stylus).</div><canvas ref={signatureRef} width={650} height={125} aria-label="Operator handwritten signature pad" onPointerDown={beginSignature} onPointerMove={drawSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{display:"block",width:"100%",maxWidth:650,height:125,background:"#fff",border:"1px solid #9da8b5",touchAction:"none",cursor:"crosshair"}}/><button type="button" className="secondary" onClick={clearSignature} style={{marginTop:8}}>Clear signature</button><div style={{color:"#64748b",fontSize:11,marginTop:7}}>Signature and submission date/time are stored with the inspection report.</div></div>
         <label style={{display:"flex",alignItems:"start",gap:9,fontWeight:500}}><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I have carried out the above checks and confirmed that I have checked around the machine before moving off.</label>
-        <button type="submit" className="primary" disabled={saving||loading||!assetId||answered!==32||!confirmed}>{saving?"Saving inspection…":"Submit and sign inspection"}</button>
+        <button type="submit" className="primary" disabled={saving||loading||!assetId||answered!==32||!confirmed||!signature}>{saving?"Saving inspection…":"Submit and sign inspection"}</button>
         <div style={{fontSize:12,color:"#667085",marginTop:8}}>Complete all 32 checks. Use N/A for items that do not apply to this machine. A submitted inspection cannot be edited.</div>
       </div>
     </form>
