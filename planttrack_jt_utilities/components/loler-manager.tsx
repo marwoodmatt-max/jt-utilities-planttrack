@@ -7,7 +7,7 @@ import { Pencil, RefreshCw, Save, X } from "lucide-react";
 function formatDate(value: string | null) {
   if (!value) return "Not recorded";
   const [year, month, day] = value.slice(0, 10).split("-");
-  return `${day} ${month} ${year}`;
+  return `${day}-${month}-${year}`;
 }
 
 type Row = {
