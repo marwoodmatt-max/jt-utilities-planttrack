@@ -19,6 +19,11 @@ function displayStatus(status:string,category?:string|null) {
   if(status==="out_of_service"&&["hgv","vehicle","trailer"].includes((category||"").toLowerCase()))return "VOR";
   return labels[status] || status;
 }
+// Format displayed dates only. Keep database ISO dates and native date input values unchanged.
+function displayUkDate(value:string|null|undefined):string {
+ if(!value)return "—";
+ return String(value).replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g,(_match,year,month,day)=>day+"-"+month+"-"+year);
+}
 const nav = [
   ["Dashboard",LayoutDashboard],["Plant register",Truck],["Projects",ClipboardCheck],["Calander",CalendarDays],["MOT Tracker",FileCheck2],
   ["Plant checks",ClipboardCheck],["LOLER & certificates",FileCheck2],
@@ -249,7 +254,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
         const tests=Array.isArray(vehicle?.motTests)?vehicle.motTests:[];
         return <div key={i}><p><b>{vehicle?.registration||vehicle?.registrationNumber||"Vehicle"}</b> · {[vehicle?.make,vehicle?.model].filter(Boolean).join(" ")}</p>
           <div className="table-wrap"><table><thead><tr><th>Test date</th><th>Result</th><th>Expiry date</th><th>Mileage</th></tr></thead><tbody>
-            {tests.map((test:any,j:number)=><tr key={j}><td>{test.completedDate?String(test.completedDate).slice(0,10):"—"}</td><td>{test.testResult||"—"}</td><td>{test.expiryDate||"—"}</td><td>{test.odometerValue||"—"} {test.odometerUnit||""}</td></tr>)}
+            {tests.map((test:any,j:number)=><tr key={j}><td>{displayUkDate(test.completedDate?String(test.completedDate).slice(0,10):null)}</td><td>{test.testResult||"—"}</td><td>{displayUkDate(test.expiryDate)}</td><td>{test.odometerValue||"—"} {test.odometerUnit||""}</td></tr>)}
           </tbody></table></div>
           {!tests.length&&<p className="muted">DVSA returned no MOT tests for this registration.</p>}
         </div>;
@@ -266,7 +271,7 @@ function MotChecker({supabase}:{supabase:SupabaseClient}){
   </section>;
 }
 function GeneralRepairPaperForm({job,asset}: {job:any;asset:any}){
- const field=(label:string,value:unknown)=><div style={{border:"1px solid #94a3b8",padding:10,minHeight:58}}><strong style={{fontSize:12}}>{label}</strong><div style={{whiteSpace:"pre-wrap",marginTop:5}}>{String(value??"")||"—"}</div></div>;
+ const field=(label:string,value:unknown)=><div style={{border:"1px solid #94a3b8",padding:10,minHeight:58}}><strong style={{fontSize:12}}>{label}</strong><div style={{whiteSpace:"pre-wrap",marginTop:5}}>{displayUkDate(String(value??""))}</div></div>;
  return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:16,margin:"12px 0"}}>
   <h3 style={{textAlign:"center",color:"#17212b"}}>JT UTILITIES LTD · ASSET JOB CARD</h3>
   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))"}}>
