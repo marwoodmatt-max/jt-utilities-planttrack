@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf } from "../lib/loler-pdf";
 import LolerManager from "../components/loler-manager";
+import DailyPlantInspections from "../components/daily-plant-inspections";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -680,7 +681,7 @@ function Dashboard({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean})
         {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
         {page==="Calander"&&<Calendar supabase={supabase}/>}
         {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
-        {page==="Plant checks"&&<Checks action={action}/>}
+        {page==="Plant checks"&&<DailyPlantInspections supabase={supabase}/>}
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<WorkshopJobs supabase={supabase}/>}
         {page==="Users & sign-offs"&&<UsersPanel supabase={supabase} isAdmin={isAdmin}/>}
@@ -961,7 +962,6 @@ function Projects({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}) 
   </section>;
 }
 
-function Checks({action}:{action:(s:string)=>void}) {const items=["Engine oil and coolant","Brakes and steering","Tyres / tracks","Hydraulic hoses and leaks","Lights and warning devices","Safety equipment","General condition"];const [answers,setAnswers]=useState<Record<string,string>>({});return <section className="panel"><div className="panel-head"><div><h3>Operator plant check</h3><p>Daily plant check template — not yet connected to live submissions</p></div><Tag tone="blue">Draft</Tag></div><p className="muted">This checklist is a template only. Live asset selection, individual sign-off and submission are not yet connected.</p>{items.map(i=><div className="check-row" key={i}><b>{i}</b><div><button className={answers[i]==="Pass"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"Pass"})}>Pass</button><button className={answers[i]==="Fail"?"choice fail selected": "choice fail"} onClick={()=>setAnswers({...answers,[i]:"Fail"})}>Fail</button><button className={answers[i]==="N/A"?"choice selected": "choice"} onClick={()=>setAnswers({...answers,[i]:"N/A"})}>N/A</button></div></div>)}<label>Comments<textarea placeholder="Record observations or defects..."/></label><button className="primary" onClick={()=>action("Demo form only. Live authenticated submission and defect escalation require backend setup.")}>Submit check for sign-off</button></section>}
 function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}){
  const [users,setUsers]=useState<{id:string;email:string;full_name:string;role:string;active:boolean}[]>([]);
  const [name,setName]=useState("");const [email,setEmail]=useState("");const [role,setRole]=useState("operator");
