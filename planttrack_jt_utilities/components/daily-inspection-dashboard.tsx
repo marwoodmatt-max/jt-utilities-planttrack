@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AlertTriangle, Camera, CheckCircle2, ClipboardCheck, Download, RefreshCw, X } from "lucide-react";
 
-type Asset={id:string;asset_code:string;description:string|null;registration:string|null;ownership_type:string|null};
+type Asset={id:string;asset_code:string;description:string|null;registration:string|null;ownership_type:string|null;category:string|null};
 type Project={id:string;project_name:string;status:string};
 type Allocation={id:string;asset_id:string;project_id:string;allocated_at:string;returned_at:string|null};
 type Inspection={id:string;asset_id:string|null;project_id:string|null;submitted_at:string;result:string;answers:Record<string,unknown>|null;report_path:string|null;comments:string|null};
@@ -36,7 +36,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   setLoading(true);setError("");
   try{
    const [a,p,al]=await Promise.all([
-    supabase.from("assets").select("id,asset_code,description,registration,ownership_type").order("asset_code").limit(2000),
+    supabase.from("assets").select("id,asset_code,description,registration,ownership_type,category").order("asset_code").limit(2000),
     supabase.from("projects").select("id,project_name,status").eq("status","active").order("project_name").limit(500),
     supabase.from("project_allocations").select("id,asset_id,project_id,allocated_at,returned_at").is("returned_at",null).order("allocated_at",{ascending:false}).limit(3000)
    ]);
@@ -76,6 +76,8 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   const today=new Date();
   for(const allocation of allocations){
    if(!projectById.has(allocation.project_id)||!assetById.has(allocation.asset_id))continue;
+   // Vehicle and trailer fleets use separate roadworthiness/PMI processes.
+   if(!["plant","agricultural equipment"].includes((assetById.get(allocation.asset_id)?.category||"").trim().toLowerCase()))continue;
    // Only allocations already in effect on the chosen day; future allocations must not count.
    if(allocation.allocated_at&&ukDate(new Date(allocation.allocated_at))>date)continue;
    const previous=current.get(allocation.asset_id);
@@ -124,7 +126,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   finally{setLinkBusy(null);}
  }
  return <section className="panel" id="daily-inspection-dashboard" style={{marginTop:24,borderTop:"4px solid #e31b36"}}>
-  <div className="panel-head"><div><h3><ClipboardCheck size={19} style={{verticalAlign:"-4px",marginRight:8,color:"#e31b36"}}/>Daily Plant Inspection Compliance</h3><p>Machines allocated to active projects right now · Only recorded daily pre-start inspections count</p></div><button type="button" className="secondary" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/> Refresh</button></div>
+  <div className="panel-head"><div><h3><ClipboardCheck size={19} style={{verticalAlign:"-4px",marginRight:8,color:"#e31b36"}}/>Daily Plant Inspection Compliance</h3><p>Plant and agricultural machinery allocated to active projects · Only recorded daily pre-start inspections count</p></div><button type="button" className="secondary" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/> Refresh</button></div>
   <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"end",margin:"15px 0"}}>
    <label style={{fontSize:12,fontWeight:700}}>Inspection date
     <input aria-label="Inspection date" type="date" max={ukDate(new Date())} value={date} onChange={e=>setDate(e.target.value)} style={{display:"block",marginTop:5,minWidth:145}}/>
@@ -142,7 +144,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   {loading?<p>Loading inspection compliance…</p>:<>
    <div className="stats" style={{margin:"15px 0 18px"}}>
     {[
-      ["Allocated machines",totals.total,"Active project allocations",ClipboardCheck],
+      ["Allocated plant",totals.total,"Plant on active projects",ClipboardCheck],
       ["Checked today",totals.checked,"No reported defects on selected date",CheckCircle2],
       ["Not checked",totals.missing,"No daily check submitted",AlertTriangle],
       ["Defects reported",totals.defect,"At least one failed daily check",AlertTriangle]
@@ -161,7 +163,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
       </div>:<span style={{color:"#64748b"}}>Awaiting inspection</span>}</td>
     </tr>)}
    </tbody></table>{visible.length===0&&<p style={{padding:14}}>{lines.length===0?"No machines are currently allocated to an active project for this date.":"No machines match the selected filters."}</p>}</div>
-   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. This report uses current active project allocations, not historical allocation records. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
+   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. This report uses current active project allocations for plant and agricultural equipment, not historical allocation records. Vehicles and trailers use their own inspection processes. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
   </>}
   {photoRecord&&<div style={{marginTop:18,padding:14,border:"1px solid #e2e8f0",borderRadius:6}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h4>Inspection photographs · {displayDate(date)}</h4><button className="secondary" type="button" onClick={()=>{setPhotoRecord(null);setPhotoLinks([]);}}><X size={14}/> Close</button></div>
