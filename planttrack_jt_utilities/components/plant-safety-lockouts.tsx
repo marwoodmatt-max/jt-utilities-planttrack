@@ -31,7 +31,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
     else{setHolds((h.data||[]) as Hold[]);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));}
     setLoading(false);
   },[supabase,assetId]);
-  useEffect(()=>{void load();const channel=supabase.channel("plant-safety-holds-"+(assetId||"all")).on("postgres_changes",{event:"*",schema:"public",table:"plant_safety_lockouts"},()=>void load()).subscribe();return()=>{void supabase.removeChannel(channel);};},[supabase,assetId,load]);
+  useEffect(()=>{void load();const channel=supabase.channel("plant-safety-holds-"+(assetId||"all")).on("postgres_changes",{event:"*",schema:"public",table:"plant_safety_lockouts"},()=>void load()).on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();const refresh=()=>void load();window.addEventListener("focus",refresh);return()=>{window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,assetId,load]);
   const active=holds.filter(h=>!h.released_at),history=holds.filter(h=>Boolean(h.released_at));
   const byAsset=Array.from(new Set(active.map(h=>h.asset_id)));
   const associated=(hold:Hold)=>jobs.find(job=>job.inspection_id===hold.inspection_id);
