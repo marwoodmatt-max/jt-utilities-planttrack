@@ -44,7 +44,7 @@ const yesNoChecks = new Set([
   "Check lights / warning lights / beacon are working",
   "Check horn is working", "Lights-flashing and vehicle"
 ]);
-type PlantAsset={id:string;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
+type PlantAsset={id:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
 type InspectionRow={id:string;asset_id:string|null;project_id:string|null;hired_plant_name:string|null;hired_plant_reference:string|null;submitted_at:string;submitted_by:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null;status:string};
 const showDate=(date:string)=>new Date(date).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
 const failAnswer=(answer:string)=>answer==="Unsafe"||answer==="No";
@@ -94,7 +94,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   async function load(){
     setLoading(true);setError("");
     const [a,r,p,alloc]=await Promise.all([
-      supabase.from("assets").select("id,asset_code,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
+      supabase.from("assets").select("id,asset_code,ownership_type,hire_supplier,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
       supabase.from("inspections").select("id,asset_id,project_id,hired_plant_name,hired_plant_reference,submitted_at,submitted_by,meter_reading,result,answers,comments,status").eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}).limit(200),
       supabase.from("projects").select("id,project_name,site_address,site_postcode").neq("status","archived").order("project_name"),
       supabase.from("project_allocations").select("project_id,asset_id").is("returned_at",null)
@@ -110,6 +110,8 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     if(active)setOperator(profile?.full_name||data.user?.email||"");
   });return ()=>{active=false};},[supabase]);
   const projectAssets=projectId?assets.filter(a=>allocations.some(x=>x.project_id===projectId&&x.asset_id===a.id)):[];
+  const ownedProjectAssets=projectAssets.filter(a=>a.ownership_type!=="hired_in");
+  const hiredProjectAssets=projectAssets.filter(a=>a.ownership_type==="hired_in");
   function selectProject(id:string){setProjectId(id);setAssetId("");setHiredPlant("");setHiredReference("");const p=projects.find(p=>p.id===id);setSite([p?.site_address,p?.site_postcode].filter(Boolean).join(", "));}
   function selectSource(value:"own"|"hired"){setPlantSource(value);setAssetId("");setHiredPlant("");setHiredReference("");setHours("");}
   function chooseAsset(id:string){setAssetId(id);const a=assetMap.get(id);setHours(a?.hour_meter==null?"":String(a.hour_meter));setSite(a?.location||"");}
@@ -126,7 +128,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     e.preventDefault();if(saving)return;
     setError("");setMessage("");
     if(answered!==32){setError("Complete all 32 checks. Select N/A for items that do not apply.");return;}
-    if(!projectId||((plantSource==="own"&&!assetId)||(plantSource==="hired"&&!hiredPlant.trim()))||!operator.trim()||!confirmed||!signature){setError("Select a project and machine (or enter hired plant), sign and confirm the declaration.");return;}
+    if(!projectId||((plantSource==="own"&&!assetId)||(plantSource==="hired"&&!assetId&&!hiredPlant.trim()))||!operator.trim()||!confirmed||!signature){setError("Select a project and machine (or enter hired plant), sign and confirm the declaration.");return;}
     if(hours.trim()===""||!Number.isFinite(Number(hours))||Number(hours)<0){setError("Enter a valid hours reading.");return;}
     if(defects.length&&!comments.trim()){setError("Describe all unsafe items in the comments. Defective critical equipment must not be operated.");return;}
     if(randomPhotoQuestions.length!==3||randomPhotoQuestions.some(prompt=>!photos[prompt])){setError("Take each of the three randomly selected machine photographs before submitting.");return;}
@@ -145,8 +147,8 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     }
     const {error:saveError}=await supabase.from("inspections").insert({
       id:inspectionId,project_id:projectId,
-      hired_plant_name:plantSource==="hired"?hiredPlant.trim():null,hired_plant_reference:plantSource==="hired"?(hiredReference.trim()||null):null,
-      asset_id:plantSource==="own"?assetId:null,inspection_type:"daily_plant_pre_start",result:defects.length?"fail":"pass",
+      hired_plant_name:plantSource==="hired"&&!assetId?hiredPlant.trim():null,hired_plant_reference:plantSource==="hired"&&!assetId?(hiredReference.trim()||null):null,
+      asset_id:assetId||null,inspection_type:"daily_plant_pre_start",result:defects.length?"fail":"pass",
       answers:{...answers,_template:"JT Utilities Plant & Machinery Pre Start Inspection",_template_version:"2026-09",_operator:operator.trim(),_location:site.trim(),_signed:true,_signature:signature,_score:score,_photo_evidence:evidence,_project_name:projects.find(p=>p.id===projectId)?.project_name||""},
       comments:comments.trim()||null,meter_reading:Number(hours),submitted_by:data.user.id,
       status:defects.length?"defect_reported":"submitted"
@@ -201,7 +203,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         <label style={{margin:0}}>Location<input value={site} onChange={e=>setSite(e.target.value)} style={{width:"100%",marginTop:5}} placeholder="Site / location"/></label>
         <label style={{margin:0}}>Project<select required value={projectId} onChange={e=>selectProject(e.target.value)} style={{width:"100%",marginTop:5}}><option value="">Select project</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select></label>
         <label style={{margin:0}}>Plant type<select value={plantSource} onChange={e=>selectSource(e.target.value as "own"|"hired")} style={{width:"100%",marginTop:5}}><option value="own">JT Utilities plant</option><option value="hired">Hired-in plant</option></select></label>
-        {plantSource==="own"?<label style={{margin:0}}>Select Asset<select required value={assetId} disabled={!projectId} onChange={e=>chooseAsset(e.target.value)} style={{width:"100%",marginTop:5}}><option value="">Choose machine allocated to project</option>{projectAssets.map(a=><option key={a.id} value={a.id}>{a.asset_code} - {a.description||a.registration||a.category||"Plant"}</option>)}</select>{projectId&&projectAssets.length===0&&<small>No company assets allocated to this project. Allocate plant in Projects or choose Hired-in plant.</small>}</label>:<><label style={{margin:0}}>Hired-in machine / description<input required value={hiredPlant} onChange={e=>setHiredPlant(e.target.value)} placeholder="e.g. 6-tonne excavator / Make and model" maxLength={200} style={{width:"100%",marginTop:5}}/></label><label style={{margin:0}}>Hire reference / fleet ID<input value={hiredReference} maxLength={100} onChange={e=>setHiredReference(e.target.value)} placeholder="Hire company reference or serial" style={{width:"100%",marginTop:5}}/></label></>}
+        {plantSource==="own"?<label style={{margin:0}}>Select Asset<select required value={assetId} disabled={!projectId} onChange={e=>chooseAsset(e.target.value)} style={{width:"100%",marginTop:5}}><option value="">Choose machine allocated to project</option>{ownedProjectAssets.map(a=><option key={a.id} value={a.id}>{a.asset_code} - {a.description||a.registration||a.category||"Plant"}</option>)}</select>{projectId&&ownedProjectAssets.length===0&&<small>No company assets allocated to this project. Allocate plant in Projects or choose Hired-in plant.</small>}</label>:<><label style={{margin:0}}>Select hired-in plant from Asset List<select value={assetId} disabled={!projectId} onChange={e=>{chooseAsset(e.target.value);setHiredPlant("");setHiredReference("");}}><option value="">New hired machine (enter below)</option>{hiredProjectAssets.map(a=><option key={a.id} value={a.id}>{a.asset_code} · {a.description} · {a.hire_supplier||"Hire company not recorded"}</option>)}</select></label>{!assetId&&<><label style={{margin:0}}>Hired-in machine / description<input required value={hiredPlant} onChange={e=>setHiredPlant(e.target.value)} placeholder="e.g. 6-tonne excavator / Make and model" maxLength={200} style={{width:"100%",marginTop:5}}/></label><label style={{margin:0}}>Hire reference / fleet ID<input value={hiredReference} maxLength={100} onChange={e=>setHiredReference(e.target.value)} placeholder="Hire company reference or serial" style={{width:"100%",marginTop:5}}/></label></>}</>}
         <label style={{margin:0}}>Date and time<input value={new Date().toLocaleString("en-GB",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/London"})} readOnly style={{width:"100%",marginTop:5}}/></label>
         <label style={{margin:0}}>Records hours reading<input required type="number" min="0" step="0.1" value={hours} onChange={e=>setHours(e.target.value)} placeholder="Hours" style={{width:"100%",marginTop:5}}/></label>
       </div>
@@ -230,7 +232,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>Signed by operator</p>
         <div style={{border:"1px solid #cbd5e1",padding:12,background:"#f8fafc",fontSize:13}}><strong>{operator||"Signed-in operator"}</strong><div style={{fontSize:12,margin:"7px 0"}}>Draw your signature in the box below (finger, mouse or stylus).</div><canvas ref={signatureRef} width={650} height={125} aria-label="Operator handwritten signature pad" onPointerDown={beginSignature} onPointerMove={drawSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{display:"block",width:"100%",maxWidth:650,height:125,background:"#fff",border:"1px solid #9da8b5",touchAction:"none",cursor:"crosshair"}}/><button type="button" className="secondary" onClick={clearSignature} style={{marginTop:8}}>Clear signature</button><div style={{color:"#64748b",fontSize:11,marginTop:7}}>Signature and submission date/time are stored with the inspection report.</div></div>
         <label style={{display:"flex",alignItems:"start",gap:9,fontWeight:500}}><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I have carried out the above checks and confirmed that I have checked around the machine before moving off.</label>
-        <button type="submit" className="primary" disabled={saving||loading||!projectId||(plantSource==="own"?!assetId:!hiredPlant.trim())||answered!==32||randomPhotoQuestions.some(prompt=>!photos[prompt])||!confirmed||!signature}>{saving?"Saving inspection…":"Submit and sign inspection"}</button>
+        <button type="submit" className="primary" disabled={saving||loading||!projectId||(plantSource==="own"?!assetId:!assetId&&!hiredPlant.trim())||answered!==32||randomPhotoQuestions.some(prompt=>!photos[prompt])||!confirmed||!signature}>{saving?"Saving inspection…":"Submit and sign inspection"}</button>
         <div style={{fontSize:12,color:"#667085",marginTop:8}}>Complete all 32 checks. Use N/A for items that do not apply to this machine. A submitted inspection cannot be edited.</div>
       </div>
     </form>
