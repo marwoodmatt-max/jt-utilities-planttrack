@@ -320,3 +320,20 @@ tbody tr:hover{background:#fff5f6}
   .operator-shell .page-head .eyebrow{display:block!important}
   .operator-shell .page-head p{display:block!important}
 }
+
+
+/* Daily inspection cards: equal-size grid with a two-column wrap on smaller screens. */
+.daily-compliance-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 12px;align-items:stretch}
+.daily-compliance-stat{display:flex;flex-direction:column;min-width:0;min-height:165px;padding:18px 19px;background:#fff;border:1px solid var(--line);border-top:4px solid #262b35;border-radius:9px;box-shadow:0 5px 14px rgba(25,30,40,.04)}
+.daily-compliance-stat--success{border-top-color:#16834b}
+.daily-compliance-stat--warning{border-top-color:#e3a21b}
+.daily-compliance-stat--danger{border-top-color:#ed1c2e}
+.daily-compliance-stat-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-height:26px;color:#525963;font-size:13px;font-weight:600}
+.daily-compliance-stat-top svg{flex-shrink:0;color:var(--red)}
+.daily-compliance-stat--success .daily-compliance-stat-top svg{color:#16834b}
+.daily-compliance-stat--warning .daily-compliance-stat-top svg{color:#d89900}
+.daily-compliance-stat strong{font-size:36px;font-weight:750;line-height:1.15;margin:15px 0 12px;color:#141820}
+.daily-compliance-stat small{margin-top:auto;font-size:12px;line-height:1.5;color:#68727d}
+.daily-compliance-equation{margin:0 0 18px;padding:10px 13px;background:#f5f7fa;border-left:3px solid #cbd1dc;font-size:13px;color:#374151;line-height:1.6}
+@media(max-width:1200px){.daily-compliance-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.daily-compliance-stats{grid-template-columns:1fr}.daily-compliance-stat{min-height:135px}}
