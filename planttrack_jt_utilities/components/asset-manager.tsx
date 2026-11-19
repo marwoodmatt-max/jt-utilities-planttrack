@@ -538,7 +538,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
         <td><b>{a.asset_code}</b></td>
-        <td>{a.description}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}</small></td>
+        <td>{a.description}{a.ownership_type==="hired_in"&&<span className="tag amber" style={{marginLeft:8}}>HIRED-IN</span>}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}{a.ownership_type==="hired_in"&&a.hire_supplier?" · Hire company: "+a.hire_supplier:""}</small></td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
         <td><span className={a.loler_next_due && a.loler_next_due < new Date().toISOString().slice(0, 10) ? "tag red" : "tag"}>{formatDate(a.loler_next_due)}</span></td><td>{formatDate(a.loler_examined_at)}</td>
