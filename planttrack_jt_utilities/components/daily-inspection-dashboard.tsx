@@ -23,6 +23,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
  const [date,setDate]=useState(()=>ukDate(new Date()));
  const [projectFilter,setProjectFilter]=useState("all");
  const [statusFilter,setStatusFilter]=useState("all");
+ const [includeTestAssets,setIncludeTestAssets]=useState(false);
  const [assets,setAssets]=useState<Asset[]>([]);
  const [projects,setProjects]=useState<Project[]>([]);
  const [allocations,setAllocations]=useState<Allocation[]>([]);
@@ -75,8 +76,10 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   const current=new Map<string,Allocation>();
    for(const allocation of allocations){
    if(!projectById.has(allocation.project_id)||!assetById.has(allocation.asset_id))continue;
-   // Vehicle and trailer fleets use separate roadworthiness/PMI processes.
-   if(!["plant","agricultural equipment"].includes((assetById.get(allocation.asset_id)?.category||"").trim().toLowerCase()))continue;
+   // Daily compliance covers every actively allocated asset. Category values
+   // are not reliable for site plant (e.g. dumpers are recorded as Vehicle).
+   // Keep purpose-built TEST-LOLER out of operational compliance by default.
+   if(!includeTestAssets&&assetById.get(allocation.asset_id)?.asset_code==="TEST-LOLER")continue;
    // Only allocations already in effect on the chosen day; future allocations must not count.
    if(allocation.allocated_at&&ukDate(new Date(allocation.allocated_at))>date)continue;
    const previous=current.get(allocation.asset_id);
@@ -96,7 +99,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
    entries.push({asset,project,status:defects.length?"defect":dayChecks.length?"checked":"missing",latest,defects,count:dayChecks.length});
   }
   return entries.sort((a,b)=>statusRank[a.status]-statusRank[b.status]||a.project.project_name.localeCompare(b.project.project_name)||a.asset.asset_code.localeCompare(b.asset.asset_code));
- },[assets,projects,allocations,inspections,date]);
+ },[assets,projects,allocations,inspections,date,includeTestAssets]);
  const visible=lines.filter(line=>(projectFilter==="all"||line.project.id===projectFilter)&&(statusFilter==="all"||line.status===statusFilter));
  const totals={total:visible.length,inspected:visible.filter(v=>v.count>0).length,missing:visible.filter(v=>v.count===0).length,defect:visible.filter(v=>v.defects.length>0).length};
  async function openReport(row:Inspection){
@@ -125,7 +128,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   finally{setLinkBusy(null);}
  }
  return <section className="panel" id="daily-inspection-dashboard" style={{marginTop:24,borderTop:"4px solid #e31b36"}}>
-  <div className="panel-head"><div><h3><ClipboardCheck size={19} style={{verticalAlign:"-4px",marginRight:8,color:"#e31b36"}}/>Daily Plant Inspection Compliance</h3><p>Plant and agricultural machinery allocated to active projects · Only recorded daily pre-start inspections count</p></div><button type="button" className="secondary" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/> Refresh</button></div>
+  <div className="panel-head"><div><h3><ClipboardCheck size={19} style={{verticalAlign:"-4px",marginRight:8,color:"#e31b36"}}/>Daily Plant Inspection Compliance</h3><p>All registered equipment allocated to active projects · Test machine excluded by default</p></div><button type="button" className="secondary" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/> Refresh</button></div>
   <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"end",margin:"15px 0"}}>
    <label style={{fontSize:12,fontWeight:700}}>Inspection date
     <input aria-label="Inspection date" type="date" max={ukDate(new Date())} value={date} onChange={e=>setDate(e.target.value)} style={{display:"block",marginTop:5,minWidth:145}}/>
@@ -137,13 +140,14 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
    <label style={{fontSize:12,fontWeight:700}}>Inspection status
     <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:150}}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option></select>
    </label>
+   <label style={{display:"flex",gap:7,alignItems:"center",fontSize:12,fontWeight:650,paddingBottom:6}}><input type="checkbox" checked={includeTestAssets} onChange={e=>setIncludeTestAssets(e.target.checked)}/> Include TEST-LOLER</label>
    <button type="button" className="secondary" onClick={onOpenChecks}>Open Plant Checks</button>
   </div>
   {error&&<p className="auth-error" role="alert">{error}</p>}
   {loading?<p>Loading inspection compliance…</p>:<>
    <div className="daily-compliance-stats">
     {[
-      {label:"Allocated plant",value:totals.total,caption:"Plant on active projects",icon:ClipboardCheck,kind:"base"},
+      {label:"Allocated equipment",value:totals.total,caption:"Operational allocations on active projects",icon:ClipboardCheck,kind:"base"},
       {label:"Inspected today",value:totals.inspected,caption:"Completed checks, including defects",icon:CheckCircle2,kind:"success"},
       {label:"Not inspected",value:totals.missing,caption:"No daily check submitted",icon:AlertTriangle,kind:"warning"},
       {label:"Defects reported",value:totals.defect,caption:"Inspected machines with a failed check",icon:AlertTriangle,kind:"danger"}
@@ -166,7 +170,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
       </div>:<span style={{color:"#64748b"}}>Awaiting inspection</span>}</td>
     </tr>)}
    </tbody></table>{visible.length===0&&<p style={{padding:14}}>{lines.length===0?"No machines are currently allocated to an active project for this date.":"No machines match the selected filters."}</p>}</div>
-   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. This report uses current active project allocations for plant and agricultural equipment, not historical allocation records. Vehicles and trailers use their own inspection processes. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
+   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. This report uses current active project allocations across all asset categories. TEST-LOLER is excluded unless you select Include TEST-LOLER. Vehicle and trailer inspection requirements may differ; this view only records whether a Daily Plant Check was submitted, not whether a separate roadworthiness inspection was completed. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
   </>}
   {photoRecord&&<div style={{marginTop:18,padding:14,border:"1px solid #e2e8f0",borderRadius:6}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h4>Inspection photographs · {displayDate(date)}</h4><button className="secondary" type="button" onClick={()=>{setPhotoRecord(null);setPhotoLinks([]);}}><X size={14}/> Close</button></div>
