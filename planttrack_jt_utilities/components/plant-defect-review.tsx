@@ -24,21 +24,46 @@ export default function PlantDefectReview({supabase,onOpenWorkshop}:{supabase:Su
       supabase.rpc("list_plant_defect_mechanics"),
       supabase.from("assets").select("id,asset_code")
     ]);
-    if(j.error||m.error||a.error)setError("Could not load defect jobs: "+(j.error||m.error||a.error)?.message);
-    else{setJobs((j.data||[]) as DefectJob[]);setMechanics((m.data||[]) as Mechanic[]);setAssets(Object.fromEntries((a.data||[]).map(v=>[v.id,v.asset_code])));}
+    if(j.error)setError("Could not load defect jobs: "+j.error.message);
+    else{setJobs((j.data||[]) as DefectJob[]);setError("");}
+    if(!m.error)setMechanics((m.data||[]) as Mechanic[]);
+    if(!a.error)setAssets(Object.fromEntries((a.data||[]).map(v=>[v.id,v.asset_code])));
     setLoading(false);
   },[supabase]);
-  useEffect(()=>{void load();const channel=supabase.channel("daily-plant-defect-review").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();return()=>{void supabase.removeChannel(channel);};},[supabase,load]);
+  useEffect(()=>{void load();const channel=supabase.channel("daily-plant-defect-review").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();const refresh=()=>void load();window.addEventListener("focus",refresh);return()=>{window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,load]);
   const pending=jobs.filter(j=>j.status==="New"||j.status==="Assigned");
   async function triage(job:DefectJob,action:"assign"|"dismiss"){
     setError("");setNotice("");
     if(action==="assign"&&!selected[job.id]){setError("Choose the mechanic before assigning this job.");return;}
     if(action==="dismiss"&&(reasons[job.id]||"").trim().length<5){setError("Enter a reason for dismissing the defect job (at least 5 characters).");return;}
+    if(busy)return;
     setBusy(job.id);
-    const {error,result}=await (async()=>{const {data,error}=await supabase.rpc("admin_triage_plant_defect_job",{p_job:job.id,p_action:action,p_mechanic:action==="assign"?selected[job.id]:null,p_reason:action==="dismiss"?reasons[job.id]:null});return {error,result:data};})();
-    if(error)setError("Could not change job status: "+error.message);
-    else{setNotice(action==="dismiss"?"Job card dismissed and reason recorded. The failed inspection is retained and does not clear the machine for use.":"Job card assigned to mechanic.");await load();}
-    setBusy(null);
+    try{
+      // Re-read from the server before changing a job that another tab or panel may already have handled.
+      const latest=await supabase.from("workshop_job_cards").select("status").eq("id",job.id).single();
+      if(latest.error)throw latest.error;
+      if(!["New","Assigned"].includes(latest.data.status)){
+        setNotice("This job is already "+latest.data.status+". The view has been refreshed; no second action was taken.");
+        return;
+      }
+      const {error}=await supabase.rpc("admin_triage_plant_defect_job",{p_job:job.id,p_action:action,p_mechanic:action==="assign"?selected[job.id]:null,p_reason:action==="dismiss"?reasons[job.id]:null});
+      if(error){
+        if(error.message.includes("Only unstarted inspection job cards can be triaged")){
+          const updated=await supabase.from("workshop_job_cards").select("status").eq("id",job.id).single();
+          if(!updated.error&&updated.data&&!["New","Assigned"].includes(updated.data.status)){
+            setNotice("Job is already "+updated.data.status+" — another action completed it. The list has been refreshed.");
+            return;
+          }
+        }
+        throw error;
+      }
+      setNotice(action==="dismiss"?"Job card dismissed and reason recorded. The original failed inspection remains saved; safety release requires separate authorisation.":"Job card assigned to mechanic.");
+    }catch(e){
+      setError("Could not change job status: "+(e instanceof Error?e.message:String(e)));
+    }finally{
+      await load();
+      setBusy(null);
+    }
   }
   return <section className="panel" style={{marginBottom:20,borderTop:"4px solid #e31b36"}}>
     <div className="panel-head"><div><h3><AlertTriangle size={18} style={{verticalAlign:"-3px",color:"#d91f32",marginRight:7}}/>Daily plant inspection defects</h3><p>{pending.length} job card(s) awaiting admin review or mechanic allocation</p></div><button className="secondary" type="button" onClick={()=>void load()}><RefreshCcw size={15}/> Refresh</button></div>
