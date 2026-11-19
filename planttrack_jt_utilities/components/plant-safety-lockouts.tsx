@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AlertTriangle, CheckCircle2, RefreshCcw, ShieldCheck } from "lucide-react";
 
 type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;released_by:string|null;release_notes:string|null};
-type Job={inspection_id:string|null;status:string;job_card_number:string|null};
+type Job={id:string;inspection_id:string|null;status:string;job_card_number:string|null};
 const dateLabel=(v:string)=>new Date(v).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 
 export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase:SupabaseClient;isAdmin:boolean;assetId?:string}){
@@ -12,6 +12,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
   const [jobs,setJobs]=useState<Job[]>([]);
   const [assets,setAssets]=useState<Record<string,string>>({});
   const [notes,setNotes]=useState<Record<string,string>>({});
+  const [dismissalReasons,setDismissalReasons]=useState<Record<string,string>>({});
   const [confirmed,setConfirmed]=useState<Record<string,boolean>>({});
   const [busy,setBusy]=useState<string|null>(null);
   const [loading,setLoading]=useState(true);
@@ -23,7 +24,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
     if(assetId)query=query.eq("asset_id",assetId);
     const [h,j,a]=await Promise.all([
       query,
-      supabase.from("workshop_job_cards").select("inspection_id,status,job_card_number").not("inspection_id","is",null).limit(300),
+      supabase.from("workshop_job_cards").select("id,inspection_id,status,job_card_number").not("inspection_id","is",null).limit(300),
       supabase.from("assets").select("id,asset_code").limit(1500)
     ]);
     if(h.error||j.error||a.error)setError("Unable to load safety lockouts: "+(h.error||j.error||a.error)?.message);
@@ -34,6 +35,20 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
   const active=holds.filter(h=>!h.released_at),history=holds.filter(h=>Boolean(h.released_at));
   const byAsset=Array.from(new Set(active.map(h=>h.asset_id)));
   const associated=(hold:Hold)=>jobs.find(job=>job.inspection_id===hold.inspection_id);
+  async function dismissIncorrectJob(job:Job){
+    if(!job.id||busy)return;
+    const reason=(dismissalReasons[job.id]||"").trim();
+    if(reason.length<5){setError("Please enter a reason for dismissing this reported defect.");return;}
+    setError("");setNotice("");setBusy(job.id);
+    const {error:rpcError}=await supabase.rpc("admin_triage_plant_defect_job",{p_job:job.id,p_action:"dismiss",p_mechanic:null,p_reason:reason});
+    if(rpcError)setError("Job card could not be dismissed: "+rpcError.message);
+    else{
+      setNotice("Defect job dismissed with your reason. The machine remains locked out until you separately confirm it is safe and authorise release.");
+      setDismissalReasons(prev=>({...prev,[job.id]:""}));
+      await load();
+    }
+    setBusy(null);
+  }
   async function release(id:string){
     if(busy)return;
     const detail=(notes[id]||"").trim();
@@ -57,13 +72,23 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
         {entries.map(h=><div key={h.id} style={{borderTop:"1px solid #fecaca",padding:"9px 0"}}>
           <strong>{dateLabel(h.locked_at)}</strong>
           <div style={{fontSize:13,marginTop:4}}>{h.defect_summary}</div>
-          <div style={{fontSize:12,marginTop:5}}>Linked job card: <b>{associated(h)?.job_card_number||associated(h)?.status||"Awaiting review"}</b> · Status: {associated(h)?.status||"Not found"}</div>
+          <div style={{fontSize:12,marginTop:5}}>Linked job card: <b>{associated(h)?.job_card_number||"Inspection defect job"}</b> · Status: <b>{associated(h)?.status||"Not found"}</b></div>
+          {isAdmin&&associated(h)&&["New","Assigned"].includes(associated(h)!.status)&&<div style={{marginTop:9,padding:11,background:"#fff",border:"1px solid #fca5a5",borderRadius:5}}>
+            <strong>Incorrect defect / test? Dismiss the job card here</strong>
+            <p style={{fontSize:12,margin:"5px 0"}}>Only dismiss if the report was incorrect or there is no genuine defect. For genuine defects, assign a mechanic and complete the repair first.</p>
+            <label>Reason for dismissing this job
+              <textarea rows={2} style={{width:"100%",marginTop:5}} placeholder="e.g. Test-machine inspection only; equipment checked and no actual defect found" value={dismissalReasons[associated(h)!.id]||""} onChange={e=>setDismissalReasons(prev=>({...prev,[associated(h)!.id]:e.target.value}))}/>
+            </label>
+            <button type="button" className="secondary" disabled={busy!==null||(dismissalReasons[associated(h)!.id]||"").trim().length<5} onClick={()=>void dismissIncorrectJob(associated(h)!)}>{busy===associated(h)!.id?"Dismissing…":"Dismiss incorrect / test job card"}</button>
+          </div>}
         </div>)}
         {isAdmin&&<div style={{background:"#fff",border:"1px solid #fca5a5",padding:12,marginTop:10}}>
-          {!allResolved&&<p role="alert" style={{color:"#991b1b",fontWeight:650}}>Release blocked: every related defect job must first be Approved or Dismissed with a reason in Workshop Job Cards.</p>}
+          {!allResolved&&<p role="alert" style={{color:"#991b1b",fontWeight:650}}>Step 1: Every related defect job must be Approved after repair or Dismissed with a reason. For an incorrect test defect, use the dismissal form directly above.</p>}
+          {allResolved&&<p style={{color:"#166534",fontWeight:650}}>Step 1 complete: all associated job cards have been reviewed. Step 2: confirm the machine has been checked and is safe to return to service.</p>}
           <label>Repairs and safety confirmation<textarea rows={3} value={notes[id]||""} onChange={e=>setNotes(p=>({...p,[id]:e.target.value}))} placeholder="Describe repairs, reinspection, checks and why the machine is safe to return to service" style={{width:"100%",marginTop:6}}/></label>
           <label style={{display:"flex",gap:8,alignItems:"start",fontWeight:550}}><input type="checkbox" checked={Boolean(confirmed[id])} onChange={e=>setConfirmed(p=>({...p,[id]:e.target.checked}))}/> I have confirmed that all recorded defects are resolved and the machine is safe to release.</label>
           <button type="button" className="primary" disabled={!allResolved||busy!==null||!confirmed[id]||(notes[id]||"").trim().length<15} onClick={()=>void release(id)}><ShieldCheck size={16}/> {busy===id?"Releasing…":"Authorise safety release"}</button>
+          {!allResolved&&<small style={{display:"block",marginTop:7}}>The release button will enable after the job-card review above is completed.</small>}
         </div>}
       </div>;
     })}
