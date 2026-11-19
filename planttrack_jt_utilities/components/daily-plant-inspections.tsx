@@ -125,6 +125,49 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   async function showPhotos(row:InspectionRow){setShowingPhotoId(row.id);setPhotoLinks([]);setError("");const evidence=row.answers?._photo_evidence as unknown as Evidence[]|undefined;if(!evidence?.length)return;const links:typeof photoLinks=[];for(const entry of evidence){const {data,error}=await supabase.storage.from("plant-inspection-photos").createSignedUrl(entry.path,3600);if(error){setError("Could not open photo evidence: "+error.message);return;}links.push({prompt:entry.prompt,url:data.signedUrl});}setPhotoLinks(links);}
   useEffect(()=>{if(answered===32&&randomPhotoQuestions.length===0)setRandomPhotoQuestions(randomPrompts());},[answered,randomPhotoQuestions.length]);
   function updateAnswer(key:string,value:string){setAnswers(old=>({...old,[key]:value}));setMessage("");}
+
+  async function generateEvidenceReport(row:{asset_id:string|null;hired_plant_name:string|null;submitted_at:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null}){
+    const asset=row.asset_id?assetMap.get(row.asset_id):undefined;
+    const evidence=(row.answers?._photo_evidence as unknown as Evidence[]|undefined)||[];
+    const attachments:{prompt:string;bytes:Uint8Array;mimeType:string}[]=[];
+    for(const entry of evidence){
+      const {data,error}=await supabase.storage.from("plant-inspection-photos").download(entry.path);
+      if(error||!data)throw new Error("Photo evidence unavailable: "+(error?.message||entry.prompt));
+      const mime=data.type||"image/jpeg";
+      let bytes:Uint8Array;
+      if(mime==="image/webp"){
+        const bitmap=await createImageBitmap(data);
+        const canvas=document.createElement("canvas");canvas.width=bitmap.width;canvas.height=bitmap.height;
+        const ctx=canvas.getContext("2d");if(!ctx)throw new Error("Cannot process WebP photo");
+        ctx.drawImage(bitmap,0,0);bitmap.close();
+        const jpeg:Blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error("Cannot convert camera photo")),"image/jpeg",0.84));
+        bytes=new Uint8Array(await jpeg.arrayBuffer());
+      }else bytes=new Uint8Array(await data.arrayBuffer());
+      attachments.push({prompt:entry.prompt,bytes,mimeType:mime==="image/png"?"image/png":"image/jpeg"});
+    }
+    return generateDailyInspectionPdf({
+      assetName:asset?[asset.asset_code,asset.description,asset.serial_number].filter(Boolean).join(" - "):row.hired_plant_name||"Hired plant",
+      operator:String(row.answers?._operator||"Operator"),
+      location:String(row.answers?._location||asset?.location||""),
+      submittedAt:row.submitted_at,meterReading:row.meter_reading,
+      answers:row.answers||{},comments:row.comments||"",result:row.result,photos:attachments
+    });
+  }
+  async function fileReport(row:InspectionRow){
+    if(row.report_path)return;
+    setFiling(row.id);setError("");
+    try{
+      const blob=await generateEvidenceReport(row);
+      const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Session expired");
+      const path=user.id+"/"+row.id+".pdf";
+      const uploaded=await supabase.storage.from("plant-inspection-reports").upload(path,blob,{contentType:"application/pdf",upsert:false});
+      if(uploaded.error)throw uploaded.error;
+      const linked=await supabase.from("inspections").update({report_path:path}).eq("id",row.id);
+      if(linked.error)throw linked.error;
+      setMessage("Inspection report filed in the asset folder.");await load();
+    }catch(err){setError("Could not file inspection report: "+(err instanceof Error?err.message:String(err)));}
+    finally{setFiling(null);}
+  }
   async function save(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();if(saving)return;
     setError("");setMessage("");
