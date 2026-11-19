@@ -71,10 +71,10 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  write(p2,regular,"Locked and Tagged out and reported immediately. it shall not be operated until the fault has",left+10,656,9,495);
  write(p2,regular,"been rectified.",left+10,643,9,490);
  let y=621;
- for(const key of checks.slice(0,9)){row(p2,regular,bold,key,input.answers?.[key]||"",y,35);y-=35;}
+ for(const key of checks.slice(0,9)){row(p2,regular,bold,key,input.answers?.[key]||"",y,29);y-=29;}
  headerBar(p2,bold,"1.1. Conditional Checks","",y-5);
  y-=43;
- for(const key of checks.slice(9,17)){row(p2,regular,bold,key,input.answers?.[key]||"",y,33);y-=33;}
+ for(const key of checks.slice(9,17)){row(p2,regular,bold,key,input.answers?.[key]||"",y,29);y-=29;}
  footer(p2,regular,2);
  const p3=pdf.addPage([W,H]);
  let y3=813;
