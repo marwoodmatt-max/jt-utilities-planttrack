@@ -551,13 +551,15 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
       supabase.from("mot_garage_bookings").select("id,asset_id,booking_date,booking_time,garage_name").eq("status","booked"),
       supabase.from("examinations").select("id,asset_id,next_due").ilike("examination_type","%LOLER%")
     ]);
-    const error=assetsResult.error||motResult.error||bookingsResult.error||lolerResult.error;
+    const defectsResult=isAdmin?await supabase.from("workshop_job_cards").select("id,asset_id,title,created_at,status").not("inspection_id","is",null).in("status",["New","Assigned"]).order("created_at",{ascending:false}).limit(75):null;
+    const error=assetsResult.error||motResult.error||bookingsResult.error||lolerResult.error||defectsResult?.error;
     if(error){setNotificationsError("Could not load compliance alerts: "+error.message);setNotifications([]);setNotificationsLoading(false);return;}
     const today=new Date().toLocaleDateString("en-CA",{timeZone:"Europe/London"});
     const dayDiff=(date:string)=>Math.round((Date.parse(date.slice(0,10)+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
-    const fmt=(date:string)=>date.slice(8,10)+"/"+date.slice(5,7)+"/"+date.slice(0,4);
+    const fmt=(date:string)=>date.slice(8,10)+"-"+date.slice(5,7)+"-"+date.slice(0,4);
     const found:{key:string;label:string;details:string;page:string;priority:number}[]=[];
     const assetById=new Map((assetsResult.data||[]).map(a=>[a.id,a]));
+    for(const job of defectsResult?.data||[]){const asset=assetById.get(job.asset_id);found.push({key:"plant-defect-"+job.id,label:"PLANT DEFECT · "+(asset?.asset_code||"Asset"),details:job.title+" · "+job.status+" · Admin review required",page:"Workshop job cards",priority:0});}
     const savedMotIds=new Set<string>();
     for(const record of motResult.data||[]){
       savedMotIds.add(record.asset_id);
@@ -586,6 +588,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     for(const [assetId,due] of latestLoler){const days=dayDiff(due);if(days>30)continue;const asset=assetById.get(assetId);found.push({key:"loler-"+assetId,label:(days<0?"LOLER overdue":"LOLER due")+" · "+(asset?.asset_code||"Equipment"),details:"Examination "+fmt(due),page:"LOLER & certificates",priority:days<0?1:4});}
     found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found);setNotificationsLoading(false);
   }
+  useEffect(()=>{if(!isAdmin)return;void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void loadNotifications()).subscribe();return()=>{void supabase.removeChannel(channel);};},[supabase,isAdmin]);
   useEffect(() => {
     let cancelled = false;
 
