@@ -334,7 +334,7 @@ function LolerPaperForm({kind,values,onChange,readOnly=false}:{kind:"plant"|"cha
 }
 function createJobCertificatePdf(job:any,assetLabel:string):Blob{
  const lines:string[]=[];
- const add=(label:string,value:unknown)=>{lines.push(label);String(value??"Not recorded").split("\n").forEach(v=>{const words=v.replace(/[^\x20-\x7E]/g,"-").split(/\s+/);let line="";for(const word of words){if((line+" "+word).length>88){lines.push("  "+line);line=word;}else line=line?line+" "+word:word;}lines.push("  "+line);});lines.push("");};
+ const add=(label:string,value:unknown)=>{lines.push(label);displayUkDate(String(value??"Not recorded")).split("\n").forEach(v=>{const words=v.replace(/[^\x20-\x7E]/g,"-").split(/\s+/);let line="";for(const word of words){if((line+" "+word).length>88){lines.push("  "+line);line=word;}else line=line?line+" "+word:word;}lines.push("  "+line);});lines.push("");};
  lines.push("JT UTILITIES LTD","APPROVED JOB CARD / EXAMINATION RECORD",""); 
  add("Certificate / job reference",job.certificate_number||job.id);
  add("Asset",assetLabel);add("Job type",job.job_type);add("Work order",job.title);add("Instructions",job.instructions);
