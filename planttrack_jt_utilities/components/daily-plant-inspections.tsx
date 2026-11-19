@@ -45,7 +45,7 @@ const yesNoChecks = new Set([
   "Check horn is working", "Lights-flashing and vehicle"
 ]);
 type PlantAsset={id:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
-type InspectionRow={id:string;asset_id:string|null;project_id:string|null;hired_plant_name:string|null;hired_plant_reference:string|null;submitted_at:string;submitted_by:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null;status:string};
+type InspectionRow={id:string;report_path:string|null;asset_id:string|null;project_id:string|null;hired_plant_name:string|null;hired_plant_reference:string|null;submitted_at:string;submitted_by:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null;status:string};
 const showDate=(date:string)=>new Date(date).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
 const failAnswer=(answer:string)=>answer==="Unsafe"||answer==="No";
 const isSuccess=(answer:string)=>answer==="Safe"||answer==="Yes";
@@ -81,6 +81,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const signatureRef=useRef<HTMLCanvasElement|null>(null);
   const drawingRef=useRef(false);
   const [saving,setSaving]=useState(false);
+  const [filing,setFiling]=useState<string|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
@@ -95,7 +96,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     setLoading(true);setError("");
     const [a,r,p,alloc]=await Promise.all([
       supabase.from("assets").select("id,asset_code,ownership_type,hire_supplier,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
-      supabase.from("inspections").select("id,asset_id,project_id,hired_plant_name,hired_plant_reference,submitted_at,submitted_by,meter_reading,result,answers,comments,status").eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}).limit(200),
+      supabase.from("inspections").select("id,report_path,asset_id,project_id,hired_plant_name,hired_plant_reference,submitted_at,submitted_by,meter_reading,result,answers,comments,status").eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}).limit(200),
       supabase.from("projects").select("id,project_name,site_address,site_postcode").neq("status","archived").order("project_name"),
       supabase.from("project_allocations").select("project_id,asset_id").is("returned_at",null)
     ]);
@@ -145,7 +146,9 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       if(photoError){if(evidence.length)await supabase.storage.from("plant-inspection-photos").remove(evidence.map(x=>x.path));setError("Mandatory photos could not be saved: "+photoError.message);setSaving(false);return;}
       evidence.push({prompt,path});
     }
+    const submittedAt=new Date().toISOString();
     const {error:saveError}=await supabase.from("inspections").insert({
+      submitted_at:submittedAt,
       id:inspectionId,project_id:projectId,
       hired_plant_name:plantSource==="hired"&&!assetId?hiredPlant.trim():null,hired_plant_reference:plantSource==="hired"&&!assetId?(hiredReference.trim()||null):null,
       asset_id:assetId||null,inspection_type:"daily_plant_pre_start",result:defects.length?"fail":"pass",
@@ -238,7 +241,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     </form>
     <div style={{marginTop:26}}>
       <div className="panel-head"><div><h3>Completed inspection reports</h3><p>Saved against each asset · Download the three-page PDF</p></div><select aria-label="Filter inspection history by asset" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">All assets</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code}</option>)}</select></div>
-      {loading?<p>Loading inspections…</p>:filtered.length===0?<p className="muted">No daily pre-start inspections recorded yet.</p>:<div className="table-wrap"><table><thead><tr><th>Project</th><th>Asset</th><th>Date / time</th><th>Operator</th><th>Result</th><th>Report</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id}><td>{projects.find(p=>p.id===r.project_id)?.project_name||r.answers?._project_name||"Not recorded"}</td><td>{r.asset_id?assetMap.get(r.asset_id)?.asset_code||"Asset":r.hired_plant_name||"Hired plant"}</td><td>{showDate(r.submitted_at)}</td><td>{r.answers?._operator||"Not recorded"}</td><td><span className={"tag "+(r.result==="fail"?"red":"green")}>{r.result==="fail"?"Defects flagged":"Complete"}</span></td><td><button className="secondary" type="button" onClick={()=>void download(r)}>Download PDF</button> <button type="button" className="secondary" onClick={()=>setExpanded(expanded===r.id?null:r.id)}>Details</button> {(r.answers?._photo_evidence as unknown as Evidence[]|undefined)?.length?<button type="button" className="secondary" onClick={()=>void showPhotos(r)}>View photos</button>:null}</td></tr>)}</tbody></table>
+      {loading?<p>Loading inspections…</p>:filtered.length===0?<p className="muted">No daily pre-start inspections recorded yet.</p>:<div className="table-wrap"><table><thead><tr><th>Project</th><th>Asset</th><th>Date / time</th><th>Operator</th><th>Result</th><th>Report</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id}><td>{projects.find(p=>p.id===r.project_id)?.project_name||r.answers?._project_name||"Not recorded"}</td><td>{r.asset_id?assetMap.get(r.asset_id)?.asset_code||"Asset":r.hired_plant_name||"Hired plant"}</td><td>{showDate(r.submitted_at)}</td><td>{r.answers?._operator||"Not recorded"}</td><td><span className={"tag "+(r.result==="fail"?"red":"green")}>{r.result==="fail"?"Defects flagged":"Complete"}</span></td><td><button className="secondary" type="button" onClick={()=>void download(r)}>Download PDF</button> {!r.report_path&&<button className="secondary" type="button" disabled={filing===r.id} onClick={()=>void fileReport(r)}>{filing===r.id?"Filing…":"File PDF"}</button>} <button type="button" className="secondary" onClick={()=>setExpanded(expanded===r.id?null:r.id)}>Details</button> {(r.answers?._photo_evidence as unknown as Evidence[]|undefined)?.length?<button type="button" className="secondary" onClick={()=>void showPhotos(r)}>View photos</button>:null}</td></tr>)}</tbody></table>
       {showingPhotoId&&<div style={{padding:14,borderTop:"1px solid #ddd"}}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><strong>Photo evidence</strong><button className="secondary" type="button" onClick={()=>{setShowingPhotoId(null);setPhotoLinks([]);}}>Close</button></div>{photoLinks.map((p,i)=><div key={i} style={{marginTop:13}}><p><strong>{p.prompt}</strong></p><a href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt={p.prompt} style={{maxWidth:340,width:"100%",height:"auto",border:"1px solid #ddd"}}/></a></div>)}</div>}
       {expanded&&records.find(r=>r.id===expanded)&&<div style={{padding:15,borderTop:"1px solid #ddd"}}>{(()=>{const r=records.find(row=>row.id===expanded)!;return <><strong>Inspection responses</strong><p>{r.comments||"No comments"}</p>{dailyPlantChecks.map(k=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:12,borderBottom:"1px solid #eee",padding:"5px 0"}}><span>{k}</span><strong>{r.answers?.[k]||"—"}</strong></div>)}</>})()}</div>}</div>}
     </div>
