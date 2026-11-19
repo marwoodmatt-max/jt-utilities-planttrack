@@ -42,7 +42,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   const ink=rgb(.12,.17,.23),border=rgb(.48,.53,.6),pale=rgb(.94,.95,.97);
   const left=37,right=558,width=right-left;
   const clean=(value:unknown)=>{const v=String(value??"").trim();return v&&v.toLowerCase()!=="none"?v:"";};
-  const shortDate=(value:unknown)=>{const v=clean(value);if(!v)return "";const date=v.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);return date?`${date[3]}/${date[2]}/${date[1]}`:v;};
+  const shortDate=(value:unknown)=>{const v=clean(value);if(!v)return "";const date=v.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);return date?`${date[3]}-${date[2]}-${date[1]}`:v;};
   const line=(value:unknown,x:number,top:number,maxWidth:number,size=9,boldText=false,maxLines=4)=>{
    const face=boldText?strong:font,rows:string[]=[];
    for(const paragraph of ascii(value??"").split(/\n/)){
