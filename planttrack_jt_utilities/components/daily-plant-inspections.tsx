@@ -201,7 +201,21 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     });
     if(saveError){await supabase.storage.from("plant-inspection-photos").remove(evidence.map(x=>x.path));setError("Unable to save inspection: "+saveError.message);}
     else{
-      setMessage(defects.length?"Inspection saved with defects. STOP: lock/tag out defective critical equipment and report it immediately. This submission does not automatically change the asset's availability.":"Inspection saved successfully. You can download its report from the history below.");
+      let warning="";
+      try{
+        const report=await generateEvidenceReport({
+          asset_id:assetId||null,hired_plant_name:hiredPlant||null,submitted_at:submittedAt,meter_reading:Number(hours),
+          result:defects.length?"fail":"pass",
+          answers:{...answers,_operator:operator.trim(),_location:site.trim(),_signature:signature,_photo_evidence:evidence},
+          comments:comments.trim()
+        });
+        const path=data.user.id+"/"+inspectionId+".pdf";
+        const uploaded=await supabase.storage.from("plant-inspection-reports").upload(path,report,{contentType:"application/pdf",upsert:false});
+        if(uploaded.error)throw uploaded.error;
+        const linked=await supabase.from("inspections").update({report_path:path}).eq("id",inspectionId);
+        if(linked.error)throw linked.error;
+      }catch(err){warning=" PDF filing needs a retry: "+(err instanceof Error?err.message:String(err))+". Use File PDF below.";}
+      setMessage((defects.length?"Inspection saved with defects. STOP: lock/tag out critical faults immediately. A workshop job card has been raised for admin review.":"Inspection saved successfully. PDF and three photographs are filed against the asset.")+warning);
       setAnswers({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
     }
     setSaving(false);
@@ -210,13 +224,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     setError("");
     try{
       const related=row.asset_id?assetMap.get(row.asset_id):undefined;
-      const blob=await generateDailyInspectionPdf({
-        assetName:related?[related.asset_code,related.description,related.serial_number].filter(Boolean).join(" - "):row.hired_plant_name||"Hired plant",
-        operator:String(row.answers?._operator||"Not recorded"),
-        location:String(row.answers?._location||related?.location||"Not recorded"),
-        submittedAt:row.submitted_at,meterReading:row.meter_reading,
-        answers:row.answers||{},comments:row.comments||"",result:row.result
-      });
+      const blob=await generateEvidenceReport(row);
       const url=URL.createObjectURL(blob);const a=document.createElement("a");
       a.href=url;a.download="JT-Plant-Pre-Start-"+(related?.asset_code||"hired-plant")+"-"+row.submitted_at.slice(0,10)+".pdf";a.click();
       window.setTimeout(()=>URL.revokeObjectURL(url),60000);
