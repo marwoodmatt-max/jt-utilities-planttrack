@@ -16,7 +16,7 @@ const ukDate=(date:Date)=>{const p=Object.fromEntries(ukParts.formatToParts(date
 const displayDate=(date:string)=>date.slice(8,10)+"-"+date.slice(5,7)+"-"+date.slice(0,4);
 const displayTime=(iso:string)=>new Date(iso).toLocaleTimeString("en-GB",{timeZone:"Europe/London",hour:"2-digit",minute:"2-digit"});
 function evidenceFor(record:Inspection):Evidence[]{const evidence=record.answers?._photo_evidence;return Array.isArray(evidence)?evidence.filter((entry):entry is Evidence=>typeof entry?.path==="string"&&typeof entry?.prompt==="string"):[];}
-const labelStatus=(status:Status)=>status==="defect"?"Defect reported":status==="checked"?"Checked":"Not checked";
+const labelStatus=(status:Status)=>status==="defect"?"Inspected · defect":status==="checked"?"Inspected · no defect":"Not inspected";
 const statusRank:Record<Status,number>={defect:0,missing:1,checked:2};
 
 export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supabase:SupabaseClient;onOpenChecks:()=>void}){
@@ -73,8 +73,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   const assetById=new Map(assets.map(a=>[a.id,a]));
   const projectById=new Map(projects.map(p=>[p.id,p]));
   const current=new Map<string,Allocation>();
-  const today=new Date();
-  for(const allocation of allocations){
+   for(const allocation of allocations){
    if(!projectById.has(allocation.project_id)||!assetById.has(allocation.asset_id))continue;
    // Vehicle and trailer fleets use separate roadworthiness/PMI processes.
    if(!["plant","agricultural equipment"].includes((assetById.get(allocation.asset_id)?.category||"").trim().toLowerCase()))continue;
@@ -99,7 +98,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   return entries.sort((a,b)=>statusRank[a.status]-statusRank[b.status]||a.project.project_name.localeCompare(b.project.project_name)||a.asset.asset_code.localeCompare(b.asset.asset_code));
  },[assets,projects,allocations,inspections,date]);
  const visible=lines.filter(line=>(projectFilter==="all"||line.project.id===projectFilter)&&(statusFilter==="all"||line.status===statusFilter));
- const totals={total:visible.length,checked:visible.filter(v=>v.status==="checked").length,missing:visible.filter(v=>v.status==="missing").length,defect:visible.filter(v=>v.status==="defect").length};
+ const totals={total:visible.length,inspected:visible.filter(v=>v.count>0).length,missing:visible.filter(v=>v.count===0).length,defect:visible.filter(v=>v.defects.length>0).length};
  async function openReport(row:Inspection){
   setError("");setLinkBusy(row.id);
   try{
@@ -136,20 +135,24 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
     <select aria-label="Filter by project" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:185}}><option value="all">All active projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select>
    </label>
    <label style={{fontSize:12,fontWeight:700}}>Inspection status
-    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:150}}><option value="all">All statuses</option><option value="missing">Not checked</option><option value="checked">Checked</option><option value="defect">Defect reported</option></select>
+    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:150}}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option></select>
    </label>
    <button type="button" className="secondary" onClick={onOpenChecks}>Open Plant Checks</button>
   </div>
   {error&&<p className="auth-error" role="alert">{error}</p>}
   {loading?<p>Loading inspection compliance…</p>:<>
-   <div className="stats" style={{margin:"15px 0 18px"}}>
+   <div className="daily-compliance-stats">
     {[
-      ["Allocated plant",totals.total,"Plant on active projects",ClipboardCheck],
-      ["Checked today",totals.checked,"No reported defects on selected date",CheckCircle2],
-      ["Not checked",totals.missing,"No daily check submitted",AlertTriangle],
-      ["Defects reported",totals.defect,"At least one failed daily check",AlertTriangle]
-    ].map(([label,value,caption,Icon]:any)=><div className="stat" key={label} style={{borderTopColor:label==="Defects reported"&&value>0?"#dc2626":undefined}}><div className="stat-top"><span>{label}</span><Icon size={18}/></div><strong>{value}</strong><small>{caption}</small></div>)}
+      {label:"Allocated plant",value:totals.total,caption:"Plant on active projects",icon:ClipboardCheck,kind:"base"},
+      {label:"Inspected today",value:totals.inspected,caption:"Completed checks, including defects",icon:CheckCircle2,kind:"success"},
+      {label:"Not inspected",value:totals.missing,caption:"No daily check submitted",icon:AlertTriangle,kind:"warning"},
+      {label:"Defects reported",value:totals.defect,caption:"Inspected machines with a failed check",icon:AlertTriangle,kind:"danger"}
+    ].map(item=><div className={"daily-compliance-stat daily-compliance-stat--"+item.kind} key={item.label}>
+       <div className="daily-compliance-stat-top"><span>{item.label}</span><item.icon size={20}/></div>
+       <strong>{item.value}</strong><small>{item.caption}</small>
+    </div>)}
    </div>
+   <p className="daily-compliance-equation">Of <b>{totals.total}</b> allocated machines, <b>{totals.inspected}</b> have been inspected and <b>{totals.missing}</b> have not. <b>{totals.defect}</b> of the inspected machines reported a defect. Defects are included in “Inspected today”, not added to the total.</p>
    <div className="table-wrap"><table><thead><tr><th>Machine</th><th>Project</th><th>Status</th><th>Operator / time (UK)</th><th>Report / evidence</th></tr></thead><tbody>
     {visible.map(line=><tr key={line.asset.id}>
       <td><b>{line.asset.asset_code}</b><small>{line.asset.description||line.asset.registration||"Registered asset"}{line.asset.ownership_type==="hired_in"?" · Hired-in":""}</small></td>
