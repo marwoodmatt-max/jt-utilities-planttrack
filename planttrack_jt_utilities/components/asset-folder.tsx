@@ -6,16 +6,22 @@ import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lu
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
+type DailyReport={id:string;submitted_at:string;result:string;report_path:string|null;answers:Record<string,unknown>;comments:string|null};
+type JobCard={id:string;title:string;status:string;priority:string;created_at:string;job_card_number:string|null;instructions:string};
 type PmiReport = { id:string; inspected_on:string; result:string; defects:string|null; inspector_name:string; signed_off_by:string; report_path:string|null; brake_test_type:string|null };
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
 const types = ["Vehicle documents","MOT certificate","Service record","Inspection report","LOLER certificate","Risk assessment","Manual","Other"];
 const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
-const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 
 export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onEdit,onDelete,deleting}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void;onEdit:()=>void;onDelete:()=>void;deleting:boolean}) {
   const [docs,setDocs]=useState<Doc[]>([]);
   const [pmiReports,setPmiReports]=useState<PmiReport[]>([]);
+  const [dailyReports,setDailyReports]=useState<DailyReport[]>([]);
+  const [jobCards,setJobCards]=useState<JobCard[]>([]);
+  const [photosOpen,setPhotosOpen]=useState<string|null>(null);
+  const [signedPhotos,setSignedPhotos]=useState<{prompt:string;url:string}[]>([]);
   const [certificates,setCertificates]=useState<JobCertificate[]>([]);
   const [uploadAllowed,setUploadAllowed]=useState(false);
   const [loading,setLoading]=useState(true);
@@ -28,6 +34,9 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
 
   async function load() {
     setLoading(true); setError("");
+    const [daily,jobs]=await Promise.all([supabase.from("inspections").select("id,submitted_at,result,report_path,answers,comments").eq("asset_id",asset.id).eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}),supabase.from("workshop_job_cards").select("id,title,status,priority,created_at,job_card_number,instructions").eq("asset_id",asset.id).order("created_at",{ascending:false})]);
+    if(daily.error)setError("Daily inspections could not load: "+daily.error.message);else setDailyReports((daily.data||[]) as DailyReport[]);
+    if(jobs.error)setError("Job cards could not load: "+jobs.error.message);else setJobCards((jobs.data||[]) as JobCard[]);
     const pmi=await supabase.from("hgv_pmi_records").select("id,inspected_on,result,defects,inspector_name,signed_off_by,report_path,brake_test_type").eq("asset_id",asset.id).order("inspected_on",{ascending:false});
     if(pmi.error)setError("Could not load PMI history: "+pmi.error.message);
     else setPmiReports((pmi.data||[]) as PmiReport[]);
@@ -66,6 +75,24 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     setBusy(false);
   }
 
+  async function openDailyReport(report:DailyReport){
+    if(!report.report_path){setError("This inspection has no filed PDF yet. Open Plant Checks and use File PDF in inspection history.");return;}
+    const {data,error}=await supabase.storage.from("plant-inspection-reports").createSignedUrl(report.report_path,600);
+    if(error||!data){setError("Could not open the inspection report: "+(error?.message||"Unknown error"));return;}
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
+  async function viewDailyPhotos(report:DailyReport){
+    setPhotosOpen(report.id);setSignedPhotos([]);setError("");
+    const evidence=Array.isArray(report.answers?._photo_evidence)?report.answers._photo_evidence as {prompt:string;path:string}[]:[];
+    const photos:{prompt:string;url:string}[]=[];
+    for(const entry of evidence){
+      const {data,error}=await supabase.storage.from("plant-inspection-photos").createSignedUrl(entry.path,600);
+      if(error||!data){setError("Photo could not be opened: "+(error?.message||entry.prompt));return;}
+      photos.push({prompt:entry.prompt,url:data.signedUrl});
+    }
+    setSignedPhotos(photos);
+  }
+  const sectionTitle=(title:string,count:number)=><h3 style={{margin:"27px 0 12px",padding:"11px 14px",background:"#191b20",color:"#fff",borderLeft:"5px solid #e31b36",borderRadius:4}}>{title} ({count})</h3>;
   async function openDoc(doc:Doc) {
     const {data,error:err}=await supabase.storage.from("asset-documents").createSignedUrl(doc.storage_path,300);
     if(err||!data?.signedUrl){setError("Could not open this PDF: "+(err?.message||"No secure link returned."));return;}
@@ -114,11 +141,15 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
       <p className="fine">PDF files only · maximum 25 MB per document. Uploads are linked to this asset and recorded against your login.</p>
       {busy&&<p className="muted">Working…</p>}
     </div>}
-    <h3>Generated job certificates ({certificates.length})</h3>
+    {sectionTitle("Daily Plant Inspections",dailyReports.length)}
+    {dailyReports.length===0?<p className="muted">No daily pre-start inspections filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Date</th><th>Operator</th><th>Result</th><th>Report and photographs</th></tr></thead><tbody>{dailyReports.map(report=><tr key={report.id}><td>{dateLabel(report.submitted_at)}</td><td>{String(report.answers?._operator||"Unknown")}</td><td><span className={"tag "+(report.result==="fail"?"red":"green")}>{report.result==="fail"?"Defect reported":"Pass"}</span></td><td><button className="secondary" type="button" onClick={()=>void openDailyReport(report)}><Download size={14}/> {report.report_path?"Open PDF":"PDF not yet filed"}</button> <button className="secondary" type="button" onClick={()=>void viewDailyPhotos(report)}>View 3 photos</button></td></tr>)}</tbody></table>{photosOpen&&<div style={{padding:14,borderTop:"1px solid #e2e8f0"}}><button className="secondary" onClick={()=>{setPhotosOpen(null);setSignedPhotos([]);}}>Close photographs</button><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:15,marginTop:12}}>{signedPhotos.map((photo,i)=><div key={i}><strong>{photo.prompt}</strong><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.prompt} style={{width:"100%",maxWidth:300,border:"1px solid #e2e8f0"}}/></a></div>)}</div></div>}</div>}
+    {sectionTitle("Workshop Job Cards",jobCards.length)}
+    {jobCards.length===0?<p className="muted">No workshop job cards for this machine.</p>:<div className="table-wrap"><table><thead><tr><th>Job</th><th>Date</th><th>Priority</th><th>Status</th><th>Instructions</th></tr></thead><tbody>{jobCards.map(job=><tr key={job.id}><td><b>{job.job_card_number||job.title}</b><small>{job.title}</small></td><td>{dateLabel(job.created_at)}</td><td>{job.priority}</td><td>{job.status}</td><td>{job.instructions}</td></tr>)}</tbody></table></div>}
+    {sectionTitle("Approved Job Certificates",certificates.length)}
     {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Filed at</th><th>Filed by</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td>{cert.pdf_filed_at?dateLabel(cert.pdf_filed_at):"Not recorded (older certificate)"}</td><td>{cert.pdf_filed_by_email|| (cert.pdf_filed_by?"User "+cert.pdf_filed_by.slice(0,8):"Not recorded")}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
-    <h3>PMI inspection reports ({pmiReports.length})</h3>
-    {pmiReports.length===0?<p className="muted">No PMI inspection records for this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Inspection date</th><th>Result</th><th>Brake test</th><th>Inspector</th><th>Signed off by</th><th>Report</th></tr></thead><tbody>{pmiReports.map(p=><tr key={p.id}><td>{p.inspected_on.split("-").reverse().join("/")}</td><td>{p.result}{p.defects?<small style={{display:"block"}}>{p.defects}</small>:null}</td><td>{p.brake_test_type||"—"}</td><td>{p.inspector_name}</td><td>{p.signed_off_by}</td><td>{p.report_path?<button className="secondary" onClick={()=>void openPmiReport(p)}><Download size={14}/> Open PMI report</button>:"No report attached"}</td></tr>)}</tbody></table></div>}
-    <h3>Saved documents ({docs.length})</h3>
+    {sectionTitle("PMI Inspection Reports",pmiReports.length)}
+    {pmiReports.length===0?<p className="muted">No PMI inspection records for this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Inspection date</th><th>Result</th><th>Brake test</th><th>Inspector</th><th>Signed off by</th><th>Report</th></tr></thead><tbody>{pmiReports.map(p=><tr key={p.id}><td>{p.inspected_on.split("-").reverse().join("-")}</td><td>{p.result}{p.defects?<small style={{display:"block"}}>{p.defects}</small>:null}</td><td>{p.brake_test_type||"—"}</td><td>{p.inspector_name}</td><td>{p.signed_off_by}</td><td>{p.report_path?<button className="secondary" onClick={()=>void openPmiReport(p)}><Download size={14}/> Open PMI report</button>:"No report attached"}</td></tr>)}</tbody></table></div>}
+    {sectionTitle("Certificates & Other Documents",docs.length)}
     {loading?<p className="muted">Loading documents…</p>:docs.length===0?<p className="empty">No documents saved for this asset yet. Upload its first PDF above when ready.</p>:
       <div className="table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>Description</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
       {docs.map(doc=><tr key={doc.id}><td><b><FileText size={15} style={{verticalAlign:"middle",marginRight:6}}/>{doc.file_name}</b></td><td>{doc.document_type}</td><td>{doc.description||"—"}</td><td>{dateLabel(doc.uploaded_at)}</td><td style={{display:"flex",gap:7}}><button className="secondary" onClick={()=>void openDoc(doc)}><Download size={14}/> Open PDF</button>{isAdmin&&<button className="secondary" disabled={busy} onClick={()=>void removeDoc(doc)} aria-label="Delete document"><Trash2 size={14}/></button>}</td></tr>)}
