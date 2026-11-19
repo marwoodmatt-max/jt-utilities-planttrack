@@ -7,6 +7,7 @@ import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
 import PlantDefectReview from "../components/plant-defect-review";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
+import DailyInspectionDashboard from "../components/daily-inspection-dashboard";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -739,6 +740,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
           </div>}
           {jobsError&&<p className="auth-error" role="alert">{jobsError}</p>}
 
+          {isAdmin&&<DailyInspectionDashboard supabase={supabase} onOpenChecks={()=>setPage("Plant checks")}/>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Calander")}>Open Calander</button></div>
           {isAdmin&&<PlantSafetyLockouts supabase={supabase} isAdmin={isAdmin}/>}
           {isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}
