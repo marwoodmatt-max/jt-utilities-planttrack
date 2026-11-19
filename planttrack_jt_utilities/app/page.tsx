@@ -547,6 +547,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   const [notificationsLoading,setNotificationsLoading]=useState(false);
   const [notificationsError,setNotificationsError]=useState("");
   const [notifications,setNotifications]=useState<{key:string;label:string;details:string;page:string;priority:number}[]>([]);
+  const [clearingNotifications,setClearingNotifications]=useState(false);
   const [jobCounts,setJobCounts]=useState({new:0,assigned:0,approval:0});
   const [jobsLoading,setJobsLoading]=useState(true);
   const [jobsError,setJobsError]=useState("");
@@ -575,6 +576,19 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   },[supabase,isAdmin]);
 
   const [form,setForm]=useState({asset:"",fault:"",priority:"Normal"});
+  async function clearNotifications(){
+    if(!notifications.length||clearingNotifications)return;
+    setClearingNotifications(true);setNotificationsError("");
+    try{
+      const {data:{user},error:userError}=await supabase.auth.getUser();
+      if(userError||!user)throw new Error("Please sign in again.");
+      const dismissed=notifications.map(n=>({user_id:user.id,notification_key:n.key,notification_label:n.label}));
+      const {error}=await supabase.from("dismissed_notifications").upsert(dismissed,{onConflict:"user_id,notification_key"});
+      if(error)throw error;
+      setNotifications([]);
+    }catch(e){setNotificationsError("Could not clear notifications: "+(e instanceof Error?e.message:String(e)));}
+    finally{setClearingNotifications(false);}
+  }
   async function loadNotifications(){
     setNotificationsLoading(true);setNotificationsError("");
     const [assetsResult,motResult,bookingsResult,lolerResult]=await Promise.all([
@@ -618,7 +632,15 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     const latestLoler=new Map<string,string>();
     for(const exam of lolerResult.data||[]){if(exam.next_due){const existing=latestLoler.get(exam.asset_id);if(!existing||exam.next_due>existing)latestLoler.set(exam.asset_id,exam.next_due);}}
     for(const [assetId,due] of latestLoler){const days=dayDiff(due);if(days>30)continue;const asset=assetById.get(assetId);found.push({key:"loler-"+assetId,label:(days<0?"LOLER overdue":"LOLER due")+" · "+(asset?.asset_code||"Equipment"),details:"Examination "+fmt(due),page:"LOLER & certificates",priority:days<0?1:4});}
-    found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found);setNotificationsLoading(false);
+    const {data:{user},error:userError}=await supabase.auth.getUser();
+    if(userError||!user){setNotificationsError("Please sign in again to see notifications.");setNotificationsLoading(false);return;}
+    const {data:dismissed,error:dismissedError}=await supabase.from("dismissed_notifications").select("notification_key,notification_label").eq("user_id",user.id);
+    if(dismissedError){setNotificationsError("Could not read cleared notifications: "+dismissedError.message);setNotificationsLoading(false);return;}
+    const activeByKey=new Map(found.map(n=>[n.key,n.label]));
+    const stale=(dismissed||[]).filter(d=>activeByKey.get(d.notification_key)!==d.notification_label).map(d=>d.notification_key);
+    if(stale.length)await supabase.from("dismissed_notifications").delete().eq("user_id",user.id).in("notification_key",stale);
+    const cleared=new Set((dismissed||[]).filter(d=>activeByKey.get(d.notification_key)===d.notification_label).map(d=>d.notification_key));
+    found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found.filter(n=>!cleared.has(n.key)));setNotificationsLoading(false);
   }
   useEffect(()=>{if(!isAdmin)return;void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void loadNotifications()).subscribe();return()=>{void supabase.removeChannel(channel);};},[supabase,isAdmin]);
   useEffect(() => {
@@ -690,7 +712,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     </aside>}
     {!isOperator&&mobileNav&&<div className="scrim" onClick={()=>setMobileNav(false)}/>}
     <main className="main">
-      <header className="topbar">{!isOperator&&<button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button>}{isOperator&&<img src="/jt-utilities-logo.jpg" alt="JT Utilities" style={{height:38,width:78,objectFit:"contain",background:"#fff",padding:3,borderRadius:3,marginRight:12}}/>}<div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions">{!isOperator&&<div style={{position:"relative"}}><button className="icon-btn" type="button" aria-label="Compliance notifications" aria-expanded={notificationsOpen} onClick={()=>{setNotificationsOpen(value=>!value);if(!notificationsOpen)void loadNotifications();}}><Bell size={18}/>{notifications.length>0&&<span style={{position:"absolute",top:-5,right:-6,minWidth:18,height:18,padding:"1px 4px",background:"#b91c1c",color:"#fff",borderRadius:12,fontSize:10,fontWeight:700}}>{notifications.length>99?"99+":notifications.length}</span>}</button>{notificationsOpen&&<div role="region" aria-label="Compliance notifications" style={{position:"absolute",right:0,top:42,width:"min(355px,90vw)",maxHeight:420,overflowY:"auto",zIndex:50,background:"#fff",color:"#17212b",border:"1px solid #cbd5e1",borderRadius:10,boxShadow:"0 12px 28px rgba(0,0,0,.18)",padding:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:9}}><strong>Compliance notifications</strong><button className="secondary" type="button" disabled={notificationsLoading} onClick={()=>void loadNotifications()}>Refresh</button></div>{notificationsLoading?<p>Checking live records…</p>:notificationsError?<p role="alert">{notificationsError}</p>:notifications.length===0?<p>No upcoming or overdue compliance alerts.</p>:notifications.map(item=><button type="button" key={item.key} onClick={()=>{setPage(item.page);setNotificationsOpen(false);}} style={{width:"100%",textAlign:"left",display:"block",background:item.priority<2?"#fff1f2":"#f8fafc",color:"#17212b",border:"1px solid #e2e8f0",borderRadius:7,padding:10,marginBottom:7,cursor:"pointer"}}><strong style={{display:"block",fontSize:12}}>{item.label}</strong><span style={{display:"block",fontSize:11,marginTop:3}}>{item.details}</span></button>)}</div>}</div>}<div className="avatar">JT</div></div></header>
+      <header className="topbar">{!isOperator&&<button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button>}{isOperator&&<img src="/jt-utilities-logo.jpg" alt="JT Utilities" style={{height:38,width:78,objectFit:"contain",background:"#fff",padding:3,borderRadius:3,marginRight:12}}/>}<div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions">{!isOperator&&<div style={{position:"relative"}}><button className="icon-btn" type="button" aria-label="Compliance notifications" aria-expanded={notificationsOpen} onClick={()=>{setNotificationsOpen(value=>!value);if(!notificationsOpen)void loadNotifications();}}><Bell size={18}/>{notifications.length>0&&<span style={{position:"absolute",top:-5,right:-6,minWidth:18,height:18,padding:"1px 4px",background:"#b91c1c",color:"#fff",borderRadius:12,fontSize:10,fontWeight:700}}>{notifications.length>99?"99+":notifications.length}</span>}</button>{notificationsOpen&&<div role="region" aria-label="Compliance notifications" style={{position:"absolute",right:0,top:42,width:"min(355px,90vw)",maxHeight:420,overflowY:"auto",zIndex:50,background:"#fff",color:"#17212b",border:"1px solid #cbd5e1",borderRadius:10,boxShadow:"0 12px 28px rgba(0,0,0,.18)",padding:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:9}}><strong>Compliance notifications</strong><div style={{display:"flex",gap:5}}><button className="secondary" type="button" disabled={notificationsLoading||clearingNotifications} onClick={()=>void loadNotifications()}>Refresh</button><button className="secondary" type="button" disabled={notificationsLoading||clearingNotifications||notifications.length===0} onClick={()=>void clearNotifications()}>{clearingNotifications?"Clearing…":"Clear all"}</button></div></div>{notificationsError&&<p role="alert">{notificationsError}</p>}{notificationsLoading?<p>Checking live records…</p>:notifications.length===0?<p>No new notifications. Existing MOT, LOLER and defect records are unchanged.</p>:notifications.map(item=><button type="button" key={item.key} onClick={()=>{setPage(item.page);setNotificationsOpen(false);}} style={{width:"100%",textAlign:"left",display:"block",background:item.priority<2?"#fff1f2":"#f8fafc",color:"#17212b",border:"1px solid #e2e8f0",borderRadius:7,padding:10,marginBottom:7,cursor:"pointer"}}><strong style={{display:"block",fontSize:12}}>{item.label}</strong><span style={{display:"block",fontSize:11,marginTop:3}}>{item.details}</span></button>)}</div>}</div>}<div className="avatar">JT</div></div></header>
       <div className="content">
         <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · {isOperator?"OPERATOR INSPECTIONS":"PLANT MANAGEMENT"}</div><h1>{title}</h1><p>{isOperator?"Complete a pre-start inspection before using your machine.":"PlantTrack management workspace"}</p></div>{!isOperator&&<button className="primary" onClick={()=>{setPage("Workshop job cards");setNotice("Complete the job details below, then click Create job card.");}}><Plus size={17}/> New job card</button>}</div>
         {notice&&<div className="notice">{notice}</div>}
