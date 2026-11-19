@@ -87,7 +87,11 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
   y3-=78;
  }
  write(p3,bold,"Signed by operator",left+8,y3,10,490);
- write(p3,regular,input.operator,left+95,y3-33,11,395);
+ const signatureData=input.answers?._signature;
+ if(signatureData&&signatureData.startsWith("data:image/png;base64,")){
+  try{const signatureImage=await pdf.embedPng(signatureData);const dims=signatureImage.scaleToFit(150,54);p3.drawImage(signatureImage,{x:left+8,y:y3-73,width:dims.width,height:dims.height});}catch{write(p3,regular,"Signature image could not be displayed",left+8,y3-42,8,155);}
+ }
+ write(p3,regular,input.operator,left+195,y3-33,11,295);
  write(p3,regular,date+" "+time+" UK - electronic acknowledgement",left+95,y3-50,9,410);
  footer(p3,regular,3);
  return new Blob([new Uint8Array(await pdf.save())],{type:"application/pdf"});
