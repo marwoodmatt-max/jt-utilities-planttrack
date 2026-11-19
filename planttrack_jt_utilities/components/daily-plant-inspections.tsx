@@ -126,7 +126,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   useEffect(()=>{if(answered===32&&randomPhotoQuestions.length===0)setRandomPhotoQuestions(randomPrompts());},[answered,randomPhotoQuestions.length]);
   function updateAnswer(key:string,value:string){setAnswers(old=>({...old,[key]:value}));setMessage("");}
 
-  async function generateEvidenceReport(row:{asset_id:string|null;hired_plant_name:string|null;submitted_at:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null}){
+  async function generateEvidenceReport(row:{asset_id:string|null;hired_plant_name:string|null;submitted_at:string;meter_reading:number|null;result:string;answers:Record<string,unknown>;comments:string|null}){
     const asset=row.asset_id?assetMap.get(row.asset_id):undefined;
     const evidence=(row.answers?._photo_evidence as unknown as Evidence[]|undefined)||[];
     const attachments:{prompt:string;bytes:Uint8Array;mimeType:string}[]=[];
@@ -150,7 +150,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       operator:String(row.answers?._operator||"Operator"),
       location:String(row.answers?._location||asset?.location||""),
       submittedAt:row.submitted_at,meterReading:row.meter_reading,
-      answers:row.answers||{},comments:row.comments||"",result:row.result,photos:attachments
+      answers:(row.answers||{}) as Record<string,string>,comments:row.comments||"",result:row.result,photos:attachments
     });
   }
   async function fileReport(row:InspectionRow){
