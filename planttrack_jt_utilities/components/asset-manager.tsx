@@ -425,7 +425,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
 
   return <section className="panel">
     <div className="panel-head">
-      <div><h3>{statusFilter==="All"?"Live asset register":statusFilter+" assets"}</h3><p>{filtered.length} matching of {rows.length} assets · {isAdmin ? "Admin asset management enabled" : "View only"}</p></div>
+      <div><h3>{statusFilter==="All"?"Live asset register":statusFilter+" assets"}</h3><p>{filtered.length} matching of {rows.length} assets · {isAdmin ? "Select Edit asset beside the asset number to make changes" : "View only — an administrator can edit asset details"}</p></div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="secondary" onClick={() => void loadAssets()}><RefreshCw size={15}/> Refresh</button>
         {isAdmin && <button className="primary" onClick={startNew}><Plus size={16}/> Add new asset</button>}
@@ -530,14 +530,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
       {categoryFilter.toLowerCase() === "hgv" ? <table><thead><tr><th>Registration</th><th>Description</th><th>Folder</th><th>Next PMI</th><th>Last PMI</th><th>MOT</th><th>Tacho Calibration</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><b>{a.registration || a.asset_code}</b></td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
+        <td><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
         <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span></td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button> <button className="secondary" disabled={saving} onClick={() => void deleteAsset(a)}><Trash2 size={14}/> Delete</button></td>}
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><b>{a.asset_code}</b></td>
+        <td><b>{a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</td>
         <td>{a.description}{a.ownership_type==="hired_in"&&<span className="tag amber" style={{marginLeft:8}}>HIRED-IN</span>}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}{a.ownership_type==="hired_in"&&a.hire_supplier?" · Hire company: "+a.hire_supplier:""}</small></td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
