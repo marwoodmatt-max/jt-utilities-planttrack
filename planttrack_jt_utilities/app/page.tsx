@@ -1015,7 +1015,7 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
  const [busy,setBusy]=useState(false);const [feedback,setFeedback]=useState("");
  const [manual,setManual]=useState(true);const [tempPassword,setTempPassword]=useState("");
  const [resetUser,setResetUser]=useState("");const [resetPassword,setResetPassword]=useState("");
- const roles=[["admin","Administrator"],["plant_manager","Plant Manager"],["supervisor","Supervisor"],["mechanic","Mechanic"],["inspector","Inspector"],["operator","Operator / Driver"],["director","Director"]];
+ const roles=[["admin","Administrator"],["plant_manager","Plant Manager"],["supervisor","Supervisor"],["mechanic","Mechanic"],["inspector","Inspector"],["operator","Plant Operator — Plant Checks only"],["director","Director"]];
  async function request(body:Record<string,unknown>){
   const {data:{session}}=await supabase.auth.getSession();
   if(!session)throw Error("Please sign in again");
@@ -1034,7 +1034,7 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
  <h4>Add a new user</h4><label><input type="checkbox" checked={manual} onChange={e=>setManual(e.target.checked)}/> Create manually (no email required)</label>
  <label>Full name<input required minLength={2} value={name} onChange={e=>setName(e.target.value)} placeholder="Full name"/></label>
  <label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
- <label>Job role<select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+ <label>Job role<select value={role} onChange={e=>setRole(e.target.value)}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>{role==="operator"&&<p className="muted" style={{margin:"-4px 0 4px"}}>Plant Operators open directly into Daily Plant Checks. The dashboard, asset register, job cards and admin tools are hidden for this profile.</p>}
  {manual&&<label>Temporary password (minimum 8 characters)<input type="password" required minLength={8} autoComplete="new-password" value={tempPassword} onChange={e=>setTempPassword(e.target.value)}/></label>}<button className="primary" type="submit" disabled={busy}><Plus size={16}/>{busy?"Please wait…":manual?"Create user":"Send email invitation"}</button>
  <p className="muted">{manual?"Give the temporary password privately. The user must choose a new password at first sign-in.":"The user receives an activation email to set their own password."}</p>
  </form>
