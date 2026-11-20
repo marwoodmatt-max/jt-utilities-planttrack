@@ -431,7 +431,10 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  };
  async function saveEngineerDraft(job:any){
   if(!Number.isFinite(Number(hours))||Number(hours)<0){setNotice("Enter a valid number of hours before saving.");return;}
-  await perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours)}),"Progress saved. Job is still assigned to you — it has not been submitted.");
+  await perform(()=>supabase.rpc("save_engineer_workshop_draft",{
+   p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours),
+   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields}:{})}
+  }),"Progress and any inspection findings saved. Job has not been signed or submitted.");
  }
  async function submitEngineerJob(job:any){
   const missing=missingEngineerFields(job);
