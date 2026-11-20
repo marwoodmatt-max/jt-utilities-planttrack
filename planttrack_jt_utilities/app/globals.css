@@ -581,3 +581,29 @@ tbody tr:hover{background:#fff5f6}
 .workshop-pre-use-row textarea{width:100%;font-size:14px;min-height:64px;border:1px solid #bbc8d8;box-sizing:border-box;padding:9px;border-radius:5px}
 .workshop-pre-use-finish{display:grid;gap:12px;padding:14px;border:2px solid #b0bece;border-radius:7px;background:#f8fafc}
 @media(max-width:700px){.workshop-pre-use-sheet-meta{grid-template-columns:1fr}.workshop-pre-use-section{padding:10px}.workshop-pre-use-section>h4{margin:-10px -10px 2px}.workshop-pre-use-choices>button{min-height:51px;font-size:12px}.workshop-pre-use-row{padding:12px 3px}.workshop-pre-use-row textarea{min-height:75px;font-size:16px}.workshop-pre-use-finish select{font-size:16px}}
+
+
+/* Clear one-tap inspection decisions and comment box, especially on Android phones. */
+.workshop-pre-use-choices{gap:9px}
+.workshop-pre-use-choices>.workshop-pre-use-option{border-radius:9px;min-height:57px;font-size:14px;letter-spacing:.1px;box-shadow:0 1px 2px rgba(12,22,37,.06);transition:background-color .1s,border-color .1s}
+.workshop-pre-use-choices>.workshop-pre-use-option.pass{background:#e5f6ec;border-color:#8bcca6;color:#125a35}
+.workshop-pre-use-choices>.workshop-pre-use-option.pass.chosen{background:#15803d;color:#fff;border-color:#11672f;box-shadow:0 0 0 2px #8fd7a8}
+.workshop-pre-use-choices>.workshop-pre-use-option.na{background:#f0f2f5;border-color:#c0c7d0;color:#424b57}
+.workshop-pre-use-choices>.workshop-pre-use-option.na.chosen{background:#596474;color:#fff;border-color:#43505f;box-shadow:0 0 0 2px #b8c1cc}
+.workshop-pre-use-choices>.workshop-pre-use-option.defect{background:#ffebed;border-color:#edacb4;color:#a1152b}
+.workshop-pre-use-choices>.workshop-pre-use-option.defect.chosen{background:#bd1831;color:#fff;border-color:#9e1427;box-shadow:0 0 0 2px #f2a5b1}
+.workshop-pre-use-choices>.workshop-pre-use-option:focus-visible{outline:3px solid #2563eb;outline-offset:3px}
+.workshop-pre-use-row>strong{font-size:15px}
+.workshop-pre-use-row .workshop-pre-use-notes{display:grid;gap:7px;margin-top:4px;color:#415064;font-size:13px}
+.workshop-pre-use-row .workshop-pre-use-notes textarea{border-radius:8px;min-height:73px;background:#fff}
+.workshop-pre-use-row .workshop-pre-use-notes.required{color:#a1152b;font-weight:800}
+.workshop-pre-use-row .workshop-pre-use-notes.required textarea{border:2px solid #bd1831;background:#fffafa}
+.workshop-pre-use-required{font-size:12px;color:#b1162d;font-weight:800}
+@media(max-width:700px){
+ .workshop-pre-use-row{background:#fff;padding:15px 10px 17px;border:1px solid #d6dee8;border-radius:10px;gap:12px;margin-bottom:4px;box-shadow:0 2px 5px rgba(10,30,50,.035)}
+ .workshop-pre-use-row>strong{font-size:16px;line-height:1.4}
+ .workshop-pre-use-choices{gap:7px}
+ .workshop-pre-use-choices>.workshop-pre-use-option{min-height:61px;font-size:14px}
+ .workshop-pre-use-row .workshop-pre-use-notes textarea{font-size:16px;min-height:84px;padding:11px}
+ .workshop-pre-use-progress{font-size:14px;padding:13px}
+}
