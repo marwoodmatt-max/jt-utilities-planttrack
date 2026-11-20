@@ -612,7 +612,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <div className="workshop-mobile-job-top"><span className={"tag "+(j.status==="Returned for correction"?"amber":"blue")}>{j.status==="Returned for correction"?"Correction requested":j.status==="Awaiting office approval"?"Sent to office":j.status}</span><span className="tag">{j.priority||"Normal"}</span></div>
     <h4>{jobHeading(j)}</h4><p className="workshop-mobile-asset">{j.title}</p>
     <p className="muted">{j.job_type||"General repair"}{j.certificate_number?" · Certificate "+j.certificate_number:""}</p>
-    <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":"View job"}</button>
+    <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":j.job_card_pdf_path?"View signed PDF":"View job"}</button>
    </article>)}
   </div>}
   {role==="office"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="Office workshop job inbox">
@@ -628,8 +628,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <button type="button" className={job.status==="Awaiting office approval"?"primary":"secondary"} onClick={()=>openMechanicJob(job)}>{job.status==="Awaiting office approval"?"Review & sign":"View job"}</button>
    </article>)}
   </div>}
-  <div className="table-wrap workshop-desktop-jobs"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {orderedJobs.map((j,index)=><Fragment key={j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button></td></tr></Fragment>)}
+  <div className={"table-wrap workshop-desktop-jobs"+(role==="engineer"?" workshop-mechanic-hide-table":"")}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+   {(role==="engineer"?mechanicVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button></td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button type="button" className="primary" onClick={()=>{setShowCreateJob(v=>!v);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{showCreateJob?"Close new job":role==="engineer"?"New Ad Hoc Job":"Add job card"}</button></div><div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3>
@@ -656,7 +656,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
    <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")?{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}:jobType==="Pre-use / return-to-work check"?{"Inspection sheet version":PRE_USE_SHEET_VERSION,"Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"","Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");setShowCreateJob(false);if(role==="engineer"){setMechanicFilter("active");if(r.data)setSelected(String(r.data));}}return r;},role==="engineer"?"Ad hoc job card created and assigned to you. Open it to record your work.":"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my Ad Hoc Job":"Create job card"}</button>
   </div></>}
-  {chosen&&<div ref={selectedJobRef} className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
+  {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
    {role==="office"&&<button type="button" className="secondary workshop-office-mobile-back" onClick={()=>{setSelected("");setNotice("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to office jobs</button>}
    {role==="engineer"&&<div className="mechanic-mobile-completion">
     <div className="mechanic-mobile-head">
@@ -694,6 +694,10 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
      <strong>{chosen.status==="Awaiting office approval"?"Submitted to office for approval":"Job status: "+chosen.status}</strong>
      {chosen.engineer_signed_at&&<p>Signed {new Date(chosen.engineer_signed_at).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
      <p>{chosen.engineer_work||""}</p>
+     <div className="workshop-pdf-actions">
+      {chosen.job_card_pdf_path?<button type="button" className="primary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}><FileText size={17}/> View filed JT PDF</button>:<button type="button" className="secondary" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={17}/> {chosen.status==="Awaiting office approval"?"Preview PDF — awaiting office signature":"Download Job Card PDF"}</button>}
+      {chosen.job_type==="Pre-use / return-to-work check"&&<p className="muted">Full Pre-Use Inspection Sheet, comments and signatures are in the PDF. Approved copies are automatically filed in the machine's Asset Folder.</p>}
+     </div>
     </div>}
    </div>}
    <div className={role==="engineer"?"mechanic-desktop-details":""}>
@@ -706,7 +710,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     {chosen.job_type==="Pre-use / return-to-work check"&&<div className="workshop-pre-use-office">
      <strong>Return-to-work safety review · {chosen.completion_checklist?.["Pre-use result"]||"Result not recorded"}</strong>
      <p>Verify every check below and the mechanic's signature. A failed check cannot be approved. An active safety hold must be released through the separate authorised process; this sign-off does not release it.</p>
-     {requiredChecklist(chosen).map((key:string)=><p key={key}><b>{key}:</b> {String(chosen.completion_checklist?.[key]||"Not recorded")}</p>)}
+     <button type="button" className="secondary" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={17}/> View inspection sheet PDF</button>
+     <details><summary>Review full checklist and notes</summary>{requiredChecklist(chosen).map((key:string)=><p key={key}><b>{key}:</b> {String(chosen.completion_checklist?.[key]||"Not recorded")}{chosen.completion_checklist?.[key+" - Comments"]?" · Notes: "+chosen.completion_checklist[key+" - Comments"]:""}</p>)}</details>
     </div>}
     <label>Office reviewer — full name<input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Enter your full name"/></label>
     <label>Review comments<textarea rows={3} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Approval notes or reason for correction"/></label>
@@ -716,7 +721,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     </div>
    </div>}
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
-   {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
+   {role==="office"&&chosen.job_type!=="Pre-use / return-to-work check"&&Object.keys(chosen.completion_checklist||{}).length>0&&<details><summary style={{cursor:"pointer",fontWeight:700}}>Inspection details</summary>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</details>}
    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/></details>}
    {chosen.job_type==="General repair"&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&(role==="office"||role==="engineer")&&<div style={{marginBottom:12}}>
     <button className="secondary" type="button" onClick={()=>{if(editCard){setEditCard(false);return;}setEditTitle(chosen.title||"");setEditInstructions(chosen.instructions||"");setEditDetails({...chosen.job_details});setEditCard(true);}}>{editCard?"Cancel editing":"Edit Asset Job Card"}</button>
@@ -728,14 +733,14 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
      <button className="primary" type="button" disabled={busy} onClick={()=>void perform(async()=>{const result=await supabase.rpc("update_open_workshop_job_card",{p_job:chosen.id,p_title:editTitle,p_instructions:editInstructions,p_details:editDetails});if(!result.error)setEditCard(false);return result;},"Job card updated — download a fresh PDF to see changes")}>Save job card changes</button>
     </div>}
    </div>}
-   <div><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> Download JT Asset Job Card PDF</button>
-    <GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/></div>
+   {role!=="engineer"&&<div><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> {chosen.job_type==="Pre-use / return-to-work check"?"Download Pre-Use Inspection PDF":"Download JT Asset Job Card PDF"}</button>
+    {chosen.job_type!=="Pre-use / return-to-work check"&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}</div>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
    {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>{String(chosen.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":"View original filed PDF"}</button>}
-   {chosen.job_card_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}>View filed JT Asset Job Card</button>}
+   {chosen.job_card_pdf_path&&role!=="engineer"&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}>{chosen.job_type==="Pre-use / return-to-work check"?"View filed Pre-Use Inspection PDF":"View filed JT Asset Job Card"}</button>}
    {role==="office"&&chosen.status==="Approved"&&(!chosen.approved_pdf_path||!chosen.job_card_pdf_path)&&<div className="workshop-missing-document">
     <strong>Approved job — document filing needs attention</strong>
     <p>{!chosen.approved_pdf_path?"Original approved document not filed. ":""}{!chosen.job_card_pdf_path?"JT Asset Job Card not separately filed.":""} The office sign-off is saved; existing PDFs will not be overwritten.</p>
