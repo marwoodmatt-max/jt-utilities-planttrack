@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AlertTriangle, CheckCircle2, RefreshCcw, ShieldCheck, Wrench } from "lucide-react";
 
-type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;release_notes:string|null};
+type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;released_by:string|null;release_notes:string|null};
 type Job={id:string;inspection_id:string|null;status:string;assigned_engineer:string|null;job_card_number:string|null};
 type Mechanic={id:string;name:string};
 type AuditEvent={event_id:string;action:string;actor_name:string;actor_id:string;happened_at:string;detail:string};
@@ -25,7 +25,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
  const [loading,setLoading]=useState(true);
  const load=useCallback(async()=>{
   setLoading(true);
-  let query=supabase.from("plant_safety_lockouts").select("id,asset_id,inspection_id,locked_at,defect_summary,previous_status,released_at,release_notes").order("locked_at",{ascending:false}).limit(300);
+  let query=supabase.from("plant_safety_lockouts").select("id,asset_id,inspection_id,locked_at,defect_summary,previous_status,released_at,released_by,release_notes").order("locked_at",{ascending:false}).limit(300);
   if(assetId)query=query.eq("asset_id",assetId);
   const [h,j,a,m]=await Promise.all([
    query,
@@ -38,7 +38,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
    const records=(h.data||[]) as Hold[];
    setHolds(records);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));setMechanics((m.data||[]) as Mechanic[]);
    if(isAdmin){
-    const activeAssets=[...new Set(records.filter(x=>!x.released_at).map(x=>x.asset_id))];
+    const activeAssets=[...new Set(records.map(x=>x.asset_id))];
     const results=await Promise.all(activeAssets.map(async id=>({id,...await supabase.rpc("read_plant_defect_audit",{p_asset:id})})));
     const failed=results.find(x=>x.error);
     if(failed)setAuditError("Could not load full audit history: "+failed.error?.message);
@@ -147,6 +147,6 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
     {isAdmin&&<details style={{marginTop:13,borderTop:"1px solid #e9bdc3",paddingTop:10}}><summary style={{cursor:"pointer",fontWeight:700,fontSize:13}}>Audit trail · who did what and when ({(auditByAsset[asset]||[]).length})</summary><div style={{maxHeight:260,overflowY:"auto",marginTop:9}}>{(auditByAsset[asset]||[]).map(event=><div key={event.event_id} style={{padding:"7px 0",borderBottom:"1px solid #f0e5e7",fontSize:12}}><b>{event.action}</b> · {event.actor_name} · {dateLabel(event.happened_at)}{event.detail&&<div style={{color:"#596271",marginTop:3,whiteSpace:"pre-wrap"}}>{event.detail}</div>}</div>)}{!(auditByAsset[asset]||[]).length&&<p className="muted">No audit events for this machine yet.</p>}</div></details>}
    </article>;
   })}
-  {history.length>0&&<details><summary style={{cursor:"pointer",fontWeight:600}}>Previous releases ({history.length})</summary>{history.slice(0,30).map(h=><p key={h.id} style={{fontSize:12,borderBottom:"1px solid #eee",padding:6}}>{assets[h.asset_id]||"Machine"} · {h.released_at?dateLabel(h.released_at):""} · {h.release_notes||""}</p>)}</details>}
+  {history.length>0&&<details><summary style={{cursor:"pointer",fontWeight:600}}>Previous releases ({history.length})</summary>{history.slice(0,30).map(h=><div key={h.id} style={{fontSize:12,borderBottom:"1px solid #eee",padding:"8px 6px"}}><b>{assets[h.asset_id]||"Machine"}</b> · Released {h.released_at?dateLabel(h.released_at):""}<div>{h.release_notes||""}</div>{isAdmin&&<details style={{marginTop:5}}><summary style={{cursor:"pointer"}}>View user and timestamp history</summary>{(auditByAsset[h.asset_id]||[]).map(ev=><div key={ev.event_id} style={{margin:"6px 0"}}>{ev.action} · {ev.actor_name} · {dateLabel(ev.happened_at)}</div>)}</details>}</div>)}</details>}
  </section>;
 }
