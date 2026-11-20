@@ -355,3 +355,35 @@ tbody tr:hover{background:#fff5f6}
 /* Align the final Plant Checks button with the four filter input boxes. */
 .daily-compliance-action{position:relative;top:-15px}
 @media(max-width:1350px){.daily-compliance-action{top:0}}
+
+
+/* Mechanic phone workflow: focused inbox and one-page job completion. */
+.mechanic-mobile-completion{display:none}
+@media(max-width:700px){
+ .mechanic-inbox-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 12px}
+ .mechanic-inbox-tabs button{border:1px solid #c9d1dc;border-radius:5px;background:#fff;color:#263241;font-size:12px;font-weight:700;padding:12px 4px;min-height:44px}
+ .mechanic-inbox-tabs button.selected{background:#222630;color:#fff;border-color:#222630}
+ .workshop-mobile-job .secondary{width:100%;min-height:46px;margin-top:10px}
+ .mechanic-desktop-details{display:none!important}
+ .mechanic-mobile-completion{display:grid;gap:14px;min-width:0}
+ .mechanic-mobile-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+ .mechanic-mobile-completion h3{font-size:19px;line-height:1.3;margin:0;overflow-wrap:anywhere}
+ .mechanic-mobile-subtitle{font-size:13px;color:#475569;margin:0}
+ .mechanic-mobile-instructions{border:1px solid #d9e0e9;background:#f7f9fb;padding:13px;border-radius:6px;font-size:13px}
+ .mechanic-mobile-instructions p{white-space:pre-wrap;margin:6px 0 0;line-height:1.6}
+ .mechanic-mobile-fields{display:grid;gap:14px}
+ .mechanic-mobile-fields>label,.mechanic-mobile-sign>label,.mechanic-specialist-fields>label{display:grid;gap:7px;font-size:13px;font-weight:700}
+ .mechanic-mobile-fields textarea,.mechanic-mobile-fields input,.mechanic-specialist-fields textarea{width:100%;min-width:0;box-sizing:border-box;font-size:16px;padding:12px;line-height:1.4;min-height:48px;border:1px solid #cbd5e1;border-radius:5px;background:#fff}
+ .mechanic-mobile-fields textarea{resize:vertical}
+ .mechanic-save-btn,.mechanic-submit-btn{width:100%;min-height:53px;font-size:15px}
+ .mechanic-mobile-sign{display:grid;gap:7px;padding-top:12px;border-top:1px solid #d6dfe9}
+ .mechanic-mobile-sign p,.mechanic-mobile-fields>small{color:#566476;font-size:12px;line-height:1.5;margin:0}
+ .mechanic-missing{background:#fff7e8;border:1px solid #f5d69c;border-radius:5px;padding:10px;font-size:12px;line-height:1.5;color:#804d13;margin:0}
+ .mechanic-mobile-complete-status{border:1px solid #b9dfc5;border-radius:6px;background:#f0fbf3;padding:14px;font-size:13px}
+ .mechanic-mobile-complete-status p{margin:7px 0 0;white-space:pre-wrap}
+ .mechanic-specialist{border:1px solid #d4dce7;border-radius:6px;padding:11px;background:#f8fafc}
+ .mechanic-specialist-toggle{width:100%;min-height:48px;text-align:left}
+ .mechanic-specialist-fields{display:grid;gap:13px;margin-top:14px}
+ .mechanic-specialist-fields textarea{font-size:15px}
+ .workshop-selected-job{scroll-margin-top:75px}
+}
