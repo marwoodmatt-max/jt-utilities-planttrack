@@ -396,6 +396,17 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     await loadAssets();
   }
 
+  // On returning from an Asset Folder, bring the editable form into view after
+  // React has mounted it.  The form sits above the asset register and importing
+  // controls, so staying at the folder's old scroll position hides it.
+  useEffect(() => {
+    if (!editing || selectedAsset || !isAdmin) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("asset-edit-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editing, selectedAsset, isAdmin]);
+
   if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} onEdit={() => {const asset=selectedAsset;setSelectedAsset(null);void startEdit(asset);}} onDelete={() => void deleteAsset(selectedAsset)} deleting={saving} />;
 
   const fieldStyle: React.CSSProperties = {
@@ -484,7 +495,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     {message && <div className="notice" role="status">{message}</div>}
     {error && <div className="auth-error" role="alert">{error}</div>}
 
-    {editing !== null && isAdmin && <form onSubmit={saveAsset} style={{ border: "1px solid #e5e5e8", borderRadius: 8, padding: 16, marginBottom: 18, background: "#fafafa" }}>
+    {editing !== null && isAdmin && <form id="asset-edit-form" onSubmit={saveAsset} style={{ scrollMarginTop: 20, border: "1px solid #e5e5e8", borderRadius: 8, padding: 16, marginBottom: 18, background: "#fafafa" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div><span className="eyebrow">ADMIN ONLY</span><h3 style={{ marginTop: 5 }}>{editing === "new" ? "Add new asset" : "Edit asset details"}</h3></div>
         <button type="button" className="icon-btn" onClick={() => setEditing(null)} aria-label="Close form"><X size={19}/></button>
