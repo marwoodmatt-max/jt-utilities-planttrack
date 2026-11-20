@@ -5,7 +5,6 @@ import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf } from "../lib/loler-pdf";
 import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
-import PlantDefectReview from "../components/plant-defect-review";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
 import DailyInspectionDashboard from "../components/daily-inspection-dashboard";
 import { requiresDailyPlantCheck, MISSING_PLANT_CHECK_ALERT_HOUR_UK, ukDateString, ukHour } from "../lib/daily-check-requirements";
@@ -401,6 +400,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
  })();return()=>{active=false};},[supabase,refresh]);
+ useEffect(()=>{const update=()=>setRefresh(n=>n+1);const channel=supabase.channel("mechanic-job-inbox").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},update).subscribe();window.addEventListener("focus",update);const timer=window.setInterval(update,30000);return()=>{window.clearInterval(timer);window.removeEventListener("focus",update);void supabase.removeChannel(channel);};},[supabase]);
  const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
  const orderedJobs=[...jobs].sort((a,b)=>jobStage(a.status)-jobStage(b.status)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
  const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
@@ -450,7 +450,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  return <section className="panel workshop-job-panel">
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
-  <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {jobs.filter(j=>j.status==="Awaiting office approval").length} awaiting review</h3>
+  <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>j.status==="Awaiting office approval").length+" awaiting review"}</h3>
   {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
     {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:orderedJobs.map(j=><article className="workshop-mobile-job" key={j.id}>
       <div className="workshop-mobile-job-top"><span className="tag">{j.priority||"Normal"} priority</span><span className="tag blue">{j.status}</span></div>
@@ -781,7 +781,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
           {isAdmin&&<DailyInspectionDashboard supabase={supabase} onOpenChecks={()=>setPage("Plant checks")}/>}
           <div className="panel-head" style={{marginTop:24,marginBottom:12}}><div><h3>Inspection and examination schedule</h3><p>See what is overdue and what is coming up across your fleet.</p></div><button className="text-btn" onClick={()=>setPage("Calander")}>Open Calander</button></div>
           {isAdmin&&<PlantSafetyLockouts supabase={supabase} isAdmin={isAdmin}/>}
-          {isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}
+          
           <PmiDashboard supabase={supabase} onOpenCalendar={()=>setPage("Calander")}/>
           <Calendar supabase={supabase}/>
           <WorkshopDashboardSummary supabase={supabase} onOpen={()=>setPage("Workshop job cards")}/>
@@ -789,7 +789,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} statusFilter={assetFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Vehicle VOR management"&&<AssetManager supabase={supabase} isAdmin={isAdmin} vorOnly onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Workshop job cards"&&<>{isAdmin&&<PlantDefectReview supabase={supabase} onOpenWorkshop={()=>setPage("Workshop job cards")}/>}<WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
+        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
         {page==="Calander"&&<Calendar supabase={supabase}/>}
         {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&(isOperator||isAdmin)&&<DailyPlantInspections supabase={supabase}/>}
