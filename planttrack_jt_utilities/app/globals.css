@@ -559,3 +559,25 @@ tbody tr:hover{background:#fff5f6}
 .workshop-pre-use-office>p b{color:#1f2937}
 .mechanic-specialist-fields select,.workshop-selected-job select{min-height:47px}
 @media(max-width:700px){.workshop-pre-use-warning{padding:11px}.workshop-pre-use-office{padding:10px}.mechanic-specialist-fields select{min-height:53px;font-size:16px}}
+
+
+/* Full JT Utilities pre-use inspection sheet: CHKD / N/A / DEFECT and comments for every item. */
+.workshop-pre-use-sheet{display:grid;gap:12px;min-width:0}
+.workshop-pre-use-sheet-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.workshop-pre-use-sheet-meta label,.workshop-pre-use-finish label{display:grid;gap:7px;font-size:13px;font-weight:750;color:#243246}
+.workshop-pre-use-sheet-meta input,.workshop-pre-use-finish select,.workshop-pre-use-finish textarea{width:100%;min-height:49px;box-sizing:border-box}
+.workshop-pre-use-progress{position:relative;margin:3px 0;padding:10px 12px;border:1px solid #c4d4e8;background:#eef4fb;border-radius:6px;font-size:13px;font-weight:700;color:#243953}
+.workshop-pre-use-section{display:grid;gap:9px;margin:7px 0 12px;border:1px solid #becad8;border-radius:7px;padding:11px;background:#fff}
+.workshop-pre-use-section>h4{background:#203149;color:#fff;font-size:14px;font-weight:800;margin:-11px -11px 3px;padding:12px;border-radius:6px 6px 0 0}
+.workshop-pre-use-row{display:grid;gap:8px;padding:11px 9px;border-bottom:1px solid #d9e1ea}
+.workshop-pre-use-row:last-child{border-bottom:0}
+.workshop-pre-use-row>strong{font-size:13px;line-height:1.4}
+.workshop-pre-use-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.workshop-pre-use-choices>button{min-height:46px;border:2px solid #aab9c9;background:#f8fafc;color:#263448;border-radius:6px;font-weight:800;font-size:12px;cursor:pointer}
+.workshop-pre-use-choices>button.chosen{background:#d7f2e0;border-color:#167a47;color:#145c39}
+.workshop-pre-use-choices>button.defect{color:#922b2b}
+.workshop-pre-use-choices>button.defect.chosen{background:#fee2e2;border-color:#c21b30;color:#8a1527}
+.workshop-pre-use-row label{display:grid;gap:5px;font-size:12px;font-weight:700;color:#384b60}
+.workshop-pre-use-row textarea{width:100%;font-size:14px;min-height:64px;border:1px solid #bbc8d8;box-sizing:border-box;padding:9px;border-radius:5px}
+.workshop-pre-use-finish{display:grid;gap:12px;padding:14px;border:2px solid #b0bece;border-radius:7px;background:#f8fafc}
+@media(max-width:700px){.workshop-pre-use-sheet-meta{grid-template-columns:1fr}.workshop-pre-use-section{padding:10px}.workshop-pre-use-section>h4{margin:-10px -10px 2px}.workshop-pre-use-choices>button{min-height:51px;font-size:12px}.workshop-pre-use-row{padding:12px 3px}.workshop-pre-use-row textarea{min-height:75px;font-size:16px}.workshop-pre-use-finish select{font-size:16px}}
