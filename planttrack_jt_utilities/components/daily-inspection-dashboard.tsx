@@ -145,7 +145,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   </div>
   {error&&<p className="auth-error" role="alert">{error}</p>}
   {loading?<p>Loading inspection compliance…</p>:<>
-   <div className="daily-compliance-stats">
+   <div className="daily-compliance-stats" style={{gridTemplateColumns:"repeat(2,minmax(0,1fr))"}}>
     {[
       {label:"Allocated equipment",value:totals.total,caption:"Operational allocations on active projects",icon:ClipboardCheck,kind:"base"},
       {label:"Inspected today",value:totals.inspected,caption:"Completed checks, including defects",icon:CheckCircle2,kind:"success"},
