@@ -105,9 +105,16 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
    const sheetPages=[sheetPage];
    let sheetLogo:Awaited<ReturnType<typeof doc.embedJpg>>|null=null;
    try{const response=await fetch("/jt-utilities-logo.jpg");if(response.ok)sheetLogo=await doc.embedJpg(await response.arrayBuffer());}catch{}
-   const write=(value:unknown,x:number,yy:number,size=8.5,face=font)=>{
-    const valueText=ascii(value??"");
-    if(valueText)sheetPage.drawText(valueText,{x,y:yy,size,font:face,color:ink});
+   const write=(value:unknown,x:number,yy:number,size=8.5,face=font,maxWidth=right-x-7)=>{
+    const valueText=ascii(value??"").replace(/\s+/g," ").trim();
+    if(!valueText)return;
+    let fitted=valueText;
+    while(fitted.length&&face.widthOfTextAtSize(fitted,size)>maxWidth)fitted=fitted.slice(0,-1);
+    if(fitted.length<valueText.length){
+     while(fitted.length&&face.widthOfTextAtSize(fitted+"...",size)>maxWidth)fitted=fitted.slice(0,-1);
+     fitted+="...";
+    }
+    if(fitted)sheetPage.drawText(fitted,{x,y:yy,size,font:face,color:ink});
    };
    const wrapped=(value:unknown,maxWidth:number,size=8,face=font):string[]=>{
     const out:string[]=[];
@@ -140,11 +147,19 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
     write("PRE-USE / RETURN-TO-WORK INSPECTION SHEET",188,799,11.5,strong);
     write(jobNo+"  |  "+shortDate(job.created_at),188,779,9,strong);
     sheetPage.drawLine({start:{x:left,y:746},end:{x:right,y:746},thickness:1.4,color:rgb(.8,.14,.22)});
-    write("DATE: "+shortDate(job.engineer_signed_at||job.created_at),left,728,8,strong);
-    write("MACHINE: "+ascii(assetLabel).slice(0,54),left+120,728,8,strong);
-    write("ASSET NO: "+ascii(assetCode).slice(0,22),left,713,8,strong);
-    write("FITTER: "+ascii(job.engineer_signature||"Not signed").slice(0,36),left+165,713,8,strong);
-    write("HOURS: "+String(job.engineer_hours??"Not recorded"),left+425,713,8,strong);
+    // Fixed-width header cells keep long names and dates from drawing over neighbouring fields.
+    const headerCells:[string,string,number,number,number][]=[
+     ["DATE",shortDate(job.engineer_signed_at||job.created_at),left,132,728],
+     ["MACHINE",assetLabel,left+137,width-137,728],
+     ["ASSET NO",assetCode,left,132,713],
+     ["FITTER",job.engineer_signature||"Not signed",left+137,278,713],
+     ["HOURS",String(job.engineer_hours??"Not recorded"),left+421,width-421,713]
+    ];
+    for(const [label,value,x,w,yy] of headerCells){
+     write(label+":",x,yy,8,strong,Math.min(58,w-6));
+     const labelWidth=strong.widthOfTextAtSize(label+":",8)+5;
+     write(value,x+labelWidth,yy,8,font,w-labelWidth-5);
+    }
     yPos=692;
    };
    sheetHeader();
@@ -176,7 +191,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
    sheetPage.drawRectangle({x:left,y:yPos-35,width,height:35,color:passes?rgb(.91,.97,.92):rgb(1,.92,.90)});
    write("FINAL RESULT: "+(passes?"PASS - inspection completed":"FAIL / NOT SAFE TO RETURN TO WORK"),left+9,yPos-22,11,strong);
    yPos-=46;
-   write("STATUTORY INSPECTION EXPIRY DATE: "+String(answers["Statutory inspection expiry date"]||"Not provided"),left,yPos,9,strong);yPos-=26;
+   write("NEXT LOLER INSPECTION DUE: "+shortDate(answers["Statutory inspection expiry date"]||"Not recorded"),left,yPos,9,strong,width);yPos-=26;
    write("OUTSTANDING DEFECTS / RESTRICTIONS",left,yPos,9,strong);yPos-=15;
    yPos-=paragraph(answers["Outstanding defects / restrictions"]||"None",left+6,yPos,width-14,9)+12;
    if(passes) yPos-=paragraph("I hereby declare the equipment was inspected / serviced in accordance with the appropriate provisions and, except as noted above, no defect likely to affect safe use was recorded.",left,yPos,width,8.5);
