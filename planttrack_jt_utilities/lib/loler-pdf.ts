@@ -36,11 +36,14 @@ function ascii(value: unknown): string {
  return String(value ?? "").replace(/[\u2018\u2019]/g,"'").replace(/[\u201C\u201D]/g,'"').replace(/[\u2013\u2014]/g,"-").replace(/[^\x20-\x7e\n]/g," ");
 }
 export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=false):Promise<Blob>{
- if(job.job_type==="General repair"){
+ if(!String(job.job_type||"").startsWith("LOLER")){
   const doc=await PDFDocument.create(),page=doc.addPage([595.28,841.89]);
   const font=await doc.embedFont(StandardFonts.Helvetica),strong=await doc.embedFont(StandardFonts.HelveticaBold);
   const ink=rgb(.12,.17,.23),border=rgb(.48,.53,.6),pale=rgb(.94,.95,.97);
   const left=37,right=558,width=right-left;
+  const assetCode=job.asset_code||String(assetLabel).split(" · ")[0];
+  const fallbackNo="JT-JOB-"+String(job.id||"").slice(0,8).toUpperCase();
+  const jobNo=job.job_card_number||fallbackNo;
   const clean=(value:unknown)=>{const v=String(value??"").trim();return v&&v.toLowerCase()!=="none"?v:"";};
   const shortDate=(value:unknown)=>{const v=clean(value);if(!v)return "";const date=v.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);return date?`${date[3]}-${date[2]}-${date[1]}`:v;};
   const line=(value:unknown,x:number,top:number,maxWidth:number,size=9,boldText=false,maxLines=4)=>{
@@ -78,16 +81,16 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   try{const response=await fetch("/jt-utilities-logo.jpg");if(response.ok){const img=await doc.embedJpg(await response.arrayBuffer());const d=img.scaleToFit(135,72);page.drawImage(img,{x:left,y:742,width:d.width,height:d.height});}}catch{}
   line("JT UTILITIES LTD",190,799,340,15,true);
   line("ASSET JOB CARD",190,775,340,14,true);
-  line("Job card no: "+(job.job_card_number||job.id),190,752,350,9);
+  line(jobNo+"   |   "+shortDate(job.created_at)+"   |   "+assetCode,190,752,365,9,true);
   let y=726;
-  cell(left,y,173,67,"ASSET NUMBER",job.asset_code||String(assetLabel).split(" · ")[0]);cell(left+173,y,174,67,"DATE OF DEFECT",shortDate(job.job_details?.["Date of defect"]||job.created_at));cell(left+347,y,174,67,"JOB CARD NO",job.job_card_number||job.id);y-=67;
+  cell(left,y,173,67,"ASSET NUMBER",assetCode);cell(left+173,y,174,67,"DATE OF JOB / DEFECT",shortDate(job.job_details?.["Date of defect"]||job.created_at));cell(left+347,y,174,67,"JOB CARD NO",jobNo);y-=67;
   cell(left,y,300,73,"DESCRIPTION",job.asset_description||job.job_details?.Description||assetLabel);cell(left+300,y,221,73,"SERIAL NUMBER",job.asset_serial_number||job.job_details?.["Serial number"]||job.job_details?.["Serial Number"]);y-=73;
-  cell(left,y,width,113,"JOB DETAILS",[job.instructions||job.title,job.job_details?.["Job details"]].filter(Boolean).join(" — "));y-=113;
+  cell(left,y,width,113,"JOB DETAILS / "+String(job._workCategory||job.job_type||"REPAIR").toUpperCase(),[job.instructions||job.title,job.job_details?.["Job details"]].filter(Boolean).join(" — "));y-=113;
   cell(left,y,width,89,"WORK COMPLETED",job.engineer_work);y-=89;
   cell(left,y,width,75,"PARTS ADDED",job.engineer_parts);y-=75;
   cell(left,y,260,67,"LOCATION",job.job_details?.Location||job.asset_location);cell(left+260,y,261,67,"WORK COMPLETED BY",job.engineer_signature);y-=67;
-  cell(left,y,260,66,"POSITION",job.job_details?.Position);cell(left+260,y,261,66,"SIGNED",clean(job.engineer_signature)?String(job.engineer_signature)+" / "+shortDate(job.engineer_signed_at):"Awaiting engineer signature");y-=66;
-  cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",shortDate(job.job_details?.["Compliant as of"]));cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature||"Awaiting office approval");
+  cell(left,y,260,66,"POSITION",job.job_details?.Position||"Mechanic / engineer");cell(left+260,y,261,66,"SIGNED",clean(job.engineer_signature)?String(job.engineer_signature)+" / "+shortDate(job.engineer_signed_at):"Awaiting engineer signature");y-=66;
+  cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",shortDate(job.job_details?.["Compliant as of"]));cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature?String(job.office_signature)+" / "+shortDate(job.office_signed_at):"Awaiting office approval");
   line("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",left,55,width,8);
   line("www.jtutilities.com   |   020 3840 4826",left,42,width,8);
   return new Blob([new Uint8Array(await doc.save())],{type:"application/pdf"});
@@ -236,4 +239,9 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   }
  }
  const bytes=await pdf.save();return new Blob([new Uint8Array(bytes)],{type:"application/pdf"});
+}
+
+/** Standard JT Asset Job Card for all workshop jobs. Statutory LOLER certificates are separate. */
+export async function generateAssetJobCardPdf(job:Job,assetLabel:string,draft=false):Promise<Blob>{
+ return generateApprovedJobPdf({...job,_workCategory:job.job_type,job_type:"General repair"},assetLabel,draft);
 }
