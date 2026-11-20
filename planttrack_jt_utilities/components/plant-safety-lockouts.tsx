@@ -6,12 +6,15 @@ import { AlertTriangle, CheckCircle2, RefreshCcw, ShieldCheck, Wrench } from "lu
 type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;release_notes:string|null};
 type Job={id:string;inspection_id:string|null;status:string;assigned_engineer:string|null;job_card_number:string|null};
 type Mechanic={id:string;name:string};
+type AuditEvent={event_id:string;action:string;actor_name:string;actor_id:string;happened_at:string;detail:string};
 const dateLabel=(v:string)=>new Date(v).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 
 export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase:SupabaseClient;isAdmin:boolean;assetId?:string}){
  const [holds,setHolds]=useState<Hold[]>([]);
  const [jobs,setJobs]=useState<Job[]>([]);
  const [mechanics,setMechanics]=useState<Mechanic[]>([]);
+ const [auditByAsset,setAuditByAsset]=useState<Record<string,AuditEvent[]>>({});
+ const [auditError,setAuditError]=useState("");
  const [assets,setAssets]=useState<Record<string,string>>({});
  const [mechanicChoice,setMechanicChoice]=useState<Record<string,string>>({});
  const [reason,setReason]=useState<Record<string,string>>({});
@@ -31,7 +34,17 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
    isAdmin?supabase.rpc("list_plant_defect_mechanics"):Promise.resolve({data:[],error:null})
   ]);
   if(h.error||j.error||a.error||m.error)setError("Could not load defect review: "+(h.error||j.error||a.error||m.error)?.message);
-  else{setHolds((h.data||[]) as Hold[]);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));setMechanics((m.data||[]) as Mechanic[]);}
+  else{
+   const records=(h.data||[]) as Hold[];
+   setHolds(records);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));setMechanics((m.data||[]) as Mechanic[]);
+   if(isAdmin){
+    const activeAssets=[...new Set(records.filter(x=>!x.released_at).map(x=>x.asset_id))];
+    const results=await Promise.all(activeAssets.map(async id=>({id,...await supabase.rpc("read_plant_defect_audit",{p_asset:id})})));
+    const failed=results.find(x=>x.error);
+    if(failed)setAuditError("Could not load full audit history: "+failed.error?.message);
+    else{setAuditError("");setAuditByAsset(Object.fromEntries(results.map(x=>[x.id,(x.data||[]) as AuditEvent[]])));}
+   }
+  }
   setLoading(false);
  },[supabase,assetId,isAdmin]);
  useEffect(()=>{
@@ -90,7 +103,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
    <div><h3><AlertTriangle size={18} style={{verticalAlign:"-4px",marginRight:7,color:"#dc2626"}}/>Plant defects & lockouts ({byAsset.length})</h3><p>One review box per locked machine · Assign to mechanic or dismiss an incorrect defect</p></div>
    <button type="button" className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCcw size={15}/> Refresh</button>
   </div>
-  {error&&<p role="alert" className="auth-error">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}
+  {error&&<p role="alert" className="auth-error">{error}</p>}{auditError&&<p role="alert" className="auth-error">{auditError}</p>}{notice&&<p role="status" className="notice">{notice}</p>}
   {loading?<p>Loading safety defects…</p>:byAsset.length===0?<p><CheckCircle2 size={17} style={{verticalAlign:"-3px",marginRight:7}}/>No locked-out machines requiring review.</p>:byAsset.map(asset=>{
    const assetHolds=active.filter(h=>h.asset_id===asset);
    const ready=assetHolds.every(h=>completed.has(associated(h)?.status||""));
@@ -131,6 +144,7 @@ export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase
      <label style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:12,margin:"8px 0"}}><input type="checkbox" checked={!!safe[asset]} onChange={e=>setSafe(p=>({...p,[asset]:e.target.checked}))}/> I confirm the defects have been resolved and this machine is safe.</label>
      <button type="button" className="primary" disabled={busy!==null||!safe[asset]||(reason[asset]||"").trim().length<15} onClick={()=>void release(asset)}><ShieldCheck size={16}/> {busy===asset?"Releasing…":"Release machine"}</button>
     </div>}
+    {isAdmin&&<details style={{marginTop:13,borderTop:"1px solid #e9bdc3",paddingTop:10}}><summary style={{cursor:"pointer",fontWeight:700,fontSize:13}}>Audit trail · who did what and when ({(auditByAsset[asset]||[]).length})</summary><div style={{maxHeight:260,overflowY:"auto",marginTop:9}}>{(auditByAsset[asset]||[]).map(event=><div key={event.event_id} style={{padding:"7px 0",borderBottom:"1px solid #f0e5e7",fontSize:12}}><b>{event.action}</b> · {event.actor_name} · {dateLabel(event.happened_at)}{event.detail&&<div style={{color:"#596271",marginTop:3,whiteSpace:"pre-wrap"}}>{event.detail}</div>}</div>)}{!(auditByAsset[asset]||[]).length&&<p className="muted">No audit events for this machine yet.</p>}</div></details>}
    </article>;
   })}
   {history.length>0&&<details><summary style={{cursor:"pointer",fontWeight:600}}>Previous releases ({history.length})</summary>{history.slice(0,30).map(h=><p key={h.id} style={{fontSize:12,borderBottom:"1px solid #eee",padding:6}}>{assets[h.asset_id]||"Machine"} · {h.released_at?dateLabel(h.released_at):""} · {h.release_notes||""}</p>)}</details>}
