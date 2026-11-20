@@ -518,3 +518,9 @@ tbody tr:hover{background:#fff5f6}
  .mechanic-only-main{padding:11px 9px 28px}
  .mechanic-only-main .workshop-job-panel{padding:12px}
 }
+
+
+.mechanic-only-tabs{display:flex;gap:10px;max-width:1200px;margin:0 auto;padding:14px 18px 0}
+.mechanic-only-tabs button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;flex:1;max-width:265px;border:2px solid #cad2dc;border-radius:7px;background:#fff;color:#1e293b;font-size:15px;font-weight:800;cursor:pointer}
+.mechanic-only-tabs button.selected{background:#192332;border-color:#192332;color:#fff}
+@media(max-width:700px){.mechanic-only-tabs{padding:12px 9px 0;gap:8px}.mechanic-only-tabs button{max-width:none;min-height:54px;font-size:14px}}
