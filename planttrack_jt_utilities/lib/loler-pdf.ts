@@ -93,6 +93,40 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",shortDate(job.job_details?.["Compliant as of"]));cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature?String(job.office_signature)+" / "+shortDate(job.office_signed_at):"Awaiting office approval");
   line("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",left,55,width,8);
   line("www.jtutilities.com   |   020 3840 4826",left,42,width,8);
+  if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"){
+   const preUsePage=doc.addPage([595.28,841.89]);
+   const draw=(value:unknown,x:number,yPos:number,maxWidth:number,fontSize=9,face=font)=>{
+    const chars=ascii(value??"").replace(/\\n/g," ");
+    const lines:string[]=[];let current="";
+    for(const word of chars.split(/\\s+/)){
+     if(!word)continue;const next=current?current+" "+word:word;
+     if(face.widthOfTextAtSize(next,fontSize)<=maxWidth){current=next;continue;}
+     if(current)lines.push(current);current=word;
+    }
+    if(current)lines.push(current);
+    lines.slice(0,2).forEach((row,i)=>preUsePage.drawText(row.slice(0,175),{x,y:yPos-i*(fontSize+4),size:fontSize,font:face,color:ink}));
+   };
+   try{const res=await fetch("/jt-utilities-logo.jpg");if(res.ok){const img=await doc.embedJpg(await res.arrayBuffer());const dim=img.scaleToFit(125,61);preUsePage.drawImage(img,{x:left,y:753,width:dim.width,height:dim.height});}}catch{}
+   draw("PRE-USE / RETURN-TO-WORK CHECK",175,797,375,14,strong);
+   draw(jobNo+"  |  "+assetCode+"  |  "+shortDate(job.created_at),175,770,365,9,strong);
+   preUsePage.drawLine({start:{x:left,y:738},end:{x:right,y:738},color:border,thickness:1});
+   draw("Mandatory checks completed by mechanic before returning equipment to work",left,718,width,10,strong);
+   const findings=job.completion_checklist||{};
+   let rowY=688;
+   const checklistKeys=["Previous repair / defect reference","Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"];
+   for(const key of checklistKeys){
+    preUsePage.drawRectangle({x:left,y:rowY-53,width,height:57,borderColor:border,borderWidth:.7});
+    preUsePage.drawRectangle({x:left,y:rowY-18,width,height:22,color:pale});
+    draw(key,left+9,rowY-12,width-20,9,strong);
+    draw(findings[key]||"Not completed",left+9,rowY-37,width-20,9);
+    rowY-=57;
+   }
+   draw("Mechanic signed: "+(job.engineer_signature||"Awaiting signature")+"  |  "+shortDate(job.engineer_signed_at),left,215,width,9,strong);
+   draw("Office signed: "+(job.office_signature||"Awaiting approval")+"  |  "+shortDate(job.office_signed_at),left,193,width,9,strong);
+   draw("This document does not release a safety lockout or replace the daily operator pre-start check.",left,148,width,8,strong);
+   draw("Equipment must remain out of use where defects or statutory restrictions remain.",left,134,width,8,strong);
+   draw("JT Utilities PlantTrack | "+jobNo+" | Pre-use record",left,42,width,8);
+  }
   return new Blob([new Uint8Array(await doc.save())],{type:"application/pdf"});
  }
  const pdf=await PDFDocument.create();
