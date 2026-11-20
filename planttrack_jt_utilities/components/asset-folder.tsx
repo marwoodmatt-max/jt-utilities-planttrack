@@ -100,16 +100,25 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
 
+  // Open the tab synchronously from the tap; mobile browsers may block
+  // window.open after the awaited Supabase signed-URL request.
   async function openStoredPdf(path:string) {
+    const tab=window.open("","_blank");
+    if(tab){tab.document.title="PlantTrack PDF";tab.document.body.textContent="Opening your JT Utilities document…";}
     const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(path,300);
-    if(err||!data?.signedUrl){setError("Could not open job document: "+(err?.message||"No secure link returned."));return;}
-    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+    if(err||!data?.signedUrl){
+      if(tab)tab.close();
+      setError("Could not open job document: "+(err?.message||"No secure link returned."));
+      return;
+    }
+    if(tab){tab.location.href=data.signedUrl;}
+    else{ // Fallback for browsers that prevent new tabs entirely.
+      window.location.assign(data.signedUrl);
+    }
   }
 
   async function openCertificate(cert:JobCertificate) {
-    const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(cert.approved_pdf_path,300);
-    if(err||!data?.signedUrl){setError("Could not open generated certificate: "+(err?.message||"No secure link returned."));return;}
-    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+    await openStoredPdf(cert.approved_pdf_path);
   }
 
   async function openPmiReport(report:PmiReport) {
