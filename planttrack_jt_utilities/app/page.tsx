@@ -287,6 +287,14 @@ function GeneralRepairPaperForm({job,asset}: {job:any;asset:any}){
    {field("POSITION",job.job_details?.Position)}{field("SIGNED",job.engineer_signature?job.engineer_signature+" · "+(job.engineer_signed_at||""):"Awaiting signature")}
    {field("COMPLIANT AS OF (DD/MM/YY)",job.job_details?.["Compliant as of"])}
   </div>
+  <div className="workshop-office-signoff-record" style={{border:"2px solid #334155",borderRadius:6,marginTop:12,padding:12,background:job.office_signed_at?"#f0fdf4":"#fffaf0"}}>
+   <strong style={{fontSize:14,display:"block",marginBottom:8}}>OFFICE SIGN-OFF {job.office_signed_at?"· APPROVED":"· AWAITING APPROVAL"}</strong>
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:8}}>
+    {field("OFFICE AUTHORISED BY",job.office_signature||"Awaiting office approval")}
+    {field("OFFICE SIGNED AT (UK)",job.office_signed_at?new Date(job.office_signed_at).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-"):"Not yet signed")}
+   </div>
+   {job.office_comments&&<div style={{paddingTop:10,fontSize:13}}><strong>Office review notes</strong><p style={{whiteSpace:"pre-wrap",margin:"5px 0"}}>{job.office_comments}</p></div>}
+  </div>
   <p style={{textAlign:"center",fontSize:12,marginTop:12}}>Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR · www.jtutilities.com · 020 3840 4826</p>
  </div>;
 }
@@ -581,6 +589,16 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <h3>{jobHeading(chosen)}</h3><p><b>Work:</b> {chosen.title} · {assetName(chosen.asset_id)}</p>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p>{chosen.certificate_number&&<p><b>Certificate number:</b> {chosen.certificate_number}</p>}<p>{chosen.instructions}</p>
    <p><b>Status:</b> {chosen.status}</p>
+   {role==="office"&&chosen.status==="Awaiting office approval"&&<div className="workshop-office-approval-panel">
+    <h4>Office review & sign-off</h4>
+    <p>Review the completed work and required inspection records before approving. The signed-in account and approval time are recorded for audit.</p>
+    <label>Office reviewer — full name<input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Enter your full name"/></label>
+    <label>Review comments<textarea rows={3} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Approval notes or reason for correction"/></label>
+    <div className="workshop-office-actions">
+     <button type="button" className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void approveAndArchive(chosen)}>{busy?"Processing…":"Approve & sign job card"}</button>
+     <button type="button" className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to mechanic for correction")}>Return to mechanic</button>
+    </div>
+   </div>}
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {Object.keys(chosen.completion_checklist||{}).length>0&&<div><h4>Completed inspection checklist</h4>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</div>}
    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly/></details>}
@@ -624,14 +642,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <button className="primary" disabled={busy} onClick={()=>{const missing=[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])];if(missing.length){setNotice("Cannot submit yet. Complete: "+missing.join(", "));return;}void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours),p_signature:signature,p_checklist:{...checklist,...((chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...lolerFields}:{})}}),"Signed and submitted to office inbox");}}>Sign and submit to office</button>
    </>}
    </>}
-   {role==="office"&&chosen.status==="Awaiting office approval"&&<>
-    <label>Office review comments<textarea value={comments} onChange={e=>setComments(e.target.value)}/></label>
-    <label>Office sign-off (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
-    <div style={{display:"flex",gap:8}}>
-     <button className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void approveAndArchive(chosen)}>Approve and sign</button>
-     <button className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to engineer")}>Return for correction</button>
-    </div>
-   </>}
+
    </div>
   </div>}
  </section>;
