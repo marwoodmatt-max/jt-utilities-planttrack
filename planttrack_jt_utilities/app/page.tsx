@@ -398,7 +398,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","Inspection date","PMI checklist / inspection notes"],"LOLER thorough examination":["Equipment identification","Examination date","Competent person","Report / certificate reference"],
   "Defect rectification":["Original defect reference","Rectification and safety checks"],"Pre-use / return-to-work check":["Original job card / repair reference","Proposed job / site","Check notes"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
  };
- const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"],"Pre-use / return-to-work check":["Previous repair / defect reference","Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"]};
+ const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"],"Pre-use / return-to-work check":["Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
@@ -435,7 +435,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?assetLabel(a)+" · "+a.description:id};
  const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?assetLabel(assets.find(a=>a.id===job.asset_id)):"Asset"].join(" · ");
  const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service","Pre-use / return-to-work check"].includes(job.job_type);
- const requiredChecklist=(job:any)=>preUseIsFullSheet(job)?[...PRE_USE_ITEMS,"Previous repair / defect reference","Pre-use result"]:checklistByType[job.job_type]||[];
+ const requiredChecklist=(job:any)=>preUseIsFullSheet(job)?[...PRE_USE_ITEMS,"Pre-use result"]:checklistByType[job.job_type]||[];
  const preUseFullSheet=(job:any)=>preUseIsFullSheet(job);
  const preUseSheetForm=(job:any)=>{
   const completed=PRE_USE_ITEMS.filter(k=>["Checked","N/A","Defect"].includes(checklist[k])).length;
@@ -443,7 +443,6 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <div className="workshop-pre-use-job-number"><span>Job card number (allocated automatically)</span><strong>{job.job_card_number||"Pending allocation"}</strong><small>Asset: {assetName(job.asset_id)}</small></div>
    <p className="workshop-pre-use-warning">JT UTILITIES PRE-USE INSPECTION SHEET · Before equipment returns to work. Complete each CHKD / N/A / DEFECT box and add comments or work done. Any defect must be described. A failed inspection can be sent to the office but it cannot be approved as safe to use.</p>
    <div className="workshop-pre-use-sheet-meta">
-    <label>Previous repair / defect job number (enter N/A if none)<input value={checklist["Previous repair / defect reference"]||""} onChange={e=>setChecklist(c=>({...c,"Previous repair / defect reference":e.target.value}))} placeholder="e.g. JT-JOB-000018"/></label>
     <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
    </div>
    <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked · {PRE_USE_ITEMS.filter(k=>checklist[k]==="Defect").length} defect(s)</p>
@@ -480,7 +479,6 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   return [
    ...(incomplete.length? [incomplete.length+" inspection items still need CHKD, N/A or DEFECT ("+incomplete.slice(0,2).join(", ")+")"]:[]),
    ...(missingComments.length? [missingComments.length+" reported defect(s) need comments ("+missingComments.slice(0,2).join(", ")+")"]:[]),
-   ...(!String(checklist["Previous repair / defect reference"]||"").trim()?["Previous repair / defect reference"]:[]),
    ...(![PRE_USE_RESULT_PASS,PRE_USE_RESULT_FAIL].includes(checklist["Pre-use result"])?["Final pre-use PASS or FAIL result"]:[])
   ];
  };
