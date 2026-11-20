@@ -391,6 +391,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
+ const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
+ const [showSpecialistFields,setShowSpecialistFields]=useState(false);
  const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
@@ -404,6 +406,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
  const orderedJobs=[...jobs].sort((a,b)=>jobStage(a.status)-jobStage(b.status)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
  const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
+ const mechanicActive=(job:any)=>["Assigned","In progress","Returned for correction"].includes(job.status);
+ const mechanicVisible=orderedJobs.filter(job=>mechanicFilter==="active"?mechanicActive(job):mechanicFilter==="waiting"?job.status==="Awaiting office approval":!mechanicActive(job)&&job.status!=="Awaiting office approval");
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
@@ -411,6 +415,32 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const chosen=jobs.find(j=>j.id===selected);
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
  const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?.asset_code||"Asset"].join(" · ");
+ const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service"].includes(job.job_type);
+ const requiredChecklist=(job:any)=>checklistByType[job.job_type]||[];
+ const missingEngineerFields=(job:any)=>[
+  ...(requiredChecklist(job).filter((key:string)=>!String(checklist[key]||"").trim())),
+  ...(work.trim().length<3?["Work completed"]:[]),
+  ...(!Number.isFinite(Number(hours))||Number(hours)<0?["Valid hours worked"]:[]),
+  ...(signature.trim().length<2?["Mechanic signature"]:[])
+ ];
+ const openMechanicJob=(job:any)=>{
+  setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(false);
+  setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
+  setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
+  setChecklist(job.completion_checklist||{});setLolerFields(job.completion_checklist||{});
+ };
+ async function saveEngineerDraft(job:any){
+  if(!Number.isFinite(Number(hours))||Number(hours)<0){setNotice("Enter a valid number of hours before saving.");return;}
+  await perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours)}),"Progress saved. Job is still assigned to you — it has not been submitted.");
+ }
+ async function submitEngineerJob(job:any){
+  const missing=missingEngineerFields(job);
+  if(missing.length){setNotice("Complete before signing: "+missing.join(", "));if(requiredChecklist(job).length)setShowSpecialistFields(true);return;}
+  await perform(()=>supabase.rpc("sign_engineer_job_typed",{
+   p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,
+   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields}:{})}
+  }),"Signed and sent to office for approval. Your signature and time have been recorded.");
+ }
  async function archiveApprovedPdf(job:any){
   const chosenAsset=assets.find(a=>a.id===job.asset_id);
   const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
@@ -475,15 +505,20 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   {notice&&<p role="status">{notice}</p>}
   <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>j.status==="Awaiting office approval").length+" awaiting review"}</h3>
   {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
-    {jobs.length===0?<p className="muted">No jobs assigned yet.</p>:orderedJobs.map(j=><article className="workshop-mobile-job" key={j.id}>
-      <div className="workshop-mobile-job-top"><span className="tag">{j.priority||"Normal"} priority</span><span className="tag blue">{j.status}</span></div>
-      <h4>{jobHeading(j)}</h4><p className="workshop-mobile-asset">{j.title}</p>
-      <p className="muted">{j.job_type||"General repair"}{j.job_card_number?" · "+j.job_card_number:""}{j.certificate_number?" · "+j.certificate_number:""}</p>
-      <button className="primary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setWork(j.engineer_work||"");setParts(j.engineer_parts||"");setPartItems(j.engineer_parts?j.engineer_parts.split("\n"):[""]);setHours(String(j.engineer_hours??0));setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button>
-    </article>)}
+   <div className="mechanic-inbox-tabs" role="group" aria-label="Job status">
+    <button type="button" className={mechanicFilter==="active"?"selected":""} onClick={()=>{setMechanicFilter("active");setSelected("");}}>To do ({jobs.filter(mechanicActive).length})</button>
+    <button type="button" className={mechanicFilter==="waiting"?"selected":""} onClick={()=>{setMechanicFilter("waiting");setSelected("");}}>With office ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
+    <button type="button" className={mechanicFilter==="done"?"selected":""} onClick={()=>{setMechanicFilter("done");setSelected("");}}>Done</button>
+   </div>
+   {mechanicVisible.length===0?<p className="muted">{mechanicFilter==="active"?"No outstanding assigned jobs.":mechanicFilter==="waiting"?"No jobs awaiting office approval.":"No completed jobs yet."}</p>:mechanicVisible.map(j=><article className="workshop-mobile-job" key={j.id}>
+    <div className="workshop-mobile-job-top"><span className={"tag "+(j.status==="Returned for correction"?"amber":"blue")}>{j.status==="Returned for correction"?"Correction requested":j.status==="Awaiting office approval"?"Sent to office":j.status}</span><span className="tag">{j.priority||"Normal"}</span></div>
+    <h4>{jobHeading(j)}</h4><p className="workshop-mobile-asset">{j.title}</p>
+    <p className="muted">{j.job_type||"General repair"}{j.certificate_number?" · Certificate "+j.certificate_number:""}</p>
+    <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":"View job"}</button>
+   </article>)}
   </div>}
   <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {orderedJobs.map((j,index)=><Fragment key={j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>{setSelected(j.id);setComments("");setSignature("");setWork(j.engineer_work||"");setParts(j.engineer_parts||"");setPartItems(j.engineer_parts?j.engineer_parts.split("\n"):[""]);setHours(String(j.engineer_hours??0));setChecklist(j.completion_checklist||{});setLolerFields(j.completion_checklist||{});}}>Open job</button></td></tr></Fragment>)}
+   {orderedJobs.map((j,index)=><Fragment key={j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button></td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"Raise an unexpected job card":"Raise and assign a job card"}</h3>
