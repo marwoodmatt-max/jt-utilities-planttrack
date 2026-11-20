@@ -467,9 +467,9 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
    if(attached.error)throw attached.error;
   }
-  // Every LOLER approval gets the standard job card IN ADDITION to its legal
-  // certificate. Also supports filing a corrected JT card for older approved jobs.
-  if(legalLoler&&!job.job_card_pdf_path){
+  // Every approved job gets its own signed JT Asset Job Card.
+  // For LOLER, the original document above remains the separate statutory certificate.
+  if(!job.job_card_pdf_path){
    await fileStandardJobCard(fullJob);
   }
  }
@@ -492,7 +492,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    const {data:approved,error}=await supabase.from("workshop_job_cards").select("*").eq("id",job.id).single();
    if(error)throw error;
    await archiveApprovedPdf(approved||updated);
-   setNotice("Office approved. JT job card filed"+(String(job.job_type||"").startsWith("LOLER")?" alongside the separate statutory LOLER certificate.":"."));
+   setNotice("Office signed and approved. The JT Asset Job Card has been filed"+(String(job.job_type||"").startsWith("LOLER")?" alongside the separate statutory LOLER certificate.":" against the machine."));
   }catch(e){setNotice("Approval or PDF filing needs attention: "+(e instanceof Error?e.message:String(e))+". If approved, use Retry PDF filing.");}
   finally{setBusy(false);setRefresh(n=>n+1);}
  }
@@ -506,9 +506,13 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   }catch(e){setNotice("Could not generate job card PDF: "+(e instanceof Error?e.message:String(e)));}
  }
  async function viewArchivedPdf(path:string){
+  // Opening the tab before awaiting Supabase avoids popup blockers in installed mobile apps.
+  const tab=window.open("","_blank");
+  if(tab){tab.document.title="JT Utilities job document";tab.document.body.textContent="Opening your job document…";}
   const {data,error}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(path,120);
-  if(error||!data?.signedUrl){setNotice(error?.message||"Could not open PDF");return;}
-  window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  if(error||!data?.signedUrl){if(tab)tab.close();setNotice(error?.message||"Could not open PDF");return;}
+  if(tab)tab.location.href=data.signedUrl;
+  else window.location.assign(data.signedUrl);
  }
  async function perform(fn:()=>PromiseLike<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice("Job action failed: "+(e instanceof Error?e.message:String(e)));}finally{setBusy(false);}}
  return <section className="panel workshop-job-panel">
@@ -620,8 +624,11 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
    {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>{String(chosen.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":"View original filed PDF"}</button>}
    {chosen.job_card_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}>View filed JT Asset Job Card</button>}
-   {role==="office"&&chosen.status==="Approved"&&chosen.approved_pdf_path&&!chosen.job_card_pdf_path&&<button className="secondary" type="button" disabled={busy} onClick={()=>void perform(async()=>{await fileStandardJobCard(chosen);return {error:null};},"JT Asset Job Card filed separately — original document preserved")}>File JT Asset Job Card</button>}
-   {role==="office"&&chosen.status==="Approved"&&!chosen.approved_pdf_path&&<button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"PDF saved against asset")}>Retry PDF filing</button>}
+   {role==="office"&&chosen.status==="Approved"&&(!chosen.approved_pdf_path||!chosen.job_card_pdf_path)&&<div className="workshop-missing-document">
+    <strong>Approved job — document filing needs attention</strong>
+    <p>{!chosen.approved_pdf_path?"Original approved document not filed. ":""}{!chosen.job_card_pdf_path?"JT Asset Job Card not separately filed.":""} The office sign-off is saved; existing PDFs will not be overwritten.</p>
+    <button className="secondary" type="button" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"Missing PDF(s) filed against the asset. Original documents preserved.")}>{busy?"Filing…":"File missing job documents"}</button>
+   </div>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
    {(role==="engineer"||role==="office")&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
