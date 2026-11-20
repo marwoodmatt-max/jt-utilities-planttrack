@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
+import ManagementReports from "../components/management-reports";
 import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
@@ -967,7 +968,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
         {page==="LOLER & certificates"&&<LolerManager supabase={supabase} isAdmin={isAdmin}/> }
         {page==="Maintenance history"&&<WorkshopJobs supabase={supabase}/>}
         {page==="Users & sign-offs"&&<UsersPanel supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Reports"&&<Reports/>}
+        {page==="Reports"&&isAdmin&&<ManagementReports supabase={supabase}/>}
       </div>
     </main>
 
@@ -1279,8 +1280,6 @@ function UsersPanel({supabase,isAdmin}:{supabase:SupabaseClient;isAdmin:boolean}
  <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td>{u.full_name}</td><td>{u.email}<div><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setFeedback("");try{const d=await request({action:"resend",id:u.id,email:u.email});setFeedback(d.message);}catch(e){setFeedback(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}}>Resend setup email</button> <button type="button" disabled={busy} onClick={()=>{setResetUser(u.id);setResetPassword("");}}>Set temporary password</button></div></td><td><select disabled={busy} value={u.role} onChange={e=>void update(u.id,{role:e.target.value})}>{roles.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></td><td><button type="button" className="secondary" disabled={busy} onClick={()=>void update(u.id,{active:!u.active})}>{u.active?"Deactivate":"Reactivate"}</button></td></tr>)}</tbody></table></div>
  </section>;
 }
-function Reports(){return <section className="panel"><h3>Management reporting</h3><p className="muted">Example reporting categories for the first release.</p><div className="report-grid">{["Inspection compliance","LOLER due and overdue","Workshop workload","Plant downtime","Maintenance costs","User sign-off audit"].map((x,i)=><div className="report-card" key={x}><FileText/><b>{x}</b><small>Report template</small></div>)}</div></section>}
-
 
 function getSupabase(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
