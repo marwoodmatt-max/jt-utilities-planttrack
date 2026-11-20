@@ -8,7 +8,7 @@ import PlantSafetyLockouts from "./plant-safety-lockouts";
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;job_card_pdf_path:string|null;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
 type DailyReport={id:string;submitted_at:string;result:string;report_path:string|null;answers:Record<string,unknown>;comments:string|null};
-type JobCard={id:string;title:string;status:string;priority:string;created_at:string;job_card_number:string|null;instructions:string};
+type JobCard={id:string;title:string;status:string;priority:string;created_at:string;job_card_number:string|null;instructions:string;job_type:string|null;engineer_signed_at:string|null;office_signed_at:string|null;approved_pdf_path:string|null;job_card_pdf_path:string|null;certificate_number:string|null};
 type PmiReport = { id:string; inspected_on:string; result:string; defects:string|null; inspector_name:string; signed_off_by:string; report_path:string|null; brake_test_type:string|null };
 type Doc = { id:string; asset_id:string; file_name:string; storage_path:string; document_type:string; description:string|null; uploaded_at:string; uploaded_by:string };
 
@@ -21,6 +21,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
   const [pmiReports,setPmiReports]=useState<PmiReport[]>([]);
   const [dailyReports,setDailyReports]=useState<DailyReport[]>([]);
   const [jobCards,setJobCards]=useState<JobCard[]>([]);
+  const [ownerCanDelete,setOwnerCanDelete]=useState(false);
   const [photosOpen,setPhotosOpen]=useState<string|null>(null);
   const [signedPhotos,setSignedPhotos]=useState<{prompt:string;url:string}[]>([]);
   const [certificates,setCertificates]=useState<JobCertificate[]>([]);
@@ -33,9 +34,31 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
   const [description,setDescription]=useState("");
   const fileRef=useRef<HTMLInputElement>(null);
 
+  useEffect(()=>{let active=true;void supabase.auth.getUser().then(({data})=>{
+   if(active)setOwnerCanDelete(isAdmin&&data.user?.id==="2807b17d-6507-4808-9909-15e11e44637a");
+  });return()=>{active=false;};},[supabase,isAdmin]);
+  const canDeleteUnsigned=(job:JobCard)=>ownerCanDelete&&
+   ["New","Assigned","In progress","Returned for correction"].includes(job.status)&&
+   !job.engineer_signed_at&&!job.office_signed_at&&!job.approved_pdf_path&&!job.job_card_pdf_path&&
+   !String(job.job_type||"").startsWith("LOLER")&&!job.certificate_number;
+  async function deleteUnsigned(job:JobCard){
+   if(!canDeleteUnsigned(job))return;
+   const number=job.job_card_number||"";
+   if(!window.confirm("Delete unsigned job "+number+" permanently from this asset? Signed records cannot be deleted."))return;
+   const confirmation=window.prompt("Type "+number+" to confirm:","");
+   if(confirmation!==number){if(confirmation!==null)setError("Deletion cancelled — job number did not match.");return;}
+   setBusy(true);setError("");
+   try{
+    const {error:removeError}=await supabase.rpc("delete_my_test_workshop_job",{p_job:job.id,p_confirmation:confirmation});
+    if(removeError)throw removeError;
+    setNotice(number+" deleted from Workshop and this Asset Folder. Audit record retained.");
+    await load();
+   }catch(e){setError("Could not delete test job: "+(e instanceof Error?e.message:String(e)));}
+   finally{setBusy(false);}
+  }
   async function load() {
     setLoading(true); setError("");
-    const [daily,jobs]=await Promise.all([supabase.from("inspections").select("id,submitted_at,result,report_path,answers,comments").eq("asset_id",asset.id).eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}),supabase.from("workshop_job_cards").select("id,title,status,priority,created_at,job_card_number,instructions").eq("asset_id",asset.id).order("created_at",{ascending:false})]);
+    const [daily,jobs]=await Promise.all([supabase.from("inspections").select("id,submitted_at,result,report_path,answers,comments").eq("asset_id",asset.id).eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}),supabase.from("workshop_job_cards").select("id,title,status,priority,created_at,job_card_number,instructions,job_type,engineer_signed_at,office_signed_at,approved_pdf_path,job_card_pdf_path,certificate_number").eq("asset_id",asset.id).order("created_at",{ascending:false})]);
     if(daily.error)setError("Daily inspections could not load: "+daily.error.message);else setDailyReports((daily.data||[]) as DailyReport[]);
     if(jobs.error)setError("Job cards could not load: "+jobs.error.message);else setJobCards((jobs.data||[]) as JobCard[]);
     const pmi=await supabase.from("hgv_pmi_records").select("id,inspected_on,result,defects,inspector_name,signed_off_by,report_path,brake_test_type").eq("asset_id",asset.id).order("inspected_on",{ascending:false});
@@ -161,7 +184,14 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     {sectionTitle("Daily Plant Inspections",dailyReports.length)}
     {dailyReports.length===0?<p className="muted">No daily pre-start inspections filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Date</th><th>Operator</th><th>Result</th><th>Report and photographs</th></tr></thead><tbody>{dailyReports.map(report=><tr key={report.id}><td>{dateLabel(report.submitted_at)}</td><td>{String(report.answers?._operator||"Unknown")}</td><td><span className={"tag "+(report.result==="fail"?"red":"green")}>{report.result==="fail"?"Defect reported":"Pass"}</span></td><td><button className="secondary" type="button" onClick={()=>void openDailyReport(report)}><Download size={14}/> {report.report_path?"Open PDF":"PDF not yet filed"}</button> <button className="secondary" type="button" onClick={()=>void viewDailyPhotos(report)}>View 3 photos</button></td></tr>)}</tbody></table>{photosOpen&&<div style={{padding:14,borderTop:"1px solid #e2e8f0"}}><button className="secondary" onClick={()=>{setPhotosOpen(null);setSignedPhotos([]);}}>Close photographs</button><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:15,marginTop:12}}>{signedPhotos.map((photo,i)=><div key={i}><strong>{photo.prompt}</strong><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.prompt} style={{width:"100%",maxWidth:300,border:"1px solid #e2e8f0"}}/></a></div>)}</div></div>}</div>}
     {sectionTitle("Workshop Job Cards",jobCards.length)}
-    {jobCards.length===0?<p className="muted">No workshop job cards for this machine.</p>:<div className="table-wrap"><table><thead><tr><th>Job</th><th>Date</th><th>Priority</th><th>Status</th><th>Instructions</th></tr></thead><tbody>{jobCards.map(job=><tr key={job.id}><td><b>{job.job_card_number||job.title}</b><small>{job.title}</small></td><td>{dateLabel(job.created_at)}</td><td>{job.priority}</td><td>{job.status}</td><td>{job.instructions}</td></tr>)}</tbody></table></div>}
+    <p className="muted">Every workshop job is linked to this asset as soon as it is raised. Signed PDFs become available after office approval.</p>
+    {jobCards.length===0?<p className="muted">No workshop job cards for this machine.</p>:<div className="table-wrap"><table><thead><tr><th>Job card no.</th><th>Work type / title</th><th>Date</th><th>Status</th><th>Record</th></tr></thead><tbody>{jobCards.map(job=><tr key={job.id}>
+     <td><b>{job.job_card_number||"Number pending"}</b></td>
+     <td><strong>{job.job_type||"Workshop job"}</strong><small>{job.title}</small></td>
+     <td>{dateLabel(job.created_at)}</td><td>{job.status}</td>
+     <td>{job.job_card_pdf_path?<button type="button" className="secondary" onClick={()=>void openStoredPdf(job.job_card_pdf_path!)}><FileText size={15}/> View filed PDF</button>:<span className="muted">{job.status==="Approved"?"PDF filing pending":"Pending completion / office approval"}</span>}
+      {canDeleteUnsigned(job)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteUnsigned(job)}><Trash2 size={14}/> Delete unsigned test</button>}
+     </td></tr>)}</tbody></table></div>}
     {sectionTitle("Pre-Use / Return-to-Work PDFs",certificates.filter(cert=>cert.job_type==="Pre-use / return-to-work check").length)}
     {certificates.filter(cert=>cert.job_type==="Pre-use / return-to-work check").length===0?<p className="muted">No approved Pre-Use inspection PDFs filed for this asset yet. The office must approve the signed check before the PDF is filed.</p>:<div className="asset-pre-use-pdfs">
      {certificates.filter(cert=>cert.job_type==="Pre-use / return-to-work check").map(cert=><div key={cert.id} className="asset-pre-use-pdf">
