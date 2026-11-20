@@ -504,7 +504,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
   <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>j.status==="Awaiting office approval").length+" awaiting review"}</h3>
-  {role==="engineer"&&<div className="workshop-mobile-jobs" aria-label="My assigned workshop jobs">
+  {role==="engineer"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="My assigned workshop jobs">
    <div className="mechanic-inbox-tabs" role="group" aria-label="Job status">
     <button type="button" className={mechanicFilter==="active"?"selected":""} onClick={()=>{setMechanicFilter("active");setSelected("");}}>To do ({jobs.filter(mechanicActive).length})</button>
     <button type="button" className={mechanicFilter==="waiting"?"selected":""} onClick={()=>{setMechanicFilter("waiting");setSelected("");}}>With office ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
@@ -539,11 +539,12 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   {chosen&&<div ref={selectedJobRef} className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
    {role==="engineer"&&<div className="mechanic-mobile-completion">
     <div className="mechanic-mobile-head">
-     <button type="button" className="secondary" onClick={()=>setSelected("")}>← Back to jobs</button>
+     <button type="button" className="secondary" onClick={()=>{setSelected("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to jobs</button>
      <span className="tag blue">{chosen.status==="Awaiting office approval"?"With office":chosen.status}</span>
     </div>
     <h3>{jobHeading(chosen)}</h3>
     <p className="mechanic-mobile-subtitle">{chosen.title}</p>
+    {notice&&<p role="status" className="notice">{notice}</p>}
     <div className="mechanic-mobile-instructions"><strong>Job instructions</strong><p>{chosen.instructions}</p></div>
     {mechanicActive(chosen)?<>
      {chosen.status==="Returned for correction"&&<p role="alert" className="auth-error">Office returned this job for correction. Review their comments below and resubmit when ready. {chosen.office_comments||""}</p>}
