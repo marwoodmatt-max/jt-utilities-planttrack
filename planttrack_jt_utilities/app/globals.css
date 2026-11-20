@@ -499,3 +499,22 @@ tbody tr:hover{background:#fff5f6}
  .management-report-preview{padding:12px}
  .management-report-preview h4{font-size:17px}
 }
+
+
+/* Mechanic accounts: no fleet dashboard or office navigation, only assigned job cards. */
+.mechanic-only-shell{min-height:100vh;background:#f2f4f7;color:#17212b}
+.mechanic-only-header{display:flex;align-items:center;gap:15px;background:#192332;color:#fff;padding:12px max(18px,calc((100vw - 1200px)/2));border-bottom:4px solid #d42137}
+.mechanic-only-header img{display:block;width:92px;height:49px;object-fit:contain;background:#fff;border-radius:5px;padding:4px}
+.mechanic-only-header>div{display:grid;gap:3px}
+.mechanic-only-header strong{font-size:19px;line-height:1.2}
+.mechanic-only-header small{font-size:12px;color:#d2d8df}
+.mechanic-only-main{max-width:1200px;margin:0 auto;padding:18px}
+.mechanic-only-main>.workshop-job-panel{margin:0}
+@media(max-width:700px){
+ .mechanic-only-header{padding:11px 14px;gap:11px}
+ .mechanic-only-header img{width:76px;height:42px}
+ .mechanic-only-header strong{font-size:17px}
+ .mechanic-only-header small{font-size:11px}
+ .mechanic-only-main{padding:11px 9px 28px}
+ .mechanic-only-main .workshop-job-panel{padding:12px}
+}
