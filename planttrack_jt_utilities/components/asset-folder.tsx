@@ -6,7 +6,7 @@ import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lu
 import PlantSafetyLockouts from "./plant-safety-lockouts";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
-type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
+type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;job_card_pdf_path:string|null;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
 type DailyReport={id:string;submitted_at:string;result:string;report_path:string|null;answers:Record<string,unknown>;comments:string|null};
 type JobCard={id:string;title:string;status:string;priority:string;created_at:string;job_card_number:string|null;instructions:string};
 type PmiReport = { id:string; inspected_on:string; result:string; defects:string|null; inspector_name:string; signed_off_by:string; report_path:string|null; brake_test_type:string|null };
@@ -44,7 +44,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     const {data,error:err}=await supabase.from("asset_documents").select("id,asset_id,file_name,storage_path,document_type,description,uploaded_at,uploaded_by").eq("asset_id",asset.id).order("uploaded_at",{ascending:false});
     if(err) setError("Could not load this asset folder: "+err.message);
     else setDocs((data||[]) as Doc[]);
-    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,office_signed_at,pdf_filed_at,pdf_filed_by_email,pdf_filed_by").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});
+    const certs=await supabase.from("workshop_job_cards").select("id,certificate_number,job_card_number,job_type,status,approved_pdf_path,job_card_pdf_path,office_signed_at,pdf_filed_at,pdf_filed_by_email,pdf_filed_by").eq("asset_id",asset.id).not("approved_pdf_path","is",null).order("created_at",{ascending:false});
     if(certs.error)setError(prev=>[prev,"Could not load generated certificates: "+certs.error.message].filter(Boolean).join(" "));
     else setCertificates((certs.data||[]) as JobCertificate[]);
     setLoading(false);
@@ -100,6 +100,12 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     window.open(data.signedUrl,"_blank","noopener,noreferrer");
   }
 
+  async function openStoredPdf(path:string) {
+    const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(path,300);
+    if(err||!data?.signedUrl){setError("Could not open job document: "+(err?.message||"No secure link returned."));return;}
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
+
   async function openCertificate(cert:JobCertificate) {
     const {data,error:err}=await supabase.storage.from("planttrack-job-certificates").createSignedUrl(cert.approved_pdf_path,300);
     if(err||!data?.signedUrl){setError("Could not open generated certificate: "+(err?.message||"No secure link returned."));return;}
@@ -147,8 +153,11 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     {dailyReports.length===0?<p className="muted">No daily pre-start inspections filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Date</th><th>Operator</th><th>Result</th><th>Report and photographs</th></tr></thead><tbody>{dailyReports.map(report=><tr key={report.id}><td>{dateLabel(report.submitted_at)}</td><td>{String(report.answers?._operator||"Unknown")}</td><td><span className={"tag "+(report.result==="fail"?"red":"green")}>{report.result==="fail"?"Defect reported":"Pass"}</span></td><td><button className="secondary" type="button" onClick={()=>void openDailyReport(report)}><Download size={14}/> {report.report_path?"Open PDF":"PDF not yet filed"}</button> <button className="secondary" type="button" onClick={()=>void viewDailyPhotos(report)}>View 3 photos</button></td></tr>)}</tbody></table>{photosOpen&&<div style={{padding:14,borderTop:"1px solid #e2e8f0"}}><button className="secondary" onClick={()=>{setPhotosOpen(null);setSignedPhotos([]);}}>Close photographs</button><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:15,marginTop:12}}>{signedPhotos.map((photo,i)=><div key={i}><strong>{photo.prompt}</strong><a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.prompt} style={{width:"100%",maxWidth:300,border:"1px solid #e2e8f0"}}/></a></div>)}</div></div>}</div>}
     {sectionTitle("Workshop Job Cards",jobCards.length)}
     {jobCards.length===0?<p className="muted">No workshop job cards for this machine.</p>:<div className="table-wrap"><table><thead><tr><th>Job</th><th>Date</th><th>Priority</th><th>Status</th><th>Instructions</th></tr></thead><tbody>{jobCards.map(job=><tr key={job.id}><td><b>{job.job_card_number||job.title}</b><small>{job.title}</small></td><td>{dateLabel(job.created_at)}</td><td>{job.priority}</td><td>{job.status}</td><td>{job.instructions}</td></tr>)}</tbody></table></div>}
-    {sectionTitle("Approved Job Certificates",certificates.length)}
-    {certificates.length===0?<p className="muted">No approved job PDFs filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Filed at</th><th>Filed by</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td>{cert.pdf_filed_at?dateLabel(cert.pdf_filed_at):"Not recorded (older certificate)"}</td><td>{cert.pdf_filed_by_email|| (cert.pdf_filed_by?"User "+cert.pdf_filed_by.slice(0,8):"Not recorded")}</td><td><button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> Open PDF</button></td></tr>)}</tbody></table></div>}
+    {sectionTitle("Approved Workshop Job Cards & Certificates",certificates.length)}
+    {certificates.length===0?<p className="muted">No approved job cards or certificates filed against this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Certificate / job</th><th>Type</th><th>Status</th><th>Filed at</th><th>Filed by</th><th>Action</th></tr></thead><tbody>{certificates.map(cert=><tr key={cert.id}><td><b>{cert.certificate_number||cert.job_card_number||cert.id.slice(0,8)}</b></td><td>{cert.job_type||"Workshop job"}</td><td>{cert.status}</td><td>{cert.pdf_filed_at?dateLabel(cert.pdf_filed_at):"Not recorded (older certificate)"}</td><td>{cert.pdf_filed_by_email|| (cert.pdf_filed_by?"User "+cert.pdf_filed_by.slice(0,8):"Not recorded")}</td><td style={{minWidth:195}}>
+   {cert.job_card_pdf_path&&<button className="secondary" onClick={()=>void openStoredPdf(cert.job_card_pdf_path!)}><Download size={14}/> JT Asset Job Card</button>}
+   {cert.approved_pdf_path&&<button className="secondary" onClick={()=>void openCertificate(cert)}><Download size={14}/> {String(cert.job_type||"").startsWith("LOLER")?"Statutory LOLER certificate":cert.job_card_pdf_path?"Original filed record":"JT job card / filed record"}</button>}
+  </td></tr>)}</tbody></table></div>}
     {sectionTitle("PMI Inspection Reports",pmiReports.length)}
     {pmiReports.length===0?<p className="muted">No PMI inspection records for this asset yet.</p>:<div className="table-wrap"><table><thead><tr><th>Inspection date</th><th>Result</th><th>Brake test</th><th>Inspector</th><th>Signed off by</th><th>Report</th></tr></thead><tbody>{pmiReports.map(p=><tr key={p.id}><td>{p.inspected_on.split("-").reverse().join("-")}</td><td>{p.result}{p.defects?<small style={{display:"block"}}>{p.defects}</small>:null}</td><td>{p.brake_test_type||"—"}</td><td>{p.inspector_name}</td><td>{p.signed_off_by}</td><td>{p.report_path?<button className="secondary" onClick={()=>void openPmiReport(p)}><Download size={14}/> Open PMI report</button>:"No report attached"}</td></tr>)}</tbody></table></div>}
     {sectionTitle("Certificates & Other Documents",docs.length)}
