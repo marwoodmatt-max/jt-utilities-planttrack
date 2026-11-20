@@ -3,21 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AlertTriangle, Camera, CheckCircle2, ClipboardCheck, Download, RefreshCw, X } from "lucide-react";
+import { requiresDailyPlantCheck } from "../lib/daily-check-requirements";
 
-type Asset={id:string;asset_code:string;description:string|null;registration:string|null;ownership_type:string|null;category:string|null};
+type Asset={id:string;asset_code:string;description:string|null;registration:string|null;ownership_type:string|null;category:string|null;daily_plant_check_required:boolean|null};
 type Project={id:string;project_name:string;status:string};
 type Allocation={id:string;asset_id:string;project_id:string;allocated_at:string;returned_at:string|null};
 type Inspection={id:string;asset_id:string|null;project_id:string|null;submitted_at:string;result:string;answers:Record<string,unknown>|null;report_path:string|null;comments:string|null};
 type Evidence={path:string;prompt:string};
-type Status="checked"|"missing"|"defect";
-type Line={asset:Asset;project:Project;status:Status;latest:Inspection|null;defects:Inspection[];count:number};
+type Status="checked"|"missing"|"defect"|"exempt";
+type Line={asset:Asset;project:Project;status:Status;required:boolean;latest:Inspection|null;defects:Inspection[];count:number};
 const ukParts=new Intl.DateTimeFormat("en-GB",{timeZone:"Europe/London",year:"numeric",month:"2-digit",day:"2-digit"});
 const ukDate=(date:Date)=>{const p=Object.fromEntries(ukParts.formatToParts(date).map(part=>[part.type,part.value]));return p.year+"-"+p.month+"-"+p.day;};
 const displayDate=(date:string)=>date.slice(8,10)+"-"+date.slice(5,7)+"-"+date.slice(0,4);
 const displayTime=(iso:string)=>new Date(iso).toLocaleTimeString("en-GB",{timeZone:"Europe/London",hour:"2-digit",minute:"2-digit"});
 function evidenceFor(record:Inspection):Evidence[]{const evidence=record.answers?._photo_evidence;return Array.isArray(evidence)?evidence.filter((entry):entry is Evidence=>typeof entry?.path==="string"&&typeof entry?.prompt==="string"):[];}
-const labelStatus=(status:Status)=>status==="defect"?"Inspected · defect":status==="checked"?"Inspected · no defect":"Not inspected";
-const statusRank:Record<Status,number>={defect:0,missing:1,checked:2};
+const labelStatus=(status:Status)=>status==="defect"?"Inspected · defect":status==="checked"?"Inspected · no defect":status==="exempt"?"No daily plant check required":"Not inspected";
+const statusRank:Record<Status,number>={defect:0,missing:1,checked:2,exempt:3};
 
 export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supabase:SupabaseClient;onOpenChecks:()=>void}){
  const [date,setDate]=useState(()=>ukDate(new Date()));
@@ -31,13 +32,14 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [linkBusy,setLinkBusy]=useState<string|null>(null);
+ const [requirementBusy,setRequirementBusy]=useState<string|null>(null);
  const [photoRecord,setPhotoRecord]=useState<Inspection|null>(null);
  const [photoLinks,setPhotoLinks]=useState<{prompt:string;url:string}[]>([]);
  const load=useCallback(async()=>{
   setLoading(true);setError("");
   try{
    const [a,p,al]=await Promise.all([
-    supabase.from("assets").select("id,asset_code,description,registration,ownership_type,category").order("asset_code").limit(2000),
+    supabase.from("assets").select("id,asset_code,description,registration,ownership_type,category,daily_plant_check_required").order("asset_code").limit(2000),
     supabase.from("projects").select("id,project_name,status").eq("status","active").order("project_name").limit(500),
     supabase.from("project_allocations").select("id,asset_id,project_id,allocated_at,returned_at").is("returned_at",null).order("allocated_at",{ascending:false}).limit(3000)
    ]);
@@ -96,12 +98,21 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
    const dayChecks=byAsset.get(id)||[];
    const defects=dayChecks.filter(i=>i.result==="fail");
    const latest=dayChecks[0]||null;
-   entries.push({asset,project,status:defects.length?"defect":dayChecks.length?"checked":"missing",latest,defects,count:dayChecks.length});
+   const required=requiresDailyPlantCheck(asset);
+   entries.push({asset,project,status:!required?"exempt":defects.length?"defect":dayChecks.length?"checked":"missing",required,latest,defects,count:dayChecks.length});
   }
   return entries.sort((a,b)=>statusRank[a.status]-statusRank[b.status]||a.project.project_name.localeCompare(b.project.project_name)||a.asset.asset_code.localeCompare(b.asset.asset_code));
  },[assets,projects,allocations,inspections,date,includeTestAssets]);
  const visible=lines.filter(line=>(projectFilter==="all"||line.project.id===projectFilter)&&(statusFilter==="all"||line.status===statusFilter));
- const totals={total:visible.length,inspected:visible.filter(v=>v.count>0).length,missing:visible.filter(v=>v.count===0).length,defect:visible.filter(v=>v.defects.length>0).length};
+ const totals={total:visible.length,required:visible.filter(v=>v.required).length,inspected:visible.filter(v=>v.required&&v.count>0).length,missing:visible.filter(v=>v.required&&v.count===0).length,defect:visible.filter(v=>v.required&&v.defects.length>0).length};
+ async function changeRequirement(asset:Asset,value:string){
+  setRequirementBusy(asset.id);setError("");
+  const required=value==="default"?null:value==="true";
+  const {error:saveError}=await supabase.from("assets").update({daily_plant_check_required:required}).eq("id",asset.id);
+  if(saveError)setError("Could not update inspection requirement: "+saveError.message);
+  else setAssets(previous=>previous.map(item=>item.id===asset.id?{...item,daily_plant_check_required:required}:item));
+  setRequirementBusy(null);
+ }
  async function openReport(row:Inspection){
   setError("");setLinkBusy(row.id);
   try{
@@ -137,7 +148,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
     <select aria-label="Filter by project" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="all">All active projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select>
    </label>
    <label className="daily-compliance-filter">Inspection status
-    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option></select>
+    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option><option value="exempt">Daily plant check not required</option></select>
    </label>
    <label className="daily-compliance-filter daily-compliance-test">
     <span>Test machine</span>
@@ -153,22 +164,23 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
   {loading?<p>Loading inspection compliance…</p>:<>
    <div className="daily-compliance-stats" style={{gridTemplateColumns:"repeat(2,minmax(0,1fr))"}}>
     {[
-      {label:"Allocated equipment",value:totals.total,caption:"Operational allocations on active projects",icon:ClipboardCheck,kind:"base"},
+      {label:"Daily checks required",value:totals.required,caption:totals.total+" allocated assets · "+(totals.total-totals.required)+" exempt",icon:ClipboardCheck,kind:"base"},
       {label:"Inspected today",value:totals.inspected,caption:"Completed checks, including defects",icon:CheckCircle2,kind:"success"},
-      {label:"Not inspected",value:totals.missing,caption:"No daily check submitted",icon:AlertTriangle,kind:"warning"},
+      {label:"Missing required checks",value:totals.missing,caption:"Allocated machines requiring inspection",icon:AlertTriangle,kind:"warning"},
       {label:"Defects reported",value:totals.defect,caption:"Inspected machines with a failed check",icon:AlertTriangle,kind:"danger"}
     ].map(item=><div className={"daily-compliance-stat daily-compliance-stat--"+item.kind} key={item.label}>
        <div className="daily-compliance-stat-top"><span>{item.label}</span><item.icon size={20}/></div>
        <strong>{item.value}</strong><small>{item.caption}</small>
     </div>)}
    </div>
-   <p className="daily-compliance-equation">Of <b>{totals.total}</b> allocated machines, <b>{totals.inspected}</b> have been inspected and <b>{totals.missing}</b> have not. <b>{totals.defect}</b> of the inspected machines reported a defect. Defects are included in “Inspected today”, not added to the total.</p>
-   <div className="table-wrap"><table><thead><tr><th>Machine</th><th>Project</th><th>Status</th><th>Operator / time (UK)</th><th>Report / evidence</th></tr></thead><tbody>
+   <p className="daily-compliance-equation">Of <b>{totals.total}</b> allocated assets, <b>{totals.required}</b> require daily plant checks. <b>{totals.inspected}</b> have been inspected and <b>{totals.missing}</b> have not. <b>{totals.defect}</b> inspected machines reported a defect. Exempt assets are listed below but do not trigger missing-check alerts.</p>
+   <div className="table-wrap"><table><thead><tr><th>Machine</th><th>Project</th><th>Status</th><th>Operator / time (UK)</th><th>Daily check required?</th><th>Report / evidence</th></tr></thead><tbody>
     {visible.map(line=><tr key={line.asset.id}>
       <td><b>{line.asset.asset_code}</b><small>{line.asset.description||line.asset.registration||"Registered asset"}{line.asset.ownership_type==="hired_in"?" · Hired-in":""}</small></td>
       <td>{line.project.project_name}</td>
       <td><span className={"tag "+(line.status==="checked"?"green":line.status==="defect"?"red":"amber")}>{labelStatus(line.status)}</span>{line.count>1&&<small>{line.count} inspections</small>}</td>
       <td>{line.latest?<>{String(line.latest.answers?._operator||"Not recorded")}<small>{displayTime(line.latest.submitted_at)} · {displayDate(date)}</small></>:"—"}</td>
+      <td><select aria-label={"Daily check requirement for "+line.asset.asset_code} disabled={requirementBusy===line.asset.id} value={line.asset.daily_plant_check_required===null?"default":String(line.asset.daily_plant_check_required)} onChange={e=>void changeRequirement(line.asset,e.target.value)} style={{minWidth:126,fontSize:12}}><option value="default">Automatic: {requiresDailyPlantCheck({...line.asset,daily_plant_check_required:null})?"Required":"Exempt"}</option><option value="true">Required</option><option value="false">Exempt</option></select></td>
       <td>{line.latest?<div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
         <button type="button" className="secondary" disabled={linkBusy===line.latest.id||!line.latest.report_path} onClick={()=>void openReport(line.latest!)} title={!line.latest.report_path?"PDF not filed yet":"Open latest inspection PDF"}><Download size={14}/> PDF</button>
         <button type="button" className="secondary" disabled={linkBusy===line.latest.id||!evidenceFor(line.latest).length} onClick={()=>void openPhotos(line.latest!)}><Camera size={14}/> Photos</button>
@@ -176,7 +188,7 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
       </div>:<span style={{color:"#64748b"}}>Awaiting inspection</span>}</td>
     </tr>)}
    </tbody></table>{visible.length===0&&<p style={{padding:14}}>{lines.length===0?"No machines are currently allocated to an active project for this date.":"No machines match the selected filters."}</p>}</div>
-   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. This report uses current active project allocations across all asset categories. TEST-LOLER is excluded unless you select Include TEST-LOLER. Vehicle and trailer inspection requirements may differ; this view only records whether a Daily Plant Check was submitted, not whether a separate roadworthiness inspection was completed. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
+   <p className="muted" style={{marginTop:13,fontSize:12}}>Each machine is counted once. If any inspection for the selected day reports a defect, it stays in “Defects reported” even after a later pass. Daily-check requirements default to Plant, Agricultural equipment, and site machinery such as dumpers and tractors; trailers and road vehicles are exempt by default. Admins can override the requirement for each asset using the dropdown. TEST-LOLER is excluded unless you select Include TEST-LOLER. This view does not replace separate roadworthiness inspections. Hired-in machines count when registered and allocated; one-off unregistered hires cannot be matched to an asset.</p>
   </>}
   {photoRecord&&<div style={{marginTop:18,padding:14,border:"1px solid #e2e8f0",borderRadius:6}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h4>Inspection photographs · {displayDate(date)}</h4><button className="secondary" type="button" onClick={()=>{setPhotoRecord(null);setPhotoLinks([]);}}><X size={14}/> Close</button></div>
