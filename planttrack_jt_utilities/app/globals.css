@@ -387,3 +387,5 @@ tbody tr:hover{background:#fff5f6}
  .mechanic-specialist-fields textarea{font-size:15px}
  .workshop-selected-job{scroll-margin-top:75px}
 }
+
+@media(max-width:700px){.workshop-mobile-jobs.mechanic-inbox-hidden{display:none!important}.mechanic-mobile-completion>.notice{margin:0;padding:11px 13px;font-size:13px}}
