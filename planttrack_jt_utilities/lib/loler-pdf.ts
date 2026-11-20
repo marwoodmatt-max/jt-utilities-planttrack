@@ -227,6 +227,11 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
    draw("Equipment must remain out of use where defects or statutory restrictions remain.",left,134,width,8,strong);
    draw("JT Utilities PlantTrack | "+jobNo+" | Pre-use record",left,42,width,8);
   }
+  // A Pre-Use inspection is its own report, not a generic repair form followed
+  // by the actual checklist. Put the signed, paginated inspection sheet first.
+  if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"&&job.job_details?.["Inspection sheet version"]==="JT Utilities Inspection Sheet v1"&&doc.getPageCount()>1){
+   doc.removePage(0);
+  }
   return new Blob([new Uint8Array(await doc.save())],{type:"application/pdf"});
  }
  const pdf=await PDFDocument.create();
