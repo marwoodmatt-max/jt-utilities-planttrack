@@ -535,6 +535,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
 }
 function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:boolean;role:string}) {
   const isOperator=role==="operator";
+  const isMechanic=role==="mechanic";
   const [page,setPage]=useState(isOperator?"Plant checks":"Dashboard");
   useEffect(()=>{if(isOperator){setPage("Plant checks");return;}if(window.matchMedia("(max-width: 700px)").matches)setPage(isAdmin?"Dashboard":"Workshop job cards");},[isOperator,isAdmin]);
   const [query,setQuery]=useState("");
@@ -594,6 +595,22 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   }
   async function loadNotifications(){
     setNotificationsLoading(true);setNotificationsError("");
+    if(isMechanic){
+      const {data:{user},error:userError}=await supabase.auth.getUser();
+      if(userError||!user){setNotificationsError("Sign in again to view assigned workshop jobs.");setNotificationsLoading(false);return;}
+      const [assigned,dismissed]=await Promise.all([
+        supabase.from("workshop_job_cards").select("id,title,status").eq("assigned_engineer",user.id).in("status",["Assigned","In progress","Returned for correction"]).order("created_at",{ascending:false}).limit(100),
+        supabase.from("dismissed_notifications").select("notification_key,notification_label").eq("user_id",user.id)
+      ]);
+      if(assigned.error||dismissed.error){
+        setNotificationsError("Could not load mechanic job alerts: "+(assigned.error||dismissed.error)?.message);
+        setNotificationsLoading(false);return;
+      }
+      const jobs=(assigned.data||[]).map(job=>({key:"mechanic-job-"+job.id,label:"WORKSHOP JOB · "+job.title,details:job.status+" · Open Workshop Job Cards to start work",page:"Workshop job cards",priority:0}));
+      const existing=new Map((dismissed.data||[]).map(d=>[d.notification_key,d.notification_label]));
+      setNotifications(jobs.filter(job=>existing.get(job.key)!==job.label));
+      setNotificationsLoading(false);return;
+    }
     const [assetsResult,motResult,bookingsResult,lolerResult]=await Promise.all([
       supabase.from("assets").select("id,asset_code,registration,mot_due"),
       supabase.from("vehicle_mot_records").select("asset_id,registration,expiry_date,mot_status,mot_tests,raw_response"),
@@ -682,7 +699,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     const cleared=new Set((dismissed||[]).filter(d=>activeByKey.get(d.notification_key)===d.notification_label).map(d=>d.notification_key));
     found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found.filter(n=>!cleared.has(n.key)));setNotificationsLoading(false);
   }
-  useEffect(()=>{if(!isAdmin)return;void loadNotifications();const refresh=()=>void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},refresh).on("postgres_changes",{event:"INSERT",schema:"public",table:"inspections"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"project_allocations"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"assets"},refresh).subscribe();const timer=window.setInterval(refresh,300000);window.addEventListener("focus",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,isAdmin]);
+  useEffect(()=>{if(!isAdmin&&!isMechanic)return;void loadNotifications();const refresh=()=>void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},refresh).on("postgres_changes",{event:"INSERT",schema:"public",table:"inspections"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"project_allocations"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"assets"},refresh).subscribe();const timer=window.setInterval(refresh,300000);window.addEventListener("focus",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,isAdmin,isMechanic]);
   useEffect(() => {
     let cancelled = false;
 
