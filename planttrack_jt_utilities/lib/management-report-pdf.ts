@@ -24,8 +24,9 @@ export async function generateManagementReportPdf(report:ReportTable):Promise<Bl
  }catch{}
  const logo=logoBytes?await doc.embedJpg(logoBytes):null;
  const pages=[];
- const rowsPerPage=25;
- const sections=Math.max(1,Math.ceil(report.rows.length/rowsPerPage));
+ const firstPageCapacity=Math.max(8,Math.floor((655-report.summary.length*40-27-85)/24));
+ const laterPageCapacity=22;
+ const sections=report.rows.length<=firstPageCapacity?1:1+Math.ceil((report.rows.length-firstPageCapacity)/laterPageCapacity);
  for(let p=0;p<sections;p++){
   const page=doc.addPage([595.28,841.89]);
   pages.push(page);
@@ -56,7 +57,8 @@ export async function generateManagementReportPdf(report:ReportTable):Promise<Bl
    page.drawText(fit(name,Math.max(9,Math.floor(cellWidth/5)-1)),{x:xStart+i*cellWidth+4,y:y-17,size:8,font:bold,color:rgb(1,1,1)});
   });
   y-=27;
-  const records=report.rows.slice(p*rowsPerPage,(p+1)*rowsPerPage);
+  const from=p===0?0:firstPageCapacity+(p-1)*laterPageCapacity;
+  const records=report.rows.slice(from,from+(p===0?firstPageCapacity:laterPageCapacity));
   if(records.length===0)page.drawText("No records in this report.",{x:45,y:y-19,font:regular,size:10,color:dark});
   for(let r=0;r<records.length;r++){
    const record=records[r];
