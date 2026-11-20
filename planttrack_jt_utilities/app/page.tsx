@@ -388,6 +388,7 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
 }
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
+ const [canDeleteTestJobs,setCanDeleteTestJobs]=useState(false);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
  const jobTypes=[["General repair","Job Card"],["Other / unexpected work","Ad hoc / unexpected work"],["Breakdown","Breakdown"],["Service","Service"],["Pre-use / return-to-work check","Pre-Use / Return-to-Work Check"],["HGV / trailer PMI","PMI"],["LOLER thorough examination","LOLERs"]];
  const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
@@ -408,8 +409,9 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
-  const [j,a,r,e]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers")]);
+  const [j,a,r,e,profile]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle()]);
   if(!active)return;
+  setCanDeleteTestJobs(user.user.id==="2807b17d-6507-4808-9909-15e11e44637a"&&profile.data?.role==="admin"&&profile.data?.active===true);
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
  })();return()=>{active=false};},[supabase,refresh]);
@@ -593,6 +595,25 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   if(tab)tab.location.href=data.signedUrl;
   else window.location.assign(data.signedUrl);
  }
+ const mayDeleteTestJob=(job:any)=>canDeleteTestJobs&&
+  ["New","Assigned","In progress","Returned for correction"].includes(job.status)&&
+  !job.engineer_signed_at&&!job.office_signed_at&&!job.approved_pdf_path&&!job.job_card_pdf_path&&
+  !String(job.job_type||"").startsWith("LOLER")&&!job.certificate_number;
+ async function deleteTestJob(job:any){
+  if(!mayDeleteTestJob(job))return;
+  const number=String(job.job_card_number||"");
+  if(!window.confirm("Permanently delete unsigned job "+number+"? This removes it from Workshop and the Asset Folder. Signed and filed jobs are protected."))return;
+  const entered=window.prompt("To confirm deletion, type the full job number: "+number,"");
+  if(entered!==number){if(entered!==null)setNotice("Deletion cancelled: job-card number did not match.");return;}
+  setBusy(true);setNotice("");
+  try{
+   const result=await supabase.rpc("delete_my_test_workshop_job",{p_job:job.id,p_confirmation:entered});
+   if(result.error)throw result.error;
+   setSelected("");setNotice(number+" deleted. The removal was recorded in the audit log.");
+   setRefresh(v=>v+1);
+  }catch(e){setNotice("Could not delete "+number+": "+(e instanceof Error?e.message:String(e)));}
+  finally{setBusy(false);}
+ }
  async function perform(fn:()=>PromiseLike<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice("Job action failed: "+(e instanceof Error?e.message:String(e)));}finally{setBusy(false);}}
  return <section className="panel workshop-job-panel">
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
@@ -626,10 +647,11 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <h4>{jobHeading(job)}</h4><p className="workshop-mobile-asset">{job.title}</p>
     <p className="muted">{job.job_type||"Workshop job"}</p>
     <button type="button" className={job.status==="Awaiting office approval"?"primary":"secondary"} onClick={()=>openMechanicJob(job)}>{job.status==="Awaiting office approval"?"Review & sign":"View job"}</button>
+    {mayDeleteTestJob(job)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(job)}><X size={15}/> Delete this unsigned test job</button>}
    </article>)}
   </div>}
   <div className={"table-wrap workshop-desktop-jobs"+(role==="engineer"?" workshop-mechanic-hide-table":"")}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {(role==="engineer"?mechanicVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button></td></tr></Fragment>)}
+   {(role==="engineer"?mechanicVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button>{mayDeleteTestJob(j)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(j)}><X size={14}/> Delete</button>}</td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button type="button" className="primary" onClick={()=>{setShowCreateJob(v=>!v);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{showCreateJob?"Close new job":role==="engineer"?"New Ad Hoc Job":"Add job card"}</button></div><div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3>
@@ -704,6 +726,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <h3>{jobHeading(chosen)}</h3><p><b>Work:</b> {chosen.title} · {assetName(chosen.asset_id)}</p>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p>{chosen.certificate_number&&<p><b>Certificate number:</b> {chosen.certificate_number}</p>}<p>{chosen.instructions}</p>
    <p><b>Status:</b> {chosen.status}</p>
+   {mayDeleteTestJob(chosen)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(chosen)}><X size={15}/> Delete this unsigned test job</button>}
    {role==="office"&&chosen.status==="Awaiting office approval"&&<div className="workshop-office-approval-panel">
     <h4>Office review & sign-off</h4>
     <p>Review the completed work and required inspection records before approving. The signed-in account and approval time are recorded for audit.</p>
