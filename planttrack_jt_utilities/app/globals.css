@@ -323,7 +323,7 @@ tbody tr:hover{background:#fff5f6}
 
 
 /* Daily inspection cards: equal-size grid with a two-column wrap on smaller screens. */
-.daily-compliance-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:18px 0 12px;align-items:stretch}
+.daily-compliance-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0 12px;align-items:stretch}
 .daily-compliance-stat{display:flex;flex-direction:column;min-width:0;min-height:165px;padding:18px 19px;background:#fff;border:1px solid var(--line);border-top:4px solid #262b35;border-radius:9px;box-shadow:0 5px 14px rgba(25,30,40,.04)}
 .daily-compliance-stat--success{border-top-color:#16834b}
 .daily-compliance-stat--warning{border-top-color:#e3a21b}
@@ -335,5 +335,5 @@ tbody tr:hover{background:#fff5f6}
 .daily-compliance-stat strong{font-size:36px;font-weight:750;line-height:1.15;margin:15px 0 12px;color:#141820}
 .daily-compliance-stat small{margin-top:auto;font-size:12px;line-height:1.5;color:#68727d}
 .daily-compliance-equation{margin:0 0 18px;padding:10px 13px;background:#f5f7fa;border-left:3px solid #cbd1dc;font-size:13px;color:#374151;line-height:1.6}
-@media(max-width:1200px){.daily-compliance-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:600px){.daily-compliance-stats{grid-template-columns:1fr}.daily-compliance-stat{min-height:135px}}
+@media(max-width:850px){.daily-compliance-stats{gap:12px}}
+@media(max-width:600px){.daily-compliance-stats{grid-template-columns:1fr!important}.daily-compliance-stat{min-height:135px}}
