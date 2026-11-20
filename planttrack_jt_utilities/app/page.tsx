@@ -440,9 +440,10 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const preUseSheetForm=(job:any)=>{
   const completed=PRE_USE_ITEMS.filter(k=>["Checked","N/A","Defect"].includes(checklist[k])).length;
   return <div className="workshop-pre-use-sheet">
+   <div className="workshop-pre-use-job-number"><span>Job card number (allocated automatically)</span><strong>{job.job_card_number||"Pending allocation"}</strong><small>Asset: {assetName(job.asset_id)}</small></div>
    <p className="workshop-pre-use-warning">JT UTILITIES PRE-USE INSPECTION SHEET · Before equipment returns to work. Complete each CHKD / N/A / DEFECT box and add comments or work done. Any defect must be described. A failed inspection can be sent to the office but it cannot be approved as safe to use.</p>
    <div className="workshop-pre-use-sheet-meta">
-    <label>Previous repair / defect job number<input value={checklist["Previous repair / defect reference"]||""} onChange={e=>setChecklist(c=>({...c,"Previous repair / defect reference":e.target.value}))} placeholder="e.g. JT-JOB-000018"/></label>
+    <label>Previous repair / defect job number (enter N/A if none)<input value={checklist["Previous repair / defect reference"]||""} onChange={e=>setChecklist(c=>({...c,"Previous repair / defect reference":e.target.value}))} placeholder="e.g. JT-JOB-000018"/></label>
     <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
    </div>
    <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked · {PRE_USE_ITEMS.filter(k=>checklist[k]==="Defect").length} defect(s)</p>
@@ -655,6 +656,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button type="button" className="primary" onClick={()=>{setShowCreateJob(v=>!v);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{showCreateJob?"Close new job":role==="engineer"?"New Ad Hoc Job":"Add job card"}</button></div><div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3>
+   <div className="workshop-job-number-notice"><FileText size={18}/><span><strong>JT job-card number:</strong> Automatically allocated when you create the card. It then appears in Workshop and the selected Asset Folder.</span></div>
    {role==="engineer"&&<p className="muted" style={{margin:"0 0 5px"}}>Choose the plant or vehicle, describe the unexpected work and create your own job card. It will appear in My Job Cards and go to the office for approval when you sign it off.</p>}
    <div className="workshop-asset-vehicle-pickers">
     <label>Plant & equipment — asset number
