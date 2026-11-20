@@ -424,7 +424,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   ...(signature.trim().length<2?["Mechanic signature"]:[])
  ];
  const openMechanicJob=(job:any)=>{
-  setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(false);
+  setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
   setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
   setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
   setChecklist(job.completion_checklist||{});setLolerFields(job.completion_checklist||{});
@@ -537,6 +537,43 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")?{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");}return r;},"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my unexpected job":"Create job card"}</button>
   </div></>}
   {chosen&&<div ref={selectedJobRef} className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
+   {role==="engineer"&&<div className="mechanic-mobile-completion">
+    <div className="mechanic-mobile-head">
+     <button type="button" className="secondary" onClick={()=>setSelected("")}>← Back to jobs</button>
+     <span className="tag blue">{chosen.status==="Awaiting office approval"?"With office":chosen.status}</span>
+    </div>
+    <h3>{jobHeading(chosen)}</h3>
+    <p className="mechanic-mobile-subtitle">{chosen.title}</p>
+    <div className="mechanic-mobile-instructions"><strong>Job instructions</strong><p>{chosen.instructions}</p></div>
+    {mechanicActive(chosen)?<>
+     {chosen.status==="Returned for correction"&&<p role="alert" className="auth-error">Office returned this job for correction. Review their comments below and resubmit when ready. {chosen.office_comments||""}</p>}
+     {specialistJob(chosen)&&<section className="mechanic-specialist">
+      <button type="button" className="secondary mechanic-specialist-toggle" onClick={()=>setShowSpecialistFields(v=>!v)} aria-expanded={showSpecialistFields}>{showSpecialistFields?"Hide":"Show"} {String(chosen.job_type||"").startsWith("LOLER")?"LOLER examination & mandatory checklist":"Required inspection checklist"} ({requiredChecklist(chosen).length} checks)</button>
+      {showSpecialistFields&&<div className="mechanic-specialist-fields">
+       {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/></>}
+       {requiredChecklist(chosen).map((key:string)=><label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
+      </div>}
+     </section>}
+     <div className="mechanic-mobile-fields">
+      <label>1. Work carried out <textarea rows={4} value={work} onChange={e=>setWork(e.target.value)} placeholder="Describe what was repaired, checked or completed"/></label>
+      <label>2. Parts or materials used <textarea rows={2} value={parts} onChange={e=>{setParts(e.target.value);setPartItems(e.target.value.split("\n"));}} placeholder="Enter parts used, one per line, or None"/></label>
+      <label>3. Hours worked <input type="number" inputMode="decimal" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
+      <button type="button" className="secondary mechanic-save-btn" disabled={busy} onClick={()=>void saveEngineerDraft(chosen)}>{busy?"Saving…":"Save progress (not submitted)"}</button>
+      <div className="mechanic-mobile-sign">
+       <label>4. Mechanic signature — full name <input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Type your full name"/></label>
+       <p>Your signed-in account and submission time will be recorded automatically for audit.</p>
+      </div>
+      {missingEngineerFields(chosen).length>0&&<p className="mechanic-missing" role="status">To submit, complete: {missingEngineerFields(chosen).join(", ")}</p>}
+      <button type="button" className="primary mechanic-submit-btn" disabled={busy||missingEngineerFields(chosen).length>0} onClick={()=>void submitEngineerJob(chosen)}>{busy?"Submitting…":"Sign & send to office"}</button>
+      <small>Once submitted, the job moves to “With office” for independent approval. Locked-out equipment stays locked until authorised safety release.</small>
+     </div>
+    </>:<div className="mechanic-mobile-complete-status">
+     <strong>{chosen.status==="Awaiting office approval"?"Submitted to office for approval":"Job status: "+chosen.status}</strong>
+     {chosen.engineer_signed_at&&<p>Signed {new Date(chosen.engineer_signed_at).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
+     <p>{chosen.engineer_work||""}</p>
+    </div>}
+   </div>}
+   <div className={role==="engineer"?"mechanic-desktop-details":""}>
    <h3>{jobHeading(chosen)}</h3><p><b>Work:</b> {chosen.title} · {assetName(chosen.asset_id)}</p>
    <p><b>Form:</b> {chosen.job_type||"General repair"}</p>{chosen.certificate_number&&<p><b>Certificate number:</b> {chosen.certificate_number}</p>}<p>{chosen.instructions}</p>
    <p><b>Status:</b> {chosen.status}</p>
@@ -591,6 +628,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
      <button className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to engineer")}>Return for correction</button>
     </div>
    </>}
+   </div>
   </div>}
  </section>;
 }
