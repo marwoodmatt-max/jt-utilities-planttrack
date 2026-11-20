@@ -88,6 +88,12 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const [message,setMessage]=useState("");
   const [expanded,setExpanded]=useState<string|null>(null);
   const [filter,setFilter]=useState("");
+  const assetMap=new Map(assets.map(a=>[a.id,a]));
+  const asset=assetMap.get(assetId);
+  const assetLocked=Boolean(assetId&&lockedAssets.has(assetId));
+  const answered=dailyPlantChecks.filter(k=>Boolean(answers[k])).length;
+  const defects=dailyPlantChecks.filter(k=>failAnswer(answers[k]));
+  const score=dailyPlantChecks.filter(k=>isSuccess(answers[k])||answers[k]==="N/A").length;
   const [mobileStep,setMobileStep]=useState(0);
   const stepNames=["Machine","Checks 1–9","Checks 10–20","Checks 21–32","Photos","Sign & send"];
   const stepCounts=[0,9,11,12,3,0];
@@ -100,12 +106,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     setError("");setMobileStep(n=>Math.min(n+1,5));
     window.scrollTo({top:0,behavior:"smooth"});
   };
-  const assetMap=new Map(assets.map(a=>[a.id,a]));
-  const asset=assetMap.get(assetId);
-  const assetLocked=Boolean(assetId&&lockedAssets.has(assetId));
-  const answered=dailyPlantChecks.filter(k=>Boolean(answers[k])).length;
-  const defects=dailyPlantChecks.filter(k=>failAnswer(answers[k]));
-  const score=dailyPlantChecks.filter(k=>isSuccess(answers[k])||answers[k]==="N/A").length;
+
   async function load(){
     setLoading(true);setError("");
     const [a,r,p,alloc]=await Promise.all([
@@ -295,15 +296,17 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       </div>
       <div className={"operator-step-controls"+(mobileStep!==0?" operator-step-hidden":"")}>{stepNav(0)}</div>
       {assetLocked&&<div role="alert" style={{padding:14,background:"#fee2e2",border:"2px solid #dc2626",fontWeight:700,color:"#991b1b"}}>SAFETY LOCKOUT — This machine is out of service. Do not operate it. You may record an inspection, but only an administrator can authorise its return to use after recorded defects are resolved.</div>}
-      <div style={{padding:"12px 15px",background:"#fff5e9",borderTop:"1px solid #e7e8eb",borderBottom:"1px solid #e7e8eb",color:"#6e3214",fontSize:13,fontWeight:650}}>
+      <div className={"operator-safety-instruction"+(mobileStep===0||mobileStep===5?"":" operator-step-hidden")} style={{padding:"12px 15px",background:"#fff5e9",borderTop:"1px solid #e7e8eb",borderBottom:"1px solid #e7e8eb",color:"#6e3214",fontSize:13,fontWeight:650}}>
         If any of the following critical components are found to be defective the equipment is to be Locked and Tagged out and reported immediately. it shall not be operated until the fault has been rectified.
       </div>
-      <div style={groupStyle}><span>1. Audit</span><span>{dailyPlantChecks.slice(0,9).filter(k=>Boolean(answers[k])).length} / 9</span></div>
-      {dailyPlantChecks.slice(0,9).map((k,i)=>row(k,i))}
-      <div style={groupStyle}><span>1.1. Conditional Checks</span><span>{dailyPlantChecks.slice(9).filter(k=>Boolean(answers[k])).length} / 23</span></div>
-      {dailyPlantChecks.slice(9).map((k,i)=>row(k,i+9))}
-      <div style={{...groupStyle,display:"block"}}>1.2. IMPORTANT: Check around plant before moving off</div>
-      {answered===32&&<div style={{padding:16,background:"#f8fafc",borderBottom:"2px solid #e31b36"}}>
+      <div className={"operator-check-section operator-section"+(mobileStep!==1?" operator-step-hidden":"")}><div style={groupStyle}><span>First 9 checks</span><span>{dailyPlantChecks.slice(0,9).filter(k=>Boolean(answers[k])).length} / 9</span></div>
+      {dailyPlantChecks.slice(0,9).map((k,i)=>row(k,i))}<div className="operator-step-controls">{stepNav(1)}</div></div>
+      <div className={"operator-check-section operator-section"+(mobileStep!==2?" operator-step-hidden":"")}><div style={groupStyle}><span>Checks 10–20</span><span>{dailyPlantChecks.slice(9,20).filter(k=>Boolean(answers[k])).length} / 11</span></div>
+      {dailyPlantChecks.slice(9,20).map((k,i)=>row(k,i+9))}<div className="operator-step-controls">{stepNav(2)}</div></div>
+      <div className={"operator-check-section operator-section"+(mobileStep!==3?" operator-step-hidden":"")}><div style={groupStyle}><span>Checks 21–32</span><span>{dailyPlantChecks.slice(20).filter(k=>Boolean(answers[k])).length} / 12</span></div>
+      {dailyPlantChecks.slice(20).map((k,i)=>row(k,i+20))}<div className="operator-step-controls">{stepNav(3)}</div></div>
+      <div className={"operator-final-reminder"+(mobileStep!==5?" operator-step-hidden":"")} style={{...groupStyle,display:"block"}}>IMPORTANT: Check around the machine before moving off</div>
+      {answered===32&&<div className={"operator-photo-section operator-section"+(mobileStep!==4?" operator-step-hidden":"")} style={{padding:16,background:"#f8fafc",borderBottom:"2px solid #e31b36"}}>
         <h4 style={{margin:"0 0 5px"}}>Required random photographs · 3 of 3</h4>
         <p style={{fontSize:12,color:"#475569"}}>These three inspection views were randomly selected after completing the checklist. Take a fresh photograph of each requested area of the selected machine. All three must be provided before submission.</p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:12}}>
@@ -312,16 +315,16 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
           <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" required={!photos[prompt]} onChange={e=>uploadPhotoSelection(prompt,e.target.files?.[0])} style={{display:"block",width:"100%",marginTop:8,fontSize:12}}/>
           <small style={{display:"block",marginTop:7,color:photos[prompt]?"#176b35":"#9a3412"}}>{photos[prompt]?"Photo ready: "+photos[prompt].name:"Required photograph missing"}</small>
         </label>)}
-        </div>
+        </div><div className="operator-step-controls">{stepNav(4)}</div>
       </div>}
-      <div style={{padding:15}}>
+      <div className={"operator-sign-section operator-section"+(mobileStep!==5?" operator-step-hidden":"")} style={{padding:15}}>
         {defects.length>0&&<p role="alert" style={{color:"#b91c1c",fontWeight:750}}>Unsafe / No selected on {defects.length} check(s). Equipment with critical defects must not be operated. Report faults immediately.</p>}
         <label>Comments / defect details{defects.length>0?" (required)":""}<textarea rows={3} required={defects.length>0} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Enter observations, faults or remedial action" style={{width:"100%",marginTop:7}}/></label>
         <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>Signed by operator</p>
         <div style={{border:"1px solid #cbd5e1",padding:12,background:"#f8fafc",fontSize:13}}><strong>{operator||"Signed-in operator"}</strong><div style={{fontSize:12,margin:"7px 0"}}>Draw your signature in the box below (finger, mouse or stylus).</div><canvas ref={signatureRef} width={650} height={125} aria-label="Operator handwritten signature pad" onPointerDown={beginSignature} onPointerMove={drawSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{display:"block",width:"100%",maxWidth:650,height:125,background:"#fff",border:"1px solid #9da8b5",touchAction:"none",cursor:"crosshair"}}/><button type="button" className="secondary" onClick={clearSignature} style={{marginTop:8}}>Clear signature</button><div style={{color:"#64748b",fontSize:11,marginTop:7}}>Signature and submission date/time are stored with the inspection report.</div></div>
         <label style={{display:"flex",alignItems:"start",gap:9,fontWeight:500}}><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I have carried out the above checks and confirmed that I have checked around the machine before moving off.</label>
         <button type="submit" className="primary" disabled={saving||loading||!projectId||(plantSource==="own"?!assetId:!assetId&&!hiredPlant.trim())||answered!==32||randomPhotoQuestions.some(prompt=>!photos[prompt])||!confirmed||!signature}>{saving?"Saving inspection…":"Submit and sign inspection"}</button>
-        <div style={{fontSize:12,color:"#667085",marginTop:8}}>Complete all 32 checks. Use N/A for items that do not apply to this machine. A submitted inspection cannot be edited.</div>
+        <div style={{fontSize:12,color:"#667085",marginTop:8}}>Complete all 32 checks. Use N/A for items that do not apply to this machine. A submitted inspection cannot be edited.</div><div className="operator-step-controls">{stepNav(5)}</div>
       </div>
     </form>
     <div style={{marginTop:26}}>
