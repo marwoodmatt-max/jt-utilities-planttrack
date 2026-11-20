@@ -443,15 +443,15 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <label>Previous repair / defect job number<input value={checklist["Previous repair / defect reference"]||""} onChange={e=>setChecklist(c=>({...c,"Previous repair / defect reference":e.target.value}))} placeholder="e.g. JT-JOB-000018"/></label>
     <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
    </div>
-   <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked</p>
+   <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked · {PRE_USE_ITEMS.filter(k=>checklist[k]==="Defect").length} defect(s)</p>
    {PRE_USE_SECTIONS.map(group=><section className="workshop-pre-use-section" key={group.name}>
     <h4>{group.name}</h4>
     {group.items.map(item=><div className="workshop-pre-use-row" key={item}>
      <strong>{item}</strong>
      <div className="workshop-pre-use-choices" role="group" aria-label={item+" inspection result"}>
-      {(["Checked","N/A","Defect"] as const).map(choice=><button type="button" key={choice} className={(checklist[item]===choice?"chosen ":"")+(choice==="Defect"?"defect":"")} aria-pressed={checklist[item]===choice} onClick={()=>setChecklist(c=>({...c,[item]:choice}))}>{choice==="Checked"?"✓ CHKD":choice==="N/A"?"N/A":"! DEFECT"}</button>)}
+      {(["Checked","N/A","Defect"] as const).map(choice=><button type="button" key={choice} className={"workshop-pre-use-option "+(choice==="Checked"?"pass":choice==="N/A"?"na":"defect")+(checklist[item]===choice?" chosen":"")} aria-pressed={checklist[item]===choice} onClick={()=>setChecklist(c=>({...c,[item]:choice,...(choice==="Defect"&&c["Pre-use result"]===PRE_USE_RESULT_PASS?{"Pre-use result":PRE_USE_RESULT_FAIL}:{})}))}>{choice==="Checked"?"✓ PASS":choice==="N/A"?"— N/A":"! DEFECT"}</button>)}
      </div>
-     <label>Comments &amp; Work Done<textarea rows={2} value={checklist[item+" - Comments"]||""} onChange={e=>setChecklist(c=>({...c,[item+" - Comments"]:e.target.value}))} placeholder={checklist[item]==="Defect"?"Describe the defect and action required (mandatory)":"Notes or work carried out, if applicable"}/></label>
+     <label className={checklist[item]==="Defect"?"workshop-pre-use-notes required": "workshop-pre-use-notes"}>Notes / comments &amp; work done {checklist[item]==="Defect"&&<span className="workshop-pre-use-required">Required for defect</span>}<textarea rows={2} value={checklist[item+" - Comments"]||""} onChange={e=>setChecklist(c=>({...c,[item+" - Comments"]:e.target.value}))} placeholder={checklist[item]==="Defect"?"Describe the defect, safety concern and action needed":"Add any notes or work done (optional)"}/></label>
     </div>)}
    </section>)}
    <div className="workshop-pre-use-finish">
