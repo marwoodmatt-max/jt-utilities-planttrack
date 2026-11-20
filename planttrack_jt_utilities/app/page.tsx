@@ -386,7 +386,7 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
  {!jobs.length&&!error&&<p className="muted">No job cards raised yet.</p>}
  </section>;
 }
-function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
+function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activeOnly?:boolean}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [canDeleteTestJobs,setCanDeleteTestJobs]=useState(false);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
@@ -400,20 +400,22 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  };
  const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"],"Pre-use / return-to-work check":["Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
+ const [assetLolerDue,setAssetLolerDue]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
- const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">("approval");
+ const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">(activeOnly?"active":"approval");
  const [showSpecialistFields,setShowSpecialistFields]=useState(false);
  const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
-  const [j,a,r,e,profile]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle()]);
+  const [j,a,r,e,profile,loler]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle(),supabase.from("examinations").select("asset_id,next_due,examined_at").ilike("examination_type","%LOLER%").order("examined_at",{ascending:false})]);
   if(!active)return;
   setCanDeleteTestJobs(user.user.id==="2807b17d-6507-4808-9909-15e11e44637a"&&profile.data?.role==="admin"&&profile.data?.active===true);
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
+  if(!loler.error){const dates:Record<string,string>={};for(const exam of loler.data||[]){if(exam.asset_id&&exam.next_due&&!dates[exam.asset_id])dates[exam.asset_id]=String(exam.next_due).slice(0,10);}setAssetLolerDue(dates);}
  })();return()=>{active=false};},[supabase,refresh]);
  useEffect(()=>{const update=()=>setRefresh(n=>n+1);const channel=supabase.channel("mechanic-job-inbox").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},update).subscribe();window.addEventListener("focus",update);const timer=window.setInterval(update,30000);return()=>{window.clearInterval(timer);window.removeEventListener("focus",update);void supabase.removeChannel(channel);};},[supabase]);
  const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
@@ -421,7 +423,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
  const mechanicActive=(job:any)=>["Assigned","In progress","Returned for correction"].includes(job.status);
  const mechanicVisible=orderedJobs.filter(job=>mechanicFilter==="active"?mechanicActive(job):mechanicFilter==="waiting"?job.status==="Awaiting office approval":!mechanicActive(job)&&job.status!=="Awaiting office approval");
- const officeVisible=orderedJobs.filter(job=>officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
+ const officeVisible=orderedJobs.filter(job=>activeOnly?["New","Assigned","In progress","Returned for correction","Awaiting office approval"].includes(job.status):officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
@@ -443,7 +445,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <div className="workshop-pre-use-job-number"><span>Job card number (allocated automatically)</span><strong>{job.job_card_number||"Pending allocation"}</strong><small>Asset: {assetName(job.asset_id)}</small></div>
    <p className="workshop-pre-use-warning">JT UTILITIES PRE-USE INSPECTION SHEET · Before equipment returns to work. Complete each CHKD / N/A / DEFECT box and add comments or work done. Any defect must be described. A failed inspection can be sent to the office but it cannot be approved as safe to use.</p>
    <div className="workshop-pre-use-sheet-meta">
-    <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
+    <label>Next LOLER inspection due (where recorded)<input type="date" value={/^\d{4}-\d{2}-\d{2}$/.test(checklist["Statutory inspection expiry date"]||"")?checklist["Statutory inspection expiry date"]:""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))}/><small>Pre-filled from the asset LOLER register where available. Check the current certificate before returning equipment to use.</small></label>
    </div>
    <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked · {PRE_USE_ITEMS.filter(k=>checklist[k]==="Defect").length} defect(s)</p>
    {PRE_USE_SECTIONS.map(group=><section className="workshop-pre-use-section" key={group.name}>
@@ -502,7 +504,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
   setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
   setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
-  setChecklist(job.completion_checklist||{});setLolerFields(job.completion_checklist||{});
+  const saved=job.completion_checklist||{};
+  setChecklist({...((preUseIsFullSheet(job)&&assetLolerDue[job.asset_id]&&!String(saved["Statutory inspection expiry date"]||"").trim())?{"Statutory inspection expiry date":assetLolerDue[job.asset_id]}:{}),...saved});setLolerFields(saved);
  };
  async function saveEngineerDraft(job:any){
   if(!Number.isFinite(Number(hours))||Number(hours)<0){setNotice("Enter a valid number of hours before saving.");return;}
@@ -650,7 +653,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    </article>)}
   </div>}
   <div className={"table-wrap workshop-desktop-jobs"+(role==="engineer"?" workshop-mechanic-hide-table":"")}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {(role==="engineer"?mechanicVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button>{mayDeleteTestJob(j)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(j)}><X size={14}/> Delete</button>}</td></tr></Fragment>)}
+   {(role==="engineer"?mechanicVisible:activeOnly?officeVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button>{mayDeleteTestJob(j)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(j)}><X size={14}/> Delete</button>}</td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button type="button" className="primary" onClick={()=>{setShowCreateJob(v=>!v);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{showCreateJob?"Close new job":role==="engineer"?"New Ad Hoc Job":"Add job card"}</button></div><div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
    <h3>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3>
