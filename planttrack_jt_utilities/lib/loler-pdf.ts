@@ -89,7 +89,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   cell(left,y,width,89,"WORK COMPLETED",job.engineer_work);y-=89;
   cell(left,y,width,75,"PARTS ADDED",job.engineer_parts);y-=75;
   cell(left,y,260,67,"LOCATION",job.job_details?.Location||job.asset_location);cell(left+260,y,261,67,"WORK COMPLETED BY",job.engineer_signature);y-=67;
-  cell(left,y,260,66,"POSITION",job.job_details?.Position||"Mechanic / engineer");cell(left+260,y,261,66,"SIGNED",clean(job.engineer_signature)?String(job.engineer_signature)+" / "+shortDate(job.engineer_signed_at):"Awaiting engineer signature");y-=66;
+  cell(left,y,260,66,"ASSET LOCATION",job.job_details?.["Asset Location"]||job.job_details?.Position||job.asset_location||job.job_details?.Location||"Not recorded");cell(left+260,y,261,66,"SIGNED",clean(job.engineer_signature)?String(job.engineer_signature)+" / "+shortDate(job.engineer_signed_at):"Awaiting engineer signature");y-=66;
   cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",shortDate(job.job_details?.["Compliant as of"]));cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature?String(job.office_signature)+" / "+shortDate(job.office_signed_at):"Awaiting office approval");
   line("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",left,55,width,8);
   line("www.jtutilities.com   |   020 3840 4826",left,42,width,8);
@@ -218,7 +218,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
    field("PARTS ADDED",job.engineer_parts);
    field("LOCATION",job.job_details?.Location);
    field("WORK COMPLETED BY",job.engineer_signature);
-   field("POSITION",job.job_details?.Position);
+   field("ASSET LOCATION",job.job_details?.["Asset Location"]||job.job_details?.Position||job.asset_location||job.job_details?.Location);
    field("SIGNED",job.engineer_signature);
    field("COMPLIANT AS OF (DD/MM/YY)",job.job_details?.["Compliant as of"]);
    write("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",8);
