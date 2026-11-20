@@ -8,6 +8,7 @@ import DailyPlantInspections from "../components/daily-plant-inspections";
 import PlantDefectReview from "../components/plant-defect-review";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
 import DailyInspectionDashboard from "../components/daily-inspection-dashboard";
+import { requiresDailyPlantCheck, MISSING_PLANT_CHECK_ALERT_HOUR_UK, ukDateString, ukHour } from "../lib/daily-check-requirements";
 import {
   Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ClipboardCheck,
   Clock3, FileCheck2, FileText, LayoutDashboard, Menu, Search, Settings, ShieldCheck,
@@ -602,7 +603,8 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     const defectsResult=isAdmin?await supabase.from("workshop_job_cards").select("id,asset_id,title,created_at,status").not("inspection_id","is",null).in("status",["New","Assigned"]).order("created_at",{ascending:false}).limit(75):null;
     const error=assetsResult.error||motResult.error||bookingsResult.error||lolerResult.error||defectsResult?.error;
     if(error){setNotificationsError("Could not load compliance alerts: "+error.message);setNotifications([]);setNotificationsLoading(false);return;}
-    const today=new Date().toLocaleDateString("en-CA",{timeZone:"Europe/London"});
+    const now=new Date();
+    const today=ukDateString(now);
     const dayDiff=(date:string)=>Math.round((Date.parse(date.slice(0,10)+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
     const fmt=(date:string)=>date.slice(8,10)+"-"+date.slice(5,7)+"-"+date.slice(0,4);
     const found:{key:string;label:string;details:string;page:string;priority:number}[]=[];
@@ -634,6 +636,42 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     const latestLoler=new Map<string,string>();
     for(const exam of lolerResult.data||[]){if(exam.next_due){const existing=latestLoler.get(exam.asset_id);if(!existing||exam.next_due>existing)latestLoler.set(exam.asset_id,exam.next_due);}}
     for(const [assetId,due] of latestLoler){const days=dayDiff(due);if(days>30)continue;const asset=assetById.get(assetId);found.push({key:"loler-"+assetId,label:(days<0?"LOLER overdue":"LOLER due")+" · "+(asset?.asset_code||"Equipment"),details:"Examination "+fmt(due),page:"LOLER & certificates",priority:days<0?1:4});}
+    // Only raise today's missing-check alerts after 10:00 UK time, and only for
+    // allocated machines whose asset inspection requirement is enabled.
+    if(isAdmin&&ukHour(now)>=MISSING_PLANT_CHECK_ALERT_HOUR_UK){
+      const [plantAssets,activeProjects,currentAllocations,checks]=await Promise.all([
+        supabase.from("assets").select("id,asset_code,description,category,daily_plant_check_required").limit(2000),
+        supabase.from("projects").select("id,project_name").eq("status","active").limit(500),
+        supabase.from("project_allocations").select("asset_id,project_id,allocated_at").is("returned_at",null).limit(3000),
+        supabase.from("inspections").select("asset_id,submitted_at").eq("inspection_type","daily_plant_pre_start")
+          .gte("submitted_at",new Date(Date.parse(today+"T00:00:00Z")-86400000).toISOString())
+          .lt("submitted_at",new Date(Date.parse(today+"T00:00:00Z")+172800000).toISOString())
+          .limit(1000)
+      ]);
+      const missingError=plantAssets.error||activeProjects.error||currentAllocations.error||checks.error;
+      if(missingError){setNotificationsError("Could not check missing daily plant inspections: "+missingError.message);}
+      else{
+        const byAssetId=new Map((plantAssets.data||[]).map(a=>[a.id,a]));
+        const byProjectId=new Map((activeProjects.data||[]).map(p=>[p.id,p]));
+        const checked=new Set((checks.data||[]).filter(r=>ukDateString(new Date(r.submitted_at))===today).map(r=>r.asset_id));
+        const allocated=new Set<string>();
+        for(const allocation of currentAllocations.data||[]){
+          const asset=byAssetId.get(allocation.asset_id);
+          const project=byProjectId.get(allocation.project_id);
+          if(!asset||!project||allocated.has(asset.id))continue;
+          if(asset.asset_code==="TEST-LOLER"||!requiresDailyPlantCheck(asset))continue;
+          if(ukDateString(new Date(allocation.allocated_at))>today)continue;
+          allocated.add(asset.id);
+          if(checked.has(asset.id))continue;
+          found.push({
+            key:"missing-plant-check-"+today+"-"+asset.id,
+            label:"DAILY CHECK MISSING · "+asset.asset_code,
+            details:project.project_name+" · No daily plant check submitted for "+fmt(today)+" by "+String(MISSING_PLANT_CHECK_ALERT_HOUR_UK).padStart(2,"0")+":00 UK",
+            page:"Dashboard",priority:1
+          });
+        }
+      }
+    }
     const {data:{user},error:userError}=await supabase.auth.getUser();
     if(userError||!user){setNotificationsError("Please sign in again to see notifications.");setNotificationsLoading(false);return;}
     const {data:dismissed,error:dismissedError}=await supabase.from("dismissed_notifications").select("notification_key,notification_label").eq("user_id",user.id);
@@ -644,7 +682,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     const cleared=new Set((dismissed||[]).filter(d=>activeByKey.get(d.notification_key)===d.notification_label).map(d=>d.notification_key));
     found.sort((a,b)=>a.priority-b.priority||a.label.localeCompare(b.label));setNotifications(found.filter(n=>!cleared.has(n.key)));setNotificationsLoading(false);
   }
-  useEffect(()=>{if(!isAdmin)return;void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void loadNotifications()).subscribe();return()=>{void supabase.removeChannel(channel);};},[supabase,isAdmin]);
+  useEffect(()=>{if(!isAdmin)return;void loadNotifications();const refresh=()=>void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},refresh).on("postgres_changes",{event:"INSERT",schema:"public",table:"inspections"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"project_allocations"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"assets"},refresh).subscribe();const timer=window.setInterval(refresh,300000);window.addEventListener("focus",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,isAdmin]);
   useEffect(() => {
     let cancelled = false;
 
