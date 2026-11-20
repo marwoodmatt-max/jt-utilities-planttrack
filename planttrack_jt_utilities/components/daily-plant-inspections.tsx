@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateDailyInspectionPdf } from "../lib/daily-inspection-pdf";
+import { requiresDailyPlantCheck } from "../lib/daily-check-requirements";
 
 export const dailyPlantChecks = [
   "Operator understands machine",
@@ -44,7 +45,7 @@ const yesNoChecks = new Set([
   "Check lights / warning lights / beacon are working",
   "Check horn is working", "Lights-flashing and vehicle"
 ]);
-type PlantAsset={id:string;status:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;location:string|null;hour_meter:number|null;serial_number:string|null};
+type PlantAsset={id:string;status:string;ownership_type:"owned"|"hired_in";hire_supplier:string|null;asset_code:string;description:string|null;registration:string|null;category:string|null;daily_plant_check_required:boolean|null;location:string|null;hour_meter:number|null;serial_number:string|null};
 type InspectionRow={id:string;report_path:string|null;asset_id:string|null;project_id:string|null;hired_plant_name:string|null;hired_plant_reference:string|null;submitted_at:string;submitted_by:string;meter_reading:number|null;result:string;answers:Record<string,string>;comments:string|null;status:string};
 const showDate=(date:string)=>new Date(date).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 const failAnswer=(answer:string)=>answer==="Unsafe"||answer==="No";
@@ -110,7 +111,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   async function load(){
     setLoading(true);setError("");
     const [a,r,p,alloc]=await Promise.all([
-      supabase.from("assets").select("id,asset_code,status,ownership_type,hire_supplier,description,registration,category,location,hour_meter,serial_number").order("asset_code").limit(1500),
+      supabase.from("assets").select("id,asset_code,status,ownership_type,hire_supplier,description,registration,category,daily_plant_check_required,location,hour_meter,serial_number").order("asset_code").limit(1500),
       supabase.from("inspections").select("id,report_path,asset_id,project_id,hired_plant_name,hired_plant_reference,submitted_at,submitted_by,meter_reading,result,answers,comments,status").eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}).limit(200),
       supabase.from("projects").select("id,project_name,site_address,site_postcode").neq("status","archived").order("project_name"),
       supabase.from("project_allocations").select("project_id,asset_id").is("returned_at",null)
@@ -128,7 +129,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     const {data:profile}=await supabase.from("profiles").select("full_name").eq("id",data.user.id).maybeSingle();
     if(active)setOperator(profile?.full_name||data.user?.email||"");
   });return ()=>{active=false};},[supabase]);
-  const projectAssets=projectId?assets.filter(a=>allocations.some(x=>x.project_id===projectId&&x.asset_id===a.id)):[];
+  const projectAssets=projectId?assets.filter(a=>requiresDailyPlantCheck(a)&&allocations.some(x=>x.project_id===projectId&&x.asset_id===a.id)):[];
   const ownedProjectAssets=projectAssets.filter(a=>a.ownership_type!=="hired_in");
   const hiredProjectAssets=projectAssets.filter(a=>a.ownership_type==="hired_in");
   function selectProject(id:string){setProjectId(id);setAssetId("");setHiredPlant("");setHiredReference("");const p=projects.find(p=>p.id===id);setSite([p?.site_address,p?.site_postcode].filter(Boolean).join(", "));}
