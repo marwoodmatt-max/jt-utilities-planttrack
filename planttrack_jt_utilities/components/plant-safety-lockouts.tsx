@@ -1,97 +1,138 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AlertTriangle, CheckCircle2, RefreshCcw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCcw, ShieldCheck, Wrench } from "lucide-react";
 
-type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;released_by:string|null;release_notes:string|null};
-type Job={id:string;inspection_id:string|null;status:string;job_card_number:string|null};
+type Hold={id:string;asset_id:string;inspection_id:string;locked_at:string;defect_summary:string;previous_status:string;released_at:string|null;release_notes:string|null};
+type Job={id:string;inspection_id:string|null;status:string;assigned_engineer:string|null;job_card_number:string|null};
+type Mechanic={id:string;name:string};
 const dateLabel=(v:string)=>new Date(v).toLocaleString("en-GB",{timeZone:"Europe/London",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 
 export default function PlantSafetyLockouts({supabase,isAdmin,assetId}:{supabase:SupabaseClient;isAdmin:boolean;assetId?:string}){
-  const [holds,setHolds]=useState<Hold[]>([]);
-  const [jobs,setJobs]=useState<Job[]>([]);
-  const [assets,setAssets]=useState<Record<string,string>>({});
-  const [notes,setNotes]=useState<Record<string,string>>({});
-  const [dismissalReasons,setDismissalReasons]=useState<Record<string,string>>({});
-  const [confirmed,setConfirmed]=useState<Record<string,boolean>>({});
-  const [busy,setBusy]=useState<string|null>(null);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState("");
-  const [notice,setNotice]=useState("");
-  const load=useCallback(async()=>{
-    setLoading(true);
-    let query=supabase.from("plant_safety_lockouts").select("id,asset_id,inspection_id,locked_at,defect_summary,previous_status,released_at,released_by,release_notes").order("locked_at",{ascending:false}).limit(300);
-    if(assetId)query=query.eq("asset_id",assetId);
-    const [h,j,a]=await Promise.all([
-      query,
-      supabase.from("workshop_job_cards").select("id,inspection_id,status,job_card_number").not("inspection_id","is",null).limit(300),
-      supabase.from("assets").select("id,asset_code").limit(1500)
-    ]);
-    if(h.error||j.error||a.error)setError("Unable to load safety lockouts: "+(h.error||j.error||a.error)?.message);
-    else{setHolds((h.data||[]) as Hold[]);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));}
-    setLoading(false);
-  },[supabase,assetId]);
-  useEffect(()=>{void load();const channel=supabase.channel("plant-safety-holds-"+(assetId||"all")).on("postgres_changes",{event:"*",schema:"public",table:"plant_safety_lockouts"},()=>void load()).on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();const refresh=()=>void load();window.addEventListener("focus",refresh);return()=>{window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,assetId,load]);
-  const active=holds.filter(h=>!h.released_at),history=holds.filter(h=>Boolean(h.released_at));
-  const byAsset=Array.from(new Set(active.map(h=>h.asset_id)));
-  const associated=(hold:Hold)=>jobs.find(job=>job.inspection_id===hold.inspection_id);
-  async function dismissIncorrectJob(job:Job){
-    if(!job.id||busy)return;
-    const reason=(dismissalReasons[job.id]||"").trim();
-    if(reason.length<5){setError("Please enter a reason for dismissing this reported defect.");return;}
-    setError("");setNotice("");setBusy(job.id);
-    const {error:rpcError}=await supabase.rpc("admin_triage_plant_defect_job",{p_job:job.id,p_action:"dismiss",p_mechanic:null,p_reason:reason});
-    if(rpcError)setError("Job card could not be dismissed: "+rpcError.message);
-    else{
-      setNotice("Defect job dismissed with your reason. The machine remains locked out until you separately confirm it is safe and authorise release.");
-      setDismissalReasons(prev=>({...prev,[job.id]:""}));
-      await load();
-    }
-    setBusy(null);
+ const [holds,setHolds]=useState<Hold[]>([]);
+ const [jobs,setJobs]=useState<Job[]>([]);
+ const [mechanics,setMechanics]=useState<Mechanic[]>([]);
+ const [assets,setAssets]=useState<Record<string,string>>({});
+ const [mechanicChoice,setMechanicChoice]=useState<Record<string,string>>({});
+ const [reason,setReason]=useState<Record<string,string>>({});
+ const [safe,setSafe]=useState<Record<string,boolean>>({});
+ const [busy,setBusy]=useState<string|null>(null);
+ const [error,setError]=useState("");
+ const [notice,setNotice]=useState("");
+ const [loading,setLoading]=useState(true);
+ const load=useCallback(async()=>{
+  setLoading(true);
+  let query=supabase.from("plant_safety_lockouts").select("id,asset_id,inspection_id,locked_at,defect_summary,previous_status,released_at,release_notes").order("locked_at",{ascending:false}).limit(300);
+  if(assetId)query=query.eq("asset_id",assetId);
+  const [h,j,a,m]=await Promise.all([
+   query,
+   supabase.from("workshop_job_cards").select("id,inspection_id,status,assigned_engineer,job_card_number").not("inspection_id","is",null).limit(300),
+   supabase.from("assets").select("id,asset_code").limit(1500),
+   isAdmin?supabase.rpc("list_plant_defect_mechanics"):Promise.resolve({data:[],error:null})
+  ]);
+  if(h.error||j.error||a.error||m.error)setError("Could not load defect review: "+(h.error||j.error||a.error||m.error)?.message);
+  else{setHolds((h.data||[]) as Hold[]);setJobs((j.data||[]) as Job[]);setAssets(Object.fromEntries((a.data||[]).map(x=>[x.id,x.asset_code])));setMechanics((m.data||[]) as Mechanic[]);}
+  setLoading(false);
+ },[supabase,assetId,isAdmin]);
+ useEffect(()=>{
+  void load();
+  const channel=supabase.channel("plant-hold-review-"+(assetId||"all"))
+   .on("postgres_changes",{event:"*",schema:"public",table:"plant_safety_lockouts"},()=>void load())
+   .on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},()=>void load()).subscribe();
+  const refresh=()=>void load();
+  window.addEventListener("focus",refresh);
+  return()=>{window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};
+ },[supabase,assetId,load]);
+ const active=holds.filter(h=>!h.released_at);
+ const history=holds.filter(h=>!!h.released_at);
+ const byAsset=Array.from(new Set(active.map(h=>h.asset_id)));
+ const associated=(hold:Hold)=>jobs.find(j=>j.inspection_id===hold.inspection_id);
+ const mechanicName=(id:string|null)=>mechanics.find(m=>m.id===id)?.name||"Assigned mechanic";
+
+ async function act(job:Job,action:"assign"|"dismiss"){
+  if(busy)return;
+  setError("");setNotice("");
+  const chosen=mechanicChoice[job.id]||job.assigned_engineer||"";
+  const details=(reason[job.id]||"").trim();
+  if(action==="assign"&&!chosen){setError("Choose a mechanic first.");return;}
+  if(action==="dismiss"&&(!safe[job.id]||details.length<15)){
+   setError("To dismiss and release, explain the incorrect report or safety checks (at least 15 characters), then tick the safety confirmation.");
+   return;
   }
-  async function release(id:string){
-    if(busy)return;
-    const detail=(notes[id]||"").trim();
-    if(detail.length<15||!confirmed[id]){setError("Confirm the machine is safe and enter at least 15 characters describing the repairs or inspection.");return;}
-    setError("");setNotice("");setBusy(id);
-    const {data,error:err}=await supabase.rpc("release_plant_safety_lockout",{p_asset:id,p_confirmation:detail,p_confirm_safe:true});
-    if(err)setError("Safety release refused: "+err.message);
-    else{setNotice(String(data||"Safety hold released"));setNotes(prev=>({...prev,[id]:""}));setConfirmed(prev=>({...prev,[id]:false}));await load();}
-    setBusy(null);
-  }
-  return <section className="panel" style={{borderTop:"4px solid #dc2626",marginBottom:22}}>
-    <div className="panel-head"><div><h3><AlertTriangle size={19} style={{verticalAlign:"-4px",marginRight:7,color:"#dc2626"}}/>Plant safety lockouts ({byAsset.length})</h3><p>Machine use is prohibited until every safety hold is properly released</p></div><button type="button" className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCcw size={15}/> Refresh</button></div>
-    {error&&<div className="auth-error" role="alert">{error}</div>}
-    {notice&&<div className="notice" role="status">{notice}</div>}
-    {loading?<p>Loading safety holds…</p>:byAsset.length===0?<p><CheckCircle2 size={16} style={{verticalAlign:"-3px",marginRight:6}}/>No active plant safety lockouts.</p>:byAsset.map(id=>{
-      const entries=active.filter(h=>h.asset_id===id);
-      const allResolved=entries.every(h=>["Approved","Dismissed"].includes(associated(h)?.status||""));
-      return <div key={id} style={{border:"2px solid #ef4444",borderRadius:6,padding:14,marginBottom:14,background:"#fff8f8"}}>
-        <h4 style={{margin:"0 0 6px",color:"#b91c1c"}}>LOCKED OUT — {assets[id]||"Machine"}</h4>
-        <p style={{fontSize:12,fontWeight:600}}>Do not operate, physically isolate and tag out where required. {entries.length} outstanding failed inspection(s).</p>
-        {entries.map(h=><div key={h.id} style={{borderTop:"1px solid #fecaca",padding:"9px 0"}}>
-          <strong>{dateLabel(h.locked_at)}</strong>
-          <div style={{fontSize:13,marginTop:4}}>{h.defect_summary}</div>
-          <div style={{fontSize:12,marginTop:5}}>Linked job card: <b>{associated(h)?.job_card_number||"Inspection defect job"}</b> · Status: <b>{associated(h)?.status||"Not found"}</b></div>
-          {isAdmin&&associated(h)&&["New","Assigned"].includes(associated(h)!.status)&&<div style={{marginTop:9,padding:11,background:"#fff",border:"1px solid #fca5a5",borderRadius:5}}>
-            <strong>Incorrect defect / test? Dismiss the job card here</strong>
-            <p style={{fontSize:12,margin:"5px 0"}}>Only dismiss if the report was incorrect or there is no genuine defect. For genuine defects, assign a mechanic and complete the repair first.</p>
-            <label>Reason for dismissing this job
-              <textarea rows={2} style={{width:"100%",marginTop:5}} placeholder="e.g. Test-machine inspection only; equipment checked and no actual defect found" value={dismissalReasons[associated(h)!.id]||""} onChange={e=>setDismissalReasons(prev=>({...prev,[associated(h)!.id]:e.target.value}))}/>
-            </label>
-            <button type="button" className="secondary" disabled={busy!==null||(dismissalReasons[associated(h)!.id]||"").trim().length<5} onClick={()=>void dismissIncorrectJob(associated(h)!)}>{busy===associated(h)!.id?"Dismissing…":"Dismiss incorrect / test job card"}</button>
-          </div>}
-        </div>)}
-        {isAdmin&&<div style={{background:"#fff",border:"1px solid #fca5a5",padding:12,marginTop:10}}>
-          {!allResolved&&<p role="alert" style={{color:"#991b1b",fontWeight:650}}>Step 1: Every related defect job must be Approved after repair or Dismissed with a reason. For an incorrect test defect, use the dismissal form directly above.</p>}
-          {allResolved&&<p style={{color:"#166534",fontWeight:650}}>Step 1 complete: all associated job cards have been reviewed. Step 2: confirm the machine has been checked and is safe to return to service.</p>}
-          <label>Repairs and safety confirmation<textarea rows={3} value={notes[id]||""} onChange={e=>setNotes(p=>({...p,[id]:e.target.value}))} placeholder="Describe repairs, reinspection, checks and why the machine is safe to return to service" style={{width:"100%",marginTop:6}}/></label>
-          <label style={{display:"flex",gap:8,alignItems:"start",fontWeight:550}}><input type="checkbox" checked={Boolean(confirmed[id])} onChange={e=>setConfirmed(p=>({...p,[id]:e.target.checked}))}/> I have confirmed that all recorded defects are resolved and the machine is safe to release.</label>
-          <button type="button" className="primary" disabled={!allResolved||busy!==null||!confirmed[id]||(notes[id]||"").trim().length<15} onClick={()=>void release(id)}><ShieldCheck size={16}/> {busy===id?"Releasing…":"Authorise safety release"}</button>
-          {!allResolved&&<small style={{display:"block",marginTop:7}}>The release button will enable after the job-card review above is completed.</small>}
-        </div>}
-      </div>;
+  setBusy(job.id);
+  try{
+   const {data,error:rpcError}=await supabase.rpc("admin_handle_plant_defect",{
+    p_job:job.id,p_action:action,p_mechanic:action==="assign"?chosen:null,
+    p_reason:action==="dismiss"?details:null,p_confirm_safe:action==="dismiss"
+   });
+   if(rpcError)throw rpcError;
+   setNotice(String(data||"Defect action recorded."));
+   setReason(prev=>({...prev,[job.id]:""}));setSafe(prev=>({...prev,[job.id]:false}));
+  }catch(e){setError("Could not complete defect action: "+(e instanceof Error?e.message:String(e)));}
+  finally{await load();setBusy(null);}
+ }
+ async function release(asset:string){
+  if(busy)return;
+  setError("");setNotice("");
+  const details=(reason[asset]||"").trim();
+  if(details.length<15||!safe[asset]){setError("Confirm repairs are complete and the machine is safe, with at least 15 characters explaining your checks.");return;}
+  setBusy(asset);
+  try{
+   const {data,error:err}=await supabase.rpc("release_plant_safety_lockout",{p_asset:asset,p_confirmation:details,p_confirm_safe:true});
+   if(err)throw err;
+   setNotice(String(data||"Machine released."));setReason(prev=>({...prev,[asset]:""}));setSafe(prev=>({...prev,[asset]:false}));
+  }catch(e){setError("Unable to release machine: "+(e instanceof Error?e.message:String(e)));}
+  finally{await load();setBusy(null);}
+ }
+ const completed=useMemo(()=>new Set(["Approved","Dismissed"]),[]);
+ return <section className="panel" style={{borderTop:"4px solid #dc2626",marginBottom:20}}>
+  <div className="panel-head">
+   <div><h3><AlertTriangle size={18} style={{verticalAlign:"-4px",marginRight:7,color:"#dc2626"}}/>Plant defects & lockouts ({byAsset.length})</h3><p>One review box per locked machine · Assign to mechanic or dismiss an incorrect defect</p></div>
+   <button type="button" className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCcw size={15}/> Refresh</button>
+  </div>
+  {error&&<p role="alert" className="auth-error">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}
+  {loading?<p>Loading safety defects…</p>:byAsset.length===0?<p><CheckCircle2 size={17} style={{verticalAlign:"-3px",marginRight:7}}/>No locked-out machines requiring review.</p>:byAsset.map(asset=>{
+   const assetHolds=active.filter(h=>h.asset_id===asset);
+   const ready=assetHolds.every(h=>completed.has(associated(h)?.status||""));
+   return <article key={asset} style={{border:"2px solid #e44a4a",borderRadius:7,padding:15,margin:"12px 0",background:"#fff9f9"}}>
+    <h4 style={{margin:"0 0 6px",fontSize:17,color:"#a61927"}}>LOCKED OUT — {assets[asset]||"Machine"}</h4>
+    <small>Do not operate until safe. The software lockout remains active when assigned to a mechanic.</small>
+    {assetHolds.map(hold=>{
+     const job=associated(hold);const canReview=job&&["New","Assigned"].includes(job.status);
+     return <div key={hold.id} style={{borderTop:"1px solid #f7c9ce",marginTop:12,paddingTop:12}}>
+      <strong>{hold.defect_summary}</strong><small style={{display:"block",margin:"5px 0 9px"}}>{dateLabel(hold.locked_at)} · Job: {job?.status||"Not linked"}{job?.assigned_engineer?" · "+mechanicName(job.assigned_engineer):""}</small>
+      {isAdmin&&job&&canReview&&<div style={{background:"#fff",border:"1px solid #e8d6d8",borderRadius:7,padding:12,display:"grid",gap:12}}>
+       <div><strong>Choose what to do</strong><p style={{fontSize:12,margin:"4px 0"}}>Assign a real defect for repair, or dismiss an incorrect report after verifying the machine is safe.</p></div>
+       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+        <div>
+         <label style={{display:"block",fontWeight:600}}>Mechanic
+          <select style={{width:"100%",marginTop:6}} value={mechanicChoice[job.id]||job.assigned_engineer||""} onChange={e=>setMechanicChoice(p=>({...p,[job.id]:e.target.value}))}>
+           <option value="">Select mechanic</option>{mechanics.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+         </label>
+         <button type="button" className="primary" style={{marginTop:9,width:"100%"}} disabled={busy!==null||!(mechanicChoice[job.id]||job.assigned_engineer)} onClick={()=>void act(job,"assign")}><Wrench size={16}/> {busy===job.id?"Saving…":"Assign to mechanic"}</button>
+        </div>
+        <div>
+         <label style={{display:"block",fontWeight:600}}>Dismissal / safety reason
+          <textarea rows={2} style={{width:"100%",marginTop:6}} placeholder="Only for an incorrect report: explain checks made and why it is safe" value={reason[job.id]||""} onChange={e=>setReason(p=>({...p,[job.id]:e.target.value}))}/>
+         </label>
+         <label style={{display:"flex",alignItems:"flex-start",gap:7,margin:"5px 0 8px",fontSize:12}}><input type="checkbox" checked={!!safe[job.id]} onChange={e=>setSafe(p=>({...p,[job.id]:e.target.checked}))}/> I have verified the machine is safe to return to use.</label>
+         <button type="button" className="secondary" style={{width:"100%"}} disabled={busy!==null||!safe[job.id]||(reason[job.id]||"").trim().length<15} onClick={()=>void act(job,"dismiss")}>{busy===job.id?"Saving…":"Dismiss & release if safe"}</button>
+        </div>
+       </div>
+      </div>}
+      {!isAdmin&&<small>Awaiting administrator review.</small>}
+      {job&&job.status==="Assigned"&&<p style={{fontSize:12,marginTop:8}}>Assigned to {mechanicName(job.assigned_engineer)}. The mechanic must complete the workshop job and obtain office approval before the machine can be released.</p>}
+     </div>;
     })}
-    {history.length>0&&<details style={{marginTop:15}}><summary style={{cursor:"pointer",fontWeight:650}}>Previous authorised releases ({history.length})</summary><div style={{marginTop:10}}>{history.slice(0,40).map(h=><div key={h.id} style={{borderBottom:"1px solid #e5e7eb",padding:"9px 0"}}><b>{assets[h.asset_id]||"Asset"}</b> · Released {h.released_at?dateLabel(h.released_at):""}<div style={{fontSize:12}}>{h.release_notes}</div></div>)}</div></details>}
-  </section>;
+    {isAdmin&&ready&&<div style={{marginTop:14,padding:12,background:"#fff",border:"1px solid #e0e7e0",borderRadius:7}}>
+     <strong>Repair approved — ready for safety release</strong>
+     <label style={{display:"block",marginTop:8}}>Checks completed / reason for release<textarea style={{width:"100%",marginTop:5}} rows={2} value={reason[asset]||""} onChange={e=>setReason(p=>({...p,[asset]:e.target.value}))}/></label>
+     <label style={{display:"flex",gap:8,alignItems:"flex-start",fontSize:12,margin:"8px 0"}}><input type="checkbox" checked={!!safe[asset]} onChange={e=>setSafe(p=>({...p,[asset]:e.target.checked}))}/> I confirm the defects have been resolved and this machine is safe.</label>
+     <button type="button" className="primary" disabled={busy!==null||!safe[asset]||(reason[asset]||"").trim().length<15} onClick={()=>void release(asset)}><ShieldCheck size={16}/> {busy===asset?"Releasing…":"Release machine"}</button>
+    </div>}
+   </article>;
+  })}
+  {history.length>0&&<details><summary style={{cursor:"pointer",fontWeight:600}}>Previous releases ({history.length})</summary>{history.slice(0,30).map(h=><p key={h.id} style={{fontSize:12,borderBottom:"1px solid #eee",padding:6}}>{assets[h.asset_id]||"Machine"} · {h.released_at?dateLabel(h.released_at):""} · {h.release_notes||""}</p>)}</details>}
+ </section>;
 }
