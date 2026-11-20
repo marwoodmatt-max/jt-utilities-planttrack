@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
-import { generateApprovedJobPdf } from "../lib/loler-pdf";
+import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
 import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
@@ -410,14 +410,37 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetLolerDefaults=(assetId:string,kind:string,certificateNo?:string,jobNo?:string):Record<string,string>=>{const a=assets.find(x=>x.id===assetId);if(!a)return {};const description=[a.manufacturer,a.model,a.description].filter(Boolean).join(" · ");const common:Record<string,string>=kind==="LOLER thorough examination"?{"EXAMINATION/TEST DATE":new Date().toISOString().slice(0,10),"CERTIFICATE NO":certificateNo||jobNo||"","NAME AND ADDRESS OF EQUIPMENT OWNER":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","LOCATION OF EQUIPMENT WHEN EXAMINED":a.location||"","ITEM":a.asset_code||"","ID NO/S":a.asset_code||"","EQUIPMENT DESCRIPTION":description||a.asset_code||"","NEXT EXAMINATION / TEST DUE DATE":suggestedLolerDate(12)}:{"Date of Thorough Examination":new Date().toISOString().slice(0,10),"Date of report":new Date().toISOString().slice(0,10),"Latest date by which next thorough examination must be carried out:":suggestedLolerDate(6),"Report number":certificateNo||jobNo||"","Name & address of employer for whom the Thorough Examination was made":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","Address of premises at which the Examination took place":a.location||"","Description & identification of the equipment or accessories":[a.asset_code,description].filter(Boolean).join(" · "),"Serial no:":a.serial_number||""};return common;};
  const chosen=jobs.find(j=>j.id===selected);
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?a.asset_code+" · "+a.description:id};
+ const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?.asset_code||"Asset"].join(" · ");
  async function archiveApprovedPdf(job:any){
-  const path=job.asset_id+"/"+job.id+".pdf";
-  const selectedAsset=assets.find(a=>a.id===job.asset_id);
-  const pdf=await generateApprovedJobPdf({...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},assetName(job.asset_id),selectedAsset?.asset_code==="TEST-LOLER-001");
+  const chosenAsset=assets.find(a=>a.id===job.asset_id);
+  const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
+  const bucket=supabase.storage.from("planttrack-job-certificates");
+  const legalLoler=String(job.job_type||"").startsWith("LOLER");
+  // Preserve the separate statutory LOLER certificate under its established path.
+  // Ordinary work continues to file a JT Asset Job Card as the primary PDF.
+  if(!job.approved_pdf_path){
+   const path=job.asset_id+"/"+job.id+".pdf";
+   const pdf=await generateApprovedJobPdf(fullJob,assetName(job.asset_id));
+   const upload=await bucket.upload(path,pdf,{contentType:"application/pdf",upsert:false});
+   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
+   const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
+   if(attached.error)throw attached.error;
+  }
+  // Every LOLER approval gets the standard job card IN ADDITION to its legal
+  // certificate. Also supports filing a corrected JT card for older approved jobs.
+  if(legalLoler&&!job.job_card_pdf_path){
+   await fileStandardJobCard(fullJob);
+  }
+ }
+ async function fileStandardJobCard(job:any){
+  const chosenAsset=assets.find(a=>a.id===job.asset_id);
+  const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
+  const path=job.asset_id+"/"+job.id+"-job-card.pdf";
+  const pdf=await generateAssetJobCardPdf(fullJob,assetName(job.asset_id));
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
-  const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
-  if(attached.error)throw attached.error;
+  const linked=await supabase.rpc("attach_workshop_job_card_pdf",{p_job:job.id,p_path:path});
+  if(linked.error)throw linked.error;
  }
  async function approveAndArchive(job:any){
   setBusy(true);setNotice("");
@@ -435,7 +458,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  async function downloadJobCardPdf(job:any){
   try{
    const selectedAsset=assets.find(a=>a.id===job.asset_id);
-   const pdf=await generateApprovedJobPdf({...job,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},selectedAsset?.asset_code||assetName(job.asset_id),true);
+   const pdf=await generateAssetJobCardPdf({...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},selectedAsset?.asset_code||assetName(job.asset_id),true);
    const url=URL.createObjectURL(pdf);
    const link=document.createElement("a");link.href=url;link.download=(job.job_card_number||"JT-Job-Card")+".pdf";document.body.appendChild(link);link.click();link.remove();
    window.setTimeout(()=>URL.revokeObjectURL(url),30000);
