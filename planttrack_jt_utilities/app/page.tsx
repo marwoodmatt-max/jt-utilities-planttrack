@@ -691,8 +691,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
 function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:boolean;role:string}) {
   const isOperator=role==="operator";
   const isMechanic=role==="mechanic";
-  const [page,setPage]=useState(isOperator?"Plant checks":"Dashboard");
-  useEffect(()=>{if(isOperator){setPage("Plant checks");return;}if(window.matchMedia("(max-width: 700px)").matches)setPage(isAdmin?"Dashboard":"Workshop job cards");},[isOperator,isAdmin]);
+  const [page,setPage]=useState(isOperator?"Plant checks":isMechanic?"Workshop job cards":"Dashboard");
+  useEffect(()=>{if(isOperator){setPage("Plant checks");return;}if(isMechanic){setPage("Workshop job cards");return;}if(window.matchMedia("(max-width: 700px)").matches)setPage("Dashboard");},[isOperator,isMechanic,isAdmin]);
   const [query,setQuery]=useState("");
   const [assets,setAssets]=useState<Asset[]>([]);
   const [assetsLoading,setAssetsLoading]=useState(true);
@@ -856,6 +856,9 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   }
   useEffect(()=>{if(!isAdmin&&!isMechanic)return;void loadNotifications();const refresh=()=>void loadNotifications();const channel=supabase.channel("plant-defect-notifications").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},refresh).on("postgres_changes",{event:"INSERT",schema:"public",table:"inspections"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"project_allocations"},refresh).on("postgres_changes",{event:"*",schema:"public",table:"assets"},refresh).subscribe();const timer=window.setInterval(refresh,300000);window.addEventListener("focus",refresh);return()=>{window.clearInterval(timer);window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};},[supabase,isAdmin,isMechanic]);
   useEffect(() => {
+    // Mechanic workspace only needs the asset details supplied to assigned job cards.
+    // Do not load the full fleet register or project allocations in its dashboard.
+    if(isMechanic)return;
     let cancelled = false;
 
     async function loadAssets() {
@@ -906,7 +909,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
 
     loadAssets();
     return () => { cancelled = true; };
-  }, [supabase,page]);
+  }, [supabase,page,isMechanic]);
   const filtered=useMemo(()=>assets.filter(a=>
     (a.id+" "+a.name+" "+a.category+" "+a.location+" "+a.registration).toLowerCase().includes(query.trim().toLowerCase()) &&
     (assetFilter==="All"||a.status===assetFilter) &&
@@ -915,6 +918,15 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   const availableCount=assets.filter(a=>a.status==="Available").length;
   function action(msg:string){setNotice(msg);setTimeout(()=>setNotice(""),3500)}
   const title=page;
+  if(isMechanic)return <div className="mechanic-only-shell">
+    <header className="mechanic-only-header">
+      <img src="/jt-utilities-logo.jpg" alt="JT Utilities" />
+      <div><strong>My Job Cards</strong><small>Assigned work · Completion · Office approval</small></div>
+    </header>
+    <main className="mechanic-only-main">
+      <WorkshopJobs supabase={supabase}/>
+    </main>
+  </div>;
   return <div className={`shell ${isOperator?"operator-shell":"office-shell"}`}>
     {!isOperator&&<aside className={`sidebar ${mobileNav?"open":""}`}>
       <div className="brand"><img className="brand-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd logo" /><div><b>JT UTILITIES LTD</b><small>PLANTTRACK</small></div><button className="close-nav" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
