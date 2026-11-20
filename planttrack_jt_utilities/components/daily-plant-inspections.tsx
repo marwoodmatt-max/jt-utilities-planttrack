@@ -88,6 +88,18 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const [message,setMessage]=useState("");
   const [expanded,setExpanded]=useState<string|null>(null);
   const [filter,setFilter]=useState("");
+  const [mobileStep,setMobileStep]=useState(0);
+  const stepNames=["Machine","Checks 1–9","Checks 10–20","Checks 21–32","Photos","Sign & send"];
+  const stepCounts=[0,9,11,12,3,0];
+  const stepAnswered=[0,dailyPlantChecks.slice(0,9).filter(k=>answers[k]).length,dailyPlantChecks.slice(9,20).filter(k=>answers[k]).length,dailyPlantChecks.slice(20).filter(k=>answers[k]).length,randomPhotoQuestions.filter(prompt=>Boolean(photos[prompt])).length,0];
+  const selectedMachine=plantSource==="own"?!!assetId:!!assetId||!!hiredPlant.trim();
+  const projectReady=!!projectId&&selectedMachine&&hours.trim()!==""&&Number.isFinite(Number(hours))&&Number(hours)>=0;
+  const completedStep=(step:number)=>step===0?projectReady:step>=1&&step<=3?stepAnswered[step]===stepCounts[step]:step===4?randomPhotoQuestions.length===3&&stepAnswered[4]===3:!!confirmed&&!!signature&&(!defects.length||!!comments.trim());
+  const nextMobileStep=()=>{
+    if(!completedStep(mobileStep)){setError(mobileStep===0?"Choose your project and machine, then enter the hours reading.":mobileStep<=3?"Complete each check. Tap Not applicable when a check does not apply.":mobileStep===4?"Take all three required photographs.":"Complete your signature and declaration.");return;}
+    setError("");setMobileStep(n=>Math.min(n+1,5));
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
   const assetMap=new Map(assets.map(a=>[a.id,a]));
   const asset=assetMap.get(assetId);
   const assetLocked=Boolean(assetId&&lockedAssets.has(assetId));
@@ -221,7 +233,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         if(linked.error)throw linked.error;
       }catch(err){warning=" PDF filing needs a retry: "+(err instanceof Error?err.message:String(err))+". Use File PDF below.";}
       setMessage((defects.length?"Inspection saved with defects. STOP: lock/tag out critical faults immediately. A workshop job card has been raised for admin review.":"Inspection saved successfully. PDF and three photographs are filed against the asset.")+warning);
-      setAnswers({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
+      setMobileStep(0);setAnswers({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
     }
     setSaving(false);
   }
@@ -236,19 +248,34 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     }catch(e){setError("Could not generate the inspection PDF: "+(e instanceof Error?e.message:String(e)));}
   }
   const filtered=records.filter(r=>!filter||r.asset_id===filter);
-  const row=(key:string,i:number)=><div key={key} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(145px,220px)",borderBottom:"1px solid #dfe3e8",minHeight:47,alignItems:"stretch"}}>
-    <label htmlFor={"check-"+i} style={{margin:0,padding:"12px 12px",fontSize:13,fontWeight:600,alignSelf:"center",color:"#1f2937"}}>{key}</label>
-    <select id={"check-"+i} aria-label={key} required value={answers[key]||""} onChange={e=>updateAnswer(key,e.target.value)}
+  const row=(key:string,i:number)=><div key={key} className={"operator-check-row"+(failAnswer(answers[key])?" operator-check-danger":"")}>
+    <div className="operator-check-label"><strong>{i+1}. {key}</strong><span>{answers[key]||"Not checked yet"}</span></div>
+    <div className="operator-check-options" role="group" aria-label={key}>
+      {statuses(key).map(status=><button key={status} type="button" aria-pressed={answers[key]===status} className={"operator-answer "+(answers[key]===status?"selected "+(failAnswer(status)?"unsafe":status==="N/A"?"not-applicable":"safe"):"")} onClick={()=>updateAnswer(key,status)}>
+       {status==="Safe"||status==="Yes"?"✓ ":status==="Unsafe"||status==="No"?"! ":""}{status==="N/A"?"Not applicable":status}
+      </button>)}
+    </div>
+    <select className="operator-check-desktop" aria-label={key} required value={answers[key]||""} onChange={e=>updateAnswer(key,e.target.value)}
       style={{height:"100%",minHeight:47,width:"100%",fontWeight:750,textAlign:"center",borderRadius:0,background:failAnswer(answers[key])?"#dc2626":answers[key]==="N/A"?"#74777e":answers[key]?(answers[key]==="Yes"?"#a1b83d":"#059669"):"#fff",color:answers[key]?"#fff":"#333",border:"1px solid #d2d7dd"}}>
       <option value="">Select</option>{statuses(key).map(status=><option key={status} value={status}>{status}</option>)}
     </select>
   </div>;
+  const stepNav=(step:number)=><div className="operator-step-nav">
+    {step>0&&<button type="button" className="secondary" onClick={()=>{setMobileStep(step-1);setError("");window.scrollTo({top:0,behavior:"smooth"});}}>Back</button>}
+    {step<5&&<button type="button" className="primary" onClick={nextMobileStep} disabled={!completedStep(step)}>Continue <span aria-hidden="true">→</span></button>}
+  </div>;
   return <section className="panel" style={{maxWidth:1050,margin:"auto"}}>
-    <div className="panel-head"><div><h3>Plant & Machinery Pre Start Inspection</h3><p>JT Utilities · Based on your current 32-check site inspection template</p></div><button type="button" className="secondary" onClick={()=>void load()} disabled={loading}>Refresh history</button></div>
+    <div className="panel-head"><div><h3>Daily Plant Check</h3><p>Choose your machine, check it, take photographs and sign before use.</p></div><button type="button" className="secondary" onClick={()=>void load()} disabled={loading}>Refresh</button></div>
     {error&&<div className="auth-error" role="alert">{error}</div>}
     {message&&<div className="notice" role="status">{message}</div>}
-    <form onSubmit={e=>void save(e)} style={{background:"#fff",border:"1px solid #d8dde4",borderRadius:4,overflow:"hidden"}}>
-      <div style={{padding:"18px 16px",background:"#f2f4f7",borderBottom:"1px solid #dbe1e7"}}>
+    <div className="operator-mobile-progress" aria-label="Daily Plant Check progress">
+      <div className="operator-step-top"><b>Step {mobileStep+1} of 6 · {stepNames[mobileStep]}</b><span>{answered}/32 checks</span></div>
+      <div className="operator-progress-rail"><span style={{width:((mobileStep+1)/6*100)+"%"}}/></div>
+      <p>{mobileStep===0?"Start by choosing your site and machine.":mobileStep===4?"Use your phone camera to take the three requested photos.":mobileStep===5?"Check any faults, sign and submit.": "Tap one answer for each check. Use Not applicable where needed."}</p>
+      {defects.length>0&&<div className="operator-danger-banner" role="alert">⚠ {defects.length} defect(s) reported — STOP. Do not operate unsafe plant. Report the fault immediately.</div>}
+    </div>
+    <form onSubmit={e=>void save(e)} className="operator-inspection-form" style={{background:"#fff",border:"1px solid #d8dde4",borderRadius:4,overflow:"hidden"}}>
+      <div className="operator-desktop-summary" style={{padding:"18px 16px",background:"#f2f4f7",borderBottom:"1px solid #dbe1e7"}}>
         <div style={{fontSize:17,fontWeight:800,color:"#202832"}}>JT Utilities - Plant & Machinery Pre Start Inspection</div>
         <div style={{fontSize:12,color:"#586374"}}>Inspection status: In progress</div>
         <div style={{display:"flex",gap:20,flexWrap:"wrap",marginTop:15,fontSize:13}}>
@@ -257,7 +284,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
           <span><strong>Actions:</strong> {defects.length}</span>
         </div>
       </div>
-      <div style={{padding:"13px 15px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
+      <div className={"operator-machine-section operator-section"+(mobileStep!==0?" operator-step-hidden":"")} style={{padding:"13px 15px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}>
         <label style={{margin:0}}>Prepared by / operator<input required readOnly value={operator} style={{width:"100%",marginTop:5}}/></label>
         <label style={{margin:0}}>Location<input value={site} onChange={e=>setSite(e.target.value)} style={{width:"100%",marginTop:5}} placeholder="Site / location"/></label>
         <label style={{margin:0}}>Project<select required value={projectId} onChange={e=>selectProject(e.target.value)} style={{width:"100%",marginTop:5}}><option value="">Select project</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select></label>
@@ -266,6 +293,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         <label style={{margin:0}}>Date and time<input value={showDate(new Date().toISOString())} readOnly style={{width:"100%",marginTop:5}}/></label>
         <label style={{margin:0}}>Records hours reading<input required type="number" min="0" step="0.1" value={hours} onChange={e=>setHours(e.target.value)} placeholder="Hours" style={{width:"100%",marginTop:5}}/></label>
       </div>
+      <div className={"operator-step-controls"+(mobileStep!==0?" operator-step-hidden":"")}>{stepNav(0)}</div>
       {assetLocked&&<div role="alert" style={{padding:14,background:"#fee2e2",border:"2px solid #dc2626",fontWeight:700,color:"#991b1b"}}>SAFETY LOCKOUT — This machine is out of service. Do not operate it. You may record an inspection, but only an administrator can authorise its return to use after recorded defects are resolved.</div>}
       <div style={{padding:"12px 15px",background:"#fff5e9",borderTop:"1px solid #e7e8eb",borderBottom:"1px solid #e7e8eb",color:"#6e3214",fontSize:13,fontWeight:650}}>
         If any of the following critical components are found to be defective the equipment is to be Locked and Tagged out and reported immediately. it shall not be operated until the fault has been rectified.
