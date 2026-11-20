@@ -659,10 +659,15 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&chosen.status==="Awaiting office approval"&&<div className="workshop-office-approval-panel">
     <h4>Office review & sign-off</h4>
     <p>Review the completed work and required inspection records before approving. The signed-in account and approval time are recorded for audit.</p>
+    {chosen.job_type==="Pre-use / return-to-work check"&&<div className="workshop-pre-use-office">
+     <strong>Return-to-work safety review · {chosen.completion_checklist?.["Pre-use result"]||"Result not recorded"}</strong>
+     <p>Verify every check below and the mechanic's signature. A failed check cannot be approved. An active safety hold must be released through the separate authorised process; this sign-off does not release it.</p>
+     {requiredChecklist(chosen).map((key:string)=><p key={key}><b>{key}:</b> {String(chosen.completion_checklist?.[key]||"Not recorded")}</p>)}
+    </div>}
     <label>Office reviewer — full name<input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Enter your full name"/></label>
     <label>Review comments<textarea rows={3} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Approval notes or reason for correction"/></label>
     <div className="workshop-office-actions">
-     <button type="button" className="primary" disabled={busy||signature.trim().length<2} onClick={()=>void approveAndArchive(chosen)}>{busy?"Processing…":"Approve & sign job card"}</button>
+     <button type="button" className="primary" disabled={busy||signature.trim().length<2||(chosen.job_type==="Pre-use / return-to-work check"&&(chosen.completion_checklist?.["Pre-use result"]!=="Pass - safe for proposed use"||Object.values(chosen.completion_checklist||{}).includes("Fail")))} onClick={()=>void approveAndArchive(chosen)}>{busy?"Processing…":"Approve & sign job card"}</button>
      <button type="button" className="secondary" disabled={busy||signature.trim().length<2||comments.trim().length<3} onClick={()=>void perform(()=>supabase.rpc("review_workshop_job",{p_job:chosen.id,p_approve:false,p_comments:comments,p_signature:signature}),"Returned to mechanic for correction")}>Return to mechanic</button>
     </div>
    </div>}
