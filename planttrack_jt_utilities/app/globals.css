@@ -549,3 +549,13 @@ tbody tr:hover{background:#fff5f6}
  .mechanic-only-main .workshop-job-panel>.workshop-selected-job{order:5}
  .mechanic-only-main .workshop-create-form.mobile-open{padding:13px}
 }
+
+
+/* Workshop pre-use/return-to-work safety checks: legible on the mechanic tablet and in office review. */
+.workshop-pre-use-warning{background:#fff5e9;border:2px solid #d78b32;color:#733e08;border-radius:7px;padding:12px 14px;font-size:13px;line-height:1.5;font-weight:700}
+.workshop-pre-use-office{display:grid;gap:7px;background:#fffaf0;border:1px solid #e6b66f;border-radius:7px;padding:12px;color:#32281d}
+.workshop-pre-use-office>strong{font-size:14px;color:#864810}
+.workshop-pre-use-office>p{margin:0!important;font-size:12px!important;line-height:1.45}
+.workshop-pre-use-office>p b{color:#1f2937}
+.mechanic-specialist-fields select,.workshop-selected-job select{min-height:47px}
+@media(max-width:700px){.workshop-pre-use-warning{padding:11px}.workshop-pre-use-office{padding:10px}.mechanic-specialist-fields select{min-height:53px;font-size:16px}}
