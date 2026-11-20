@@ -96,9 +96,9 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"){
    const preUsePage=doc.addPage([595.28,841.89]);
    const draw=(value:unknown,x:number,yPos:number,maxWidth:number,fontSize=9,face=font)=>{
-    const chars=ascii(value??"").replace(/\\n/g," ");
+    const chars=ascii(value??"").replace(/\n/g," ");
     const lines:string[]=[];let current="";
-    for(const word of chars.split(/\\s+/)){
+    for(const word of chars.split(/\s+/)){
      if(!word)continue;const next=current?current+" "+word:word;
      if(face.widthOfTextAtSize(next,fontSize)<=maxWidth){current=next;continue;}
      if(current)lines.push(current);current=word;
