@@ -388,15 +388,15 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
 function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
- const jobTypes=[["General repair","Job Card"],["Other / unexpected work","Ad hoc / unexpected work"],["Breakdown","Breakdown"],["Service","Service"],["HGV / trailer PMI","PMI"],["LOLER thorough examination","LOLERs"]];
+ const jobTypes=[["General repair","Job Card"],["Other / unexpected work","Ad hoc / unexpected work"],["Breakdown","Breakdown"],["Service","Service"],["Pre-use / return-to-work check","Pre-Use / Return-to-Work Check"],["HGV / trailer PMI","PMI"],["LOLER thorough examination","LOLERs"]];
  const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
  const [jobType,setJobType]=useState("General repair"),[jobDetails,setJobDetails]=useState<Record<string,string>>({});
  const fieldsByType:Record<string,string[]>={
   "General repair":["Date of defect","Job details","Location","Asset Location","Compliant as of"],"Breakdown":["Breakdown location","Vehicle condition / recovery required"],
   "Service":["Mileage or engine hours","Service checklist / specification"],"HGV / trailer PMI":["Mileage","Inspection date","PMI checklist / inspection notes"],"LOLER thorough examination":["Equipment identification","Examination date","Competent person","Report / certificate reference"],
-  "Defect rectification":["Original defect reference","Rectification and safety checks"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
+  "Defect rectification":["Original defect reference","Rectification and safety checks"],"Pre-use / return-to-work check":["Original job card / repair reference","Proposed job / site","Check notes"],"Other / unexpected work":["Where work occurred","Reason for unplanned work"]
  };
- const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"]};
+ const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"],"Pre-use / return-to-work check":["Previous repair / defect reference","Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
@@ -431,10 +431,24 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetLabel=(a:any)=>isRegisteredVehicle(a)?String(a.registration).trim():String(a.asset_code||"");
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?assetLabel(a)+" · "+a.description:id};
  const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?assetLabel(assets.find(a=>a.id===job.asset_id)):"Asset"].join(" · ");
- const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service"].includes(job.job_type);
+ const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service","Pre-use / return-to-work check"].includes(job.job_type);
  const requiredChecklist=(job:any)=>checklistByType[job.job_type]||[];
+ const preUseChoice=(key:string)=>["Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed"].includes(key);
+ const preUseFail=(job:any)=>job.job_type==="Pre-use / return-to-work check"&&(
+  checklist["Pre-use result"]!=="Pass - safe for proposed use"||
+  requiredChecklist(job).some((key:string)=>preUseChoice(key)&&checklist[key]==="Fail"));
+ const preUseField=(key:string)=><label key={key}>{key}
+  {key==="Pre-use result"?<select value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))}>
+   <option value="">Choose pass or fail</option>
+   <option value="Pass - safe for proposed use">Pass - safe for proposed use</option>
+   <option value="Fail - do not use">Fail - do not use</option>
+  </select>:preUseChoice(key)?<select value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))}>
+   <option value="">Choose result</option><option value="Pass">Pass</option><option value="Fail">Fail</option><option value="N/A">Not applicable</option>
+  </select>:<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder={key==="Outstanding defects / restrictions"?"Enter None if no defects; otherwise list restrictions":"Enter the related job number or findings"}/>}
+ </label>;
  const missingEngineerFields=(job:any)=>[
   ...(requiredChecklist(job).filter((key:string)=>!String(checklist[key]||"").trim())),
+  ...(preUseFail(job)?["Passing pre-use result and no failed safety checks (record failure, then return to office for further action)"]:[]),
   ...(work.trim().length<3?["Work completed"]:[]),
   ...(!Number.isFinite(Number(hours))||Number(hours)<0?["Valid hours worked"]:[]),
   ...(signature.trim().length<2?["Mechanic signature"]:[])
@@ -615,7 +629,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
       <button type="button" className="secondary mechanic-specialist-toggle" onClick={()=>setShowSpecialistFields(v=>!v)} aria-expanded={showSpecialistFields}>{showSpecialistFields?"Hide":"Show"} {String(chosen.job_type||"").startsWith("LOLER")?"LOLER examination & mandatory checklist":"Required inspection checklist"} ({requiredChecklist(chosen).length} checks)</button>
       {showSpecialistFields&&<div className="mechanic-specialist-fields">
        {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/></>}
-       {requiredChecklist(chosen).map((key:string)=><label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
+       {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">Check every item before signing. Any failed check means the machine must NOT be sent back to work. A completed job card does not release a plant lockout or replace the operator's daily pre-start check.</p>}
+       {requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
       </div>}
      </section>}
      <div className="mechanic-mobile-fields">
@@ -681,7 +696,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
    {(role==="engineer"||role==="office")&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
     {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
-    {(checklistByType[chosen.job_type]||[]).map(field=><label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
+    {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">This pre-use inspection must pass before return to work. Safety holds and operator daily checks remain separate.</p>}
+    {(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <div style={{display:"grid",gap:8}}>
      <strong>Parts added</strong>
