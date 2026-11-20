@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
 import ManagementReports from "../components/management-reports";
+import { PRE_USE_SECTIONS, PRE_USE_ITEMS, PRE_USE_SHEET_VERSION, PRE_USE_RESULT_PASS, PRE_USE_RESULT_FAIL, preUseIsFullSheet, preUseHasDefects } from "../lib/pre-use-inspection";
 import LolerManager from "../components/loler-manager";
 import DailyPlantInspections from "../components/daily-plant-inspections";
 import PlantSafetyLockouts from "../components/plant-safety-lockouts";
@@ -432,11 +433,54 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?assetLabel(a)+" · "+a.description:id};
  const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?assetLabel(assets.find(a=>a.id===job.asset_id)):"Asset"].join(" · ");
  const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service","Pre-use / return-to-work check"].includes(job.job_type);
- const requiredChecklist=(job:any)=>checklistByType[job.job_type]||[];
+ const requiredChecklist=(job:any)=>preUseIsFullSheet(job)?[...PRE_USE_ITEMS,"Previous repair / defect reference","Pre-use result"]:checklistByType[job.job_type]||[];
+ const preUseFullSheet=(job:any)=>preUseIsFullSheet(job);
+ const preUseSheetForm=(job:any)=>{
+  const completed=PRE_USE_ITEMS.filter(k=>["Checked","N/A","Defect"].includes(checklist[k])).length;
+  return <div className="workshop-pre-use-sheet">
+   <p className="workshop-pre-use-warning">JT UTILITIES PRE-USE INSPECTION SHEET · Before equipment returns to work. Complete each CHKD / N/A / DEFECT box and add comments or work done. Any defect must be described. A failed inspection can be sent to the office but it cannot be approved as safe to use.</p>
+   <div className="workshop-pre-use-sheet-meta">
+    <label>Previous repair / defect job number<input value={checklist["Previous repair / defect reference"]||""} onChange={e=>setChecklist(c=>({...c,"Previous repair / defect reference":e.target.value}))} placeholder="e.g. JT-JOB-000018"/></label>
+    <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
+   </div>
+   <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked</p>
+   {PRE_USE_SECTIONS.map(group=><section className="workshop-pre-use-section" key={group.name}>
+    <h4>{group.name}</h4>
+    {group.items.map(item=><div className="workshop-pre-use-row" key={item}>
+     <strong>{item}</strong>
+     <div className="workshop-pre-use-choices" role="group" aria-label={item+" inspection result"}>
+      {(["Checked","N/A","Defect"] as const).map(choice=><button type="button" key={choice} className={(checklist[item]===choice?"chosen ":"")+(choice==="Defect"?"defect":"")} aria-pressed={checklist[item]===choice} onClick={()=>setChecklist(c=>({...c,[item]:choice}))}>{choice==="Checked"?"✓ CHKD":choice==="N/A"?"N/A":"! DEFECT"}</button>)}
+     </div>
+     <label>Comments &amp; Work Done<textarea rows={2} value={checklist[item+" - Comments"]||""} onChange={e=>setChecklist(c=>({...c,[item+" - Comments"]:e.target.value}))} placeholder={checklist[item]==="Defect"?"Describe the defect and action required (mandatory)":"Notes or work carried out, if applicable"}/></label>
+    </div>)}
+   </section>)}
+   <div className="workshop-pre-use-finish">
+    <label>Final inspection result
+     <select value={checklist["Pre-use result"]||""} onChange={e=>setChecklist(c=>({...c,"Pre-use result":e.target.value}))}>
+      <option value="">Choose inspection result</option>
+      <option value={PRE_USE_RESULT_PASS}>PASS — no outstanding defects</option>
+      <option value={PRE_USE_RESULT_FAIL}>FAIL — do not use</option>
+     </select>
+    </label>
+    <label>Outstanding defects / restrictions<textarea rows={3} value={checklist["Outstanding defects / restrictions"]||""} onChange={e=>setChecklist(c=>({...c,"Outstanding defects / restrictions":e.target.value}))} placeholder="None, or details of any unsafe conditions"/></label>
+   </div>
+  </div>;
+ };
  const preUseChoice=(key:string)=>["Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed"].includes(key);
- const preUseFail=(job:any)=>job.job_type==="Pre-use / return-to-work check"&&(
-  checklist["Pre-use result"]!=="Pass - safe for proposed use"||
-  requiredChecklist(job).some((key:string)=>preUseChoice(key)&&checklist[key]==="Fail"));
+ const preUseInconsistent=(job:any)=>job.job_type==="Pre-use / return-to-work check"&&(
+  checklist["Pre-use result"]===PRE_USE_RESULT_PASS&&
+  (preUseFullSheet(job)?preUseHasDefects(checklist):requiredChecklist(job).some((key:string)=>preUseChoice(key)&&checklist[key]==="Fail")));
+ const preUseMissing=(job:any):string[]=>{
+  if(!preUseFullSheet(job))return requiredChecklist(job).filter((key:string)=>!String(checklist[key]||"").trim());
+  const incomplete=PRE_USE_ITEMS.filter(item=>!["Checked","N/A","Defect"].includes(checklist[item]));
+  const missingComments=PRE_USE_ITEMS.filter(item=>checklist[item]==="Defect"&&!String(checklist[item+" - Comments"]||"").trim());
+  return [
+   ...(incomplete.length? [incomplete.length+" inspection items still need CHKD, N/A or DEFECT ("+incomplete.slice(0,2).join(", ")+")"]:[]),
+   ...(missingComments.length? [missingComments.length+" reported defect(s) need comments ("+missingComments.slice(0,2).join(", ")+")"]:[]),
+   ...(!String(checklist["Previous repair / defect reference"]||"").trim()?["Previous repair / defect reference"]:[]),
+   ...(![PRE_USE_RESULT_PASS,PRE_USE_RESULT_FAIL].includes(checklist["Pre-use result"])?["Final pre-use PASS or FAIL result"]:[])
+  ];
+ };
  const preUseField=(key:string)=><label key={key}>{key}
   {key==="Pre-use result"?<select value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))}>
    <option value="">Choose pass or fail</option>
@@ -447,8 +491,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   </select>:<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder={key==="Outstanding defects / restrictions"?"Enter None if no defects; otherwise list restrictions":"Enter the related job number or findings"}/>}
  </label>;
  const missingEngineerFields=(job:any)=>[
-  ...(requiredChecklist(job).filter((key:string)=>!String(checklist[key]||"").trim())),
-  ...(preUseFail(job)?["Passing pre-use result and no failed safety checks (record failure, then return to office for further action)"]:[]),
+  ...preUseMissing(job),
+  ...(preUseInconsistent(job)?["Final result cannot be PASS while a defect is marked; choose FAIL"]:[]),
   ...(work.trim().length<3?["Work completed"]:[]),
   ...(!Number.isFinite(Number(hours))||Number(hours)<0?["Valid hours worked"]:[]),
   ...(signature.trim().length<2?["Mechanic signature"]:[])
@@ -468,7 +512,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  }
  async function submitEngineerJob(job:any){
   const missing=missingEngineerFields(job);
-  if(missing.length){setNotice("Complete before signing: "+missing.join(", "));if(requiredChecklist(job).length)setShowSpecialistFields(true);return;}
+  if(missing.length){setNotice("Please complete these fields to send the job: "+missing.join("; "));if(requiredChecklist(job).length)setShowSpecialistFields(true);window.setTimeout(()=>document.getElementById("mechanic-submit-feedback")?.scrollIntoView({behavior:"smooth",block:"center"}),30);return;}
   await perform(()=>supabase.rpc("sign_engineer_job_typed",{
    p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,
    p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields}:{})}
@@ -610,7 +654,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <label>Priority<select value={priority} onChange={e=>setPriority(e.target.value)}><option>Normal</option><option>High</option><option>Critical</option></select></label>
    {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
-   <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")?{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"","Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");setShowCreateJob(false);if(role==="engineer"){setMechanicFilter("active");if(r.data)setSelected(String(r.data));}}return r;},role==="engineer"?"Ad hoc job card created and assigned to you. Open it to record your work.":"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my Ad Hoc Job":"Create job card"}</button>
+   <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")?{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}:jobType==="Pre-use / return-to-work check"?{"Inspection sheet version":PRE_USE_SHEET_VERSION,"Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"","Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");setShowCreateJob(false);if(role==="engineer"){setMechanicFilter("active");if(r.data)setSelected(String(r.data));}}return r;},role==="engineer"?"Ad hoc job card created and assigned to you. Open it to record your work.":"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my Ad Hoc Job":"Create job card"}</button>
   </div></>}
   {chosen&&<div ref={selectedJobRef} className="workshop-selected-job" style={{marginTop:20,display:"grid",gap:10}}>
    {role==="office"&&<button type="button" className="secondary workshop-office-mobile-back" onClick={()=>{setSelected("");setNotice("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to office jobs</button>}
@@ -621,7 +665,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     </div>
     <h3>{jobHeading(chosen)}</h3>
     <p className="mechanic-mobile-subtitle">{chosen.title}</p>
-    {notice&&<p role="status" className="notice">{notice}</p>}
+    {notice&&<p id="mechanic-submit-feedback" role="status" className="notice">{notice}</p>}
     <div className="mechanic-mobile-instructions"><strong>Job instructions</strong><p>{chosen.instructions}</p></div>
     {mechanicActive(chosen)?<>
      {chosen.status==="Returned for correction"&&<p role="alert" className="auth-error">Office returned this job for correction. Review their comments below and resubmit when ready. {chosen.office_comments||""}</p>}
@@ -630,7 +674,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
       {showSpecialistFields&&<div className="mechanic-specialist-fields">
        {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/></>}
        {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">Check every item before signing. Any failed check means the machine must NOT be sent back to work. A completed job card does not release a plant lockout or replace the operator's daily pre-start check.</p>}
-       {requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
+       {preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
       </div>}
      </section>}
      <div className="mechanic-mobile-fields">
@@ -643,7 +687,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
        <p>Your signed-in account and submission time will be recorded automatically for audit.</p>
       </div>
       {missingEngineerFields(chosen).length>0&&<p className="mechanic-missing" role="status">To submit, complete: {missingEngineerFields(chosen).join(", ")}</p>}
-      <button type="button" className="primary mechanic-submit-btn" disabled={busy||missingEngineerFields(chosen).length>0} onClick={()=>void submitEngineerJob(chosen)}>{busy?"Submitting…":"Sign & send to office"}</button>
+      <button type="button" className="primary mechanic-submit-btn" disabled={busy} onClick={()=>void submitEngineerJob(chosen)}>{busy?"Submitting…":"Sign & send to office"}</button>
       <small>Once submitted, the job moves to “With office” for independent approval. Locked-out equipment stays locked until authorised safety release.</small>
      </div>
     </>:<div className="mechanic-mobile-complete-status">
@@ -702,7 +746,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {(role==="engineer"||role==="office")&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
     {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
     {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">This pre-use inspection must pass before return to work. Safety holds and operator daily checks remain separate.</p>}
-    {(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
+    {preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <div style={{display:"grid",gap:8}}>
      <strong>Parts added</strong>
@@ -715,7 +759,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
     {role==="office"&&<><p className="muted">Office can prepare and save these details. Only the assigned mechanic can sign and submit the job.</p><button className="primary" type="button" disabled={busy} onClick={()=>void perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours)}),"Workshop details saved — awaiting mechanic signature")}>Save workshop details</button></>}{role==="engineer"&&<><label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
     {(work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim()))&&<p role="status" style={{color:"#92400e",background:"#fffbeb",padding:"10px 12px",borderRadius:6,fontSize:13}}><strong>Before you can sign and submit:</strong>{" "}{[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])].join(", ")}. Complete these fields below the examination form.</p>}
-    <button className="primary" disabled={busy} onClick={()=>{const missing=[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])];if(missing.length){setNotice("Cannot submit yet. Complete: "+missing.join(", "));return;}void perform(()=>supabase.rpc("sign_engineer_job_typed",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours),p_signature:signature,p_checklist:{...checklist,...((chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...lolerFields}:{})}}),"Signed and submitted to office inbox");}}>Sign and submit to office</button>
+    <button type="button" className="primary" disabled={busy} onClick={()=>void submitEngineerJob(chosen)}>Sign and submit to office</button>
    </>}
    </>}
 
