@@ -642,3 +642,15 @@ tbody tr:hover{background:#fff5f6}
  .asset-pre-use-actions{width:100%}
  .asset-pre-use-actions button{width:100%;justify-content:center;min-height:53px}
 }
+
+
+/* Owner-only test cleanup and automatically allocated job references. */
+.workshop-delete-test{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;margin:5px 0 5px 8px;border:1px solid #d39ba5!important;color:#9d2339!important;background:#fff6f7!important;font-size:12px!important;min-height:39px}
+.workshop-delete-test:hover{background:#ffebed!important}
+.workshop-job-number-notice{display:flex;align-items:center;gap:10px;background:#eef3f9;border:1px solid #bfccdc;border-radius:8px;padding:11px 13px;color:#213148;font-size:13px;line-height:1.45}
+.workshop-job-number-notice svg{flex:0 0 auto}
+.workshop-pre-use-job-number{display:grid;gap:5px;background:#eaf2fa;border:2px solid #7795b5;padding:13px 15px;border-radius:8px;color:#203348}
+.workshop-pre-use-job-number span{font-size:12px;font-weight:700}
+.workshop-pre-use-job-number strong{font-size:21px;letter-spacing:.2px}
+.workshop-pre-use-job-number small{font-size:12px;color:#52657b}
+@media(max-width:700px){.workshop-delete-test{width:100%;margin:8px 0 0!important;min-height:48px}.workshop-pre-use-job-number strong{font-size:18px}}
