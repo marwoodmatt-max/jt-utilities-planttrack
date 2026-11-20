@@ -461,3 +461,10 @@ tbody tr:hover{background:#fff5f6}
  .workshop-mobile-job .secondary{width:100%;min-height:46px;margin-top:10px}
  .workshop-office-approval-panel{margin-top:8px}
 }
+
+
+/* Optional one-tap filing of older approved job cards; does not replace originals. */
+.workshop-backfill{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;background:#fffaf0;border:1px solid #ead2a6;border-radius:6px;margin:8px 0}
+.workshop-backfill p{margin:0;font-size:12px;color:#694a19;line-height:1.45;flex:1}
+.workshop-backfill button{flex-shrink:0;min-height:43px}
+@media(max-width:700px){.workshop-backfill{display:grid;gap:10px}.workshop-backfill button{width:100%;min-height:48px}}
