@@ -458,7 +458,6 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   const chosenAsset=assets.find(a=>a.id===job.asset_id);
   const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
   const bucket=supabase.storage.from("planttrack-job-certificates");
-  const legalLoler=String(job.job_type||"").startsWith("LOLER");
   // Preserve the separate statutory LOLER certificate under its established path.
   // Ordinary work continues to file a JT Asset Job Card as the primary PDF.
   if(!job.approved_pdf_path){
