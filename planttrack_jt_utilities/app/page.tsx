@@ -485,6 +485,20 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   const linked=await supabase.rpc("attach_workshop_job_card_pdf",{p_job:job.id,p_path:path});
   if(linked.error)throw linked.error;
  }
+ async function fileMissingApprovedJobCards(){
+  if(busy)return;
+  const missing=jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path);
+  if(!missing.length){setNotice("All approved jobs already have their JT Asset Job Cards filed.");return;}
+  setBusy(true);setNotice("Filing "+missing.length+" missing JT job card(s)…");
+  let completed=0;const problems:string[]=[];
+  for(const job of missing){
+   try{await fileStandardJobCard(job);completed++;}
+   catch(e){problems.push((job.job_card_number||job.id)+": "+(e instanceof Error?e.message:String(e)));}
+   setNotice("Filed "+completed+" of "+missing.length+" JT job card(s)"+(problems.length?" · "+problems.length+" need attention":"")+".");
+  }
+  setBusy(false);setRefresh(n=>n+1);
+  setNotice(completed+" JT job card(s) filed. Original signed documents were preserved."+(problems.length?" Failed: "+problems.join(" | "):""));
+ }
  async function approveAndArchive(job:any){
   setBusy(true);setNotice("");
   try{
@@ -521,6 +535,10 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
   <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>j.status==="Awaiting office approval").length+" awaiting review"}</h3>
+  {role==="office"&&jobs.some(j=>j.status==="Approved"&&!j.job_card_pdf_path)&&<div className="workshop-backfill">
+   <p><strong>{jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path).length} older approved job card(s)</strong> need a separate JT Asset Job Card PDF. Original documents and statutory LOLER certificates stay untouched.</p>
+   <button type="button" className="secondary" disabled={busy} onClick={()=>void fileMissingApprovedJobCards()}>{busy?"Filing documents…":"File missing JT job cards"}</button>
+  </div>}
   {role==="engineer"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="My assigned workshop jobs">
    <div className="mechanic-inbox-tabs" role="group" aria-label="Job status">
     <button type="button" className={mechanicFilter==="active"?"selected":""} onClick={()=>{setMechanicFilter("active");setSelected("");}}>To do ({jobs.filter(mechanicActive).length})</button>
