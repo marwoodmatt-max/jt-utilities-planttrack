@@ -805,6 +805,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   const [query,setQuery]=useState("");
   const [assets,setAssets]=useState<Asset[]>([]);
   const [assetsLoading,setAssetsLoading]=useState(true);
+  const [workshopOverviewVersion,setWorkshopOverviewVersion]=useState(0);
   const [assetsError,setAssetsError]=useState("");
   const [showNew,setShowNew]=useState(false);
   const [mobileNav,setMobileNav]=useState(false);
@@ -990,9 +991,14 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
         if (error) throw error;
         if (cancelled) return;
 
-        const {data:activeAllocations,error:allocationError}=await supabase.from("project_allocations").select("asset_id").is("returned_at",null);
-        if(allocationError)throw allocationError;
-        const allocatedIds=new Set((activeAllocations||[]).map(a=>a.asset_id));
+        const [allocationResult,workshopResult]=await Promise.all([
+          supabase.from("project_allocations").select("asset_id").is("returned_at",null),
+          supabase.from("workshop_job_cards").select("asset_id,status").in("status",["New","Assigned","In progress","Returned for correction","Awaiting office approval"]).limit(5000)
+        ]);
+        if(allocationResult.error)throw allocationResult.error;
+        if(workshopResult.error)throw workshopResult.error;
+        const allocatedIds=new Set((allocationResult.data||[]).map(a=>a.asset_id));
+        const workshopAssetIds=new Set((workshopResult.data||[]).map(j=>j.asset_id).filter(Boolean));
         const mapped = ((data || []) as DbAsset[]).map((item) => ({
           id: item.asset_code,
           name: item.description || [item.manufacturer, item.model].filter(Boolean).join(" ") || "Description not recorded",
@@ -1000,7 +1006,14 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
           registration: item.registration || "—",
           location: item.location || "Not recorded",
           hours: item.hour_meter == null ? "—" : String(item.hour_meter),
-          status: displayStatus(item.status==="available"&&allocatedIds.has(item.id)?"in_use":item.status,item.category),
+          // Active workshop jobs take priority over allocation, but never conceal
+          // an out-of-service/VOR state or another explicit statutory restriction.
+          status: displayStatus(
+            ["out_of_service","vor","off_hire"].includes(item.status)?item.status:
+            workshopAssetIds.has(item.id)?"in_workshop":
+            item.status==="available"&&allocatedIds.has(item.id)?"in_use":item.status,
+            item.category
+          ),
           loler: "Not recorded",
           service: "Not recorded"
         }));
@@ -1018,7 +1031,14 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
 
     loadAssets();
     return () => { cancelled = true; };
-  }, [supabase,page,isMechanic]);
+  }, [supabase,page,isMechanic,workshopOverviewVersion]);
+  useEffect(()=>{
+    if(isMechanic)return;
+    const refresh=()=>setWorkshopOverviewVersion(v=>v+1);
+    const channel=supabase.channel("workshop-status-overview").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},refresh).subscribe();
+    window.addEventListener("focus",refresh);
+    return()=>{window.removeEventListener("focus",refresh);void supabase.removeChannel(channel);};
+  },[supabase,isMechanic]);
   const filtered=useMemo(()=>assets.filter(a=>
     (a.id+" "+a.name+" "+a.category+" "+a.location+" "+a.registration).toLowerCase().includes(query.trim().toLowerCase()) &&
     (assetFilter==="All"||a.status===assetFilter) &&
