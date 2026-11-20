@@ -351,3 +351,7 @@ tbody tr:hover{background:#fff5f6}
 @media(max-width:1350px){.daily-compliance-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:850px){.daily-compliance-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:530px){.daily-compliance-filters{grid-template-columns:1fr}}
+
+/* Align the final Plant Checks button with the four filter input boxes. */
+.daily-compliance-action{position:relative;top:-15px}
+@media(max-width:1350px){.daily-compliance-action{top:0}}
