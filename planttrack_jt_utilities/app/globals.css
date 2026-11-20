@@ -468,3 +468,34 @@ tbody tr:hover{background:#fff5f6}
 .workshop-backfill p{margin:0;font-size:12px;color:#694a19;line-height:1.45;flex:1}
 .workshop-backfill button{flex-shrink:0;min-height:43px}
 @media(max-width:700px){.workshop-backfill{display:grid;gap:10px;order:2}.workshop-backfill button{width:100%;min-height:48px}.workshop-job-panel>.workshop-mobile-jobs{order:3}.workshop-job-panel>.workshop-selected-job{order:4}.workshop-job-panel>.workshop-desktop-jobs{order:5}}
+
+
+/* JT Utilities live management report downloads. */
+.management-reports{max-width:1220px;margin:auto}
+.management-report-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;margin:16px 0}
+.management-report-picker button{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;border:1px solid #d7dfe8;background:#fff;border-radius:6px;padding:14px;min-height:112px;color:#233045;cursor:pointer}
+.management-report-picker button.active{border:2px solid #cf1d32;background:#fff5f6;padding:13px}
+.management-report-picker button svg{color:#d91f32}
+.management-report-picker button strong{font-size:13px;line-height:1.3}
+.management-report-picker button small{font-size:11px;color:#64748b;line-height:1.35}
+.management-report-bar{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0 18px}
+.management-report-bar label{font-size:13px;font-weight:700;min-width:170px}
+.management-report-bar select{display:block;margin-top:7px;width:100%;min-height:45px}
+.management-report-bar>div{display:flex;gap:9px;flex-wrap:wrap}
+.management-report-bar button{display:flex;align-items:center;gap:6px;min-height:46px}
+.management-report-preview{background:#fff;border:1px solid #d6dee8;border-top:4px solid #c91f35;border-radius:6px;padding:17px}
+.management-report-preview h4{font-size:20px;margin:7px 0 3px}
+.management-report-preview>div>p{color:#566579;font-size:13px}
+.management-report-metrics{display:grid;gap:7px;margin:16px 0;background:#f3f6fa;padding:13px;border-radius:5px}
+.management-report-metrics p{margin:0!important;font-size:12px;color:#283648!important;line-height:1.5}
+.management-report-preview .table-wrap{max-height:480px;overflow:auto}
+@media(max-width:700px){
+ .management-report-picker{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .management-report-picker button{padding:11px;min-height:110px}
+ .management-report-picker button.active{padding:10px}
+ .management-report-bar{display:grid;gap:12px}
+ .management-report-bar>div{display:grid;grid-template-columns:1fr}
+ .management-report-bar button{justify-content:center;width:100%;min-height:51px}
+ .management-report-preview{padding:12px}
+ .management-report-preview h4{font-size:17px}
+}
