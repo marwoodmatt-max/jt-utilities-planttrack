@@ -524,3 +524,11 @@ tbody tr:hover{background:#fff5f6}
 .mechanic-only-tabs button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;flex:1;max-width:265px;border:2px solid #cad2dc;border-radius:7px;background:#fff;color:#1e293b;font-size:15px;font-weight:800;cursor:pointer}
 .mechanic-only-tabs button.selected{background:#192332;border-color:#192332;color:#fff}
 @media(max-width:700px){.mechanic-only-tabs{padding:12px 9px 0;gap:8px}.mechanic-only-tabs button{max-width:none;min-height:54px;font-size:14px}}
+
+
+/* Workshop job cards: separate plant asset-number and vehicle registration pickers. */
+.workshop-asset-vehicle-pickers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.workshop-asset-vehicle-pickers label{display:grid;gap:8px;font-size:14px;font-weight:750;color:#253449}
+.workshop-asset-vehicle-pickers select{width:100%;min-width:0;min-height:51px;box-sizing:border-box;border:1px solid #bbc6d2;border-radius:6px;padding:9px 10px;font-size:16px;background:#fff;color:#1e293b}
+.workshop-asset-vehicle-pickers select:focus-visible{outline:3px solid #647fa3;outline-offset:2px}
+@media(max-width:700px){.workshop-asset-vehicle-pickers{grid-template-columns:1fr;gap:16px}.workshop-asset-vehicle-pickers select{min-height:55px}}
