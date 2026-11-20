@@ -400,6 +400,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
+ const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">("approval");
  const [showSpecialistFields,setShowSpecialistFields]=useState(false);
  const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
@@ -416,6 +417,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
  const mechanicActive=(job:any)=>["Assigned","In progress","Returned for correction"].includes(job.status);
  const mechanicVisible=orderedJobs.filter(job=>mechanicFilter==="active"?mechanicActive(job):mechanicFilter==="waiting"?job.status==="Awaiting office approval":!mechanicActive(job)&&job.status!=="Awaiting office approval");
+ const officeVisible=orderedJobs.filter(job=>officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
@@ -532,7 +534,20 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
     <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":"View job"}</button>
    </article>)}
   </div>}
-  <div className={role==="engineer"?"table-wrap workshop-desktop-jobs":"table-wrap"}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+  {role==="office"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="Office workshop job inbox">
+   <div className="mechanic-inbox-tabs" role="group" aria-label="Office job status">
+    <button type="button" className={officeFilter==="approval"?"selected":""} onClick={()=>{setOfficeFilter("approval");setSelected("");}}>Sign off ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
+    <button type="button" className={officeFilter==="active"?"selected":""} onClick={()=>{setOfficeFilter("active");setSelected("");}}>Open jobs</button>
+    <button type="button" className={officeFilter==="history"?"selected":""} onClick={()=>{setOfficeFilter("history");setSelected("");}}>History</button>
+   </div>
+   {officeVisible.length===0?<p className="muted">{officeFilter==="approval"?"No jobs awaiting your approval.":officeFilter==="active"?"No open workshop jobs.":"No previous workshop records."}</p>:officeVisible.map(job=><article className="workshop-mobile-job" key={job.id}>
+    <div className="workshop-mobile-job-top"><span className="tag blue">{job.status}</span><span className="tag">{job.priority||"Normal"}</span></div>
+    <h4>{jobHeading(job)}</h4><p className="workshop-mobile-asset">{job.title}</p>
+    <p className="muted">{job.job_type||"Workshop job"}</p>
+    <button type="button" className={job.status==="Awaiting office approval"?"primary":"secondary"} onClick={()=>openMechanicJob(job)}>{job.status==="Awaiting office approval"?"Review & sign":"View job"}</button>
+   </article>)}
+  </div>}
+  <div className="table-wrap workshop-desktop-jobs"><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
    {orderedJobs.map((j,index)=><Fragment key={j.id}>{(index===0||jobStage(orderedJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button></td></tr></Fragment>)}
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button className="primary" onClick={()=>setShowCreateJob(v=>!v)} aria-expanded={showCreateJob}><Plus size={18}/>{showCreateJob?"Close new job":"Add job card"}</button></div><div className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
