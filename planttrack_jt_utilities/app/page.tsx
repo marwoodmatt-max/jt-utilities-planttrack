@@ -921,10 +921,14 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   if(isMechanic)return <div className="mechanic-only-shell">
     <header className="mechanic-only-header">
       <img src="/jt-utilities-logo.jpg" alt="JT Utilities" />
-      <div><strong>My Job Cards</strong><small>Assigned work · Completion · Office approval</small></div>
+      <div><strong>Mechanic Workspace</strong><small>Job cards and calendar</small></div>
     </header>
+    <nav className="mechanic-only-tabs" aria-label="Mechanic workspace">
+      <button type="button" className={page==="Workshop job cards"?"selected":""} aria-current={page==="Workshop job cards"?"page":undefined} onClick={()=>setPage("Workshop job cards")}><Wrench size={18}/> My Job Cards</button>
+      <button type="button" className={page==="Calander"?"selected":""} aria-current={page==="Calander"?"page":undefined} onClick={()=>setPage("Calander")}><CalendarDays size={18}/> Calendar</button>
+    </nav>
     <main className="mechanic-only-main">
-      <WorkshopJobs supabase={supabase}/>
+      {page==="Calander"?<Calendar supabase={supabase}/>:<WorkshopJobs supabase={supabase}/>}
     </main>
   </div>;
   return <div className={`shell ${isOperator?"operator-shell":"office-shell"}`}>
