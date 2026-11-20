@@ -1,4 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PRE_USE_SECTIONS, PRE_USE_SHEET_VERSION, PRE_USE_RESULT_PASS } from "./pre-use-inspection";
+
 
 type Job = Record<string, any>;
 const owner = "JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR";
@@ -93,7 +95,105 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   cell(left,y,260,62,"COMPLIANT AS OF (DD/MM/YY)",shortDate(job.job_details?.["Compliant as of"]));cell(left+260,y,261,62,"OFFICE APPROVAL",job.office_signature?String(job.office_signature)+" / "+shortDate(job.office_signed_at):"Awaiting office approval");
   line("Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR",left,55,width,8);
   line("www.jtutilities.com   |   020 3840 4826",left,42,width,8);
-  if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"){
+  // New full JT Utilities inspection sheet: all original sections, item decisions,
+  // comments and signatures. Older pre-use jobs retain their legacy eight-field PDF.
+  if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"&&job.job_details?.["Inspection sheet version"]===PRE_USE_SHEET_VERSION){
+   const answers=job.completion_checklist||{};
+   const foundDefect=PRE_USE_SECTIONS.some(section=>section.items.some(item=>answers[item]==="Defect"));
+   const passes=answers["Pre-use result"]===PRE_USE_RESULT_PASS&&!foundDefect;
+   let sheetPage=doc.addPage([595.28,841.89]), yPos=700;
+   const sheetPages=[sheetPage];
+   let sheetLogo:Awaited<ReturnType<typeof doc.embedJpg>>|null=null;
+   try{const response=await fetch("/jt-utilities-logo.jpg");if(response.ok)sheetLogo=await doc.embedJpg(await response.arrayBuffer());}catch{}
+   const write=(value:unknown,x:number,yy:number,size=8.5,face=font)=>{
+    const valueText=ascii(value??"");
+    if(valueText)sheetPage.drawText(valueText,{x,y:yy,size,font:face,color:ink});
+   };
+   const wrapped=(value:unknown,maxWidth:number,size=8,face=font):string[]=>{
+    const out:string[]=[];
+    for(const paragraph of ascii(value??"").split("\n")){
+     let current="";
+     for(let word of paragraph.trim().split(/\s+/)){
+      if(!word)continue;
+      while(word.length){
+       const possible=current?current+" "+word:word;
+       if(face.widthOfTextAtSize(possible,size)<=maxWidth){current=possible;word="";continue;}
+       if(current){out.push(current);current="";continue;}
+       let length=1;
+       while(length<word.length&&face.widthOfTextAtSize(word.slice(0,length+1),size)<=maxWidth)length++;
+       out.push(word.slice(0,length));word=word.slice(length);
+      }
+     }
+     if(current)out.push(current);
+     if(!current&&!paragraph.trim())out.push("");
+    }
+    return out.length?out:[""];
+   };
+   const paragraph=(value:unknown,x:number,top:number,maxWidth:number,size=8,face=font)=>{
+    const rows=wrapped(value,maxWidth,size,face);
+    rows.forEach((row,index)=>{if(row)sheetPage.drawText(row,{x,y:top-index*(size+3),size,font:face,color:ink});});
+    return rows.length*(size+3);
+   };
+   const sheetHeader=()=>{
+    if(sheetLogo){const dims=sheetLogo.scaleToFit(130,60);sheetPage.drawImage(sheetLogo,{x:37,y:756,width:dims.width,height:dims.height});}
+    else write("JT UTILITIES LTD",40,795,13,strong);
+    write("PRE-USE / RETURN-TO-WORK INSPECTION SHEET",188,799,11.5,strong);
+    write(jobNo+"  |  "+shortDate(job.created_at),188,779,9,strong);
+    sheetPage.drawLine({start:{x:left,y:746},end:{x:right,y:746},thickness:1.4,color:rgb(.8,.14,.22)});
+    write("DATE: "+shortDate(job.engineer_signed_at||job.created_at),left,728,8,strong);
+    write("MACHINE: "+ascii(assetLabel).slice(0,54),left+120,728,8,strong);
+    write("ASSET NO: "+ascii(assetCode).slice(0,22),left,713,8,strong);
+    write("FITTER: "+ascii(job.engineer_signature||"Not signed").slice(0,36),left+165,713,8,strong);
+    write("HOURS: "+String(job.engineer_hours??"Not recorded"),left+425,713,8,strong);
+    yPos=692;
+   };
+   sheetHeader();
+   const nextPage=()=>{sheetPage=doc.addPage([595.28,841.89]);sheetPages.push(sheetPage);sheetHeader();};
+   const ensure=(space:number)=>{if(yPos-space<85)nextPage();};
+   for(const section of PRE_USE_SECTIONS){
+    ensure(78);
+    sheetPage.drawRectangle({x:left,y:yPos-23,width,height:23,color:rgb(.13,.20,.31)});
+    sheetPage.drawText(section.name,{x:left+9,y:yPos-16,font:strong,size:10,color:rgb(1,1,1)});
+    yPos-=26;
+    for(const item of section.items){
+     const checked=ascii(answers[item]||"Not recorded");
+     const note=answers[item+" - Comments"]||"";
+     const commentLines=wrapped(note||"—",width-22,8);
+     const h=Math.max(52,35+commentLines.length*11);
+     ensure(h+5);
+     sheetPage.drawRectangle({x:left,y:yPos-h,width,height:h,borderColor:border,borderWidth:.65});
+     sheetPage.drawRectangle({x:left,y:yPos-23,width,height:23,color:pale});
+     paragraph(item,left+7,yPos-9,width-140,8.8,strong);
+     sheetPage.drawText(checked,{x:right-101,y:yPos-15,font:strong,size:9,color:checked==="Defect"?rgb(.78,.07,.12):ink});
+     paragraph("COMMENTS & WORK DONE: "+ascii(note||"None"),left+8,yPos-34,width-18,8);
+     yPos-=h+3;
+    }
+    yPos-=7;
+   }
+   const finalNotes=wrapped(answers["Outstanding defects / restrictions"]||"None",width-20,9);
+   const finishHeight=165+finalNotes.length*12;
+   ensure(finishHeight);
+   sheetPage.drawRectangle({x:left,y:yPos-35,width,height:35,color:passes?rgb(.91,.97,.92):rgb(1,.92,.90)});
+   write("FINAL RESULT: "+(passes?"PASS - inspection completed":"FAIL / NOT SAFE TO RETURN TO WORK"),left+9,yPos-22,11,strong);
+   yPos-=46;
+   write("STATUTORY INSPECTION EXPIRY DATE: "+String(answers["Statutory inspection expiry date"]||"Not provided"),left,yPos,9,strong);yPos-=26;
+   write("OUTSTANDING DEFECTS / RESTRICTIONS",left,yPos,9,strong);yPos-=15;
+   yPos-=paragraph(answers["Outstanding defects / restrictions"]||"None",left+6,yPos,width-14,9)+12;
+   if(passes) yPos-=paragraph("I hereby declare the equipment was inspected / serviced in accordance with the appropriate provisions and, except as noted above, no defect likely to affect safe use was recorded.",left,yPos,width,8.5);
+   else yPos-=paragraph("FAILED INSPECTION: NOT FIT FOR RETURN TO WORK. This sheet records defects; it is NOT a declaration of safe operation. Repair and reinspection are required before use.",left,yPos,width,8.5,strong);
+   yPos-=16;
+   write("COMPLETED BY: "+(job.engineer_signature||"Not signed"),left,yPos,9,strong);
+   write("DATE: "+shortDate(job.engineer_signed_at),left+350,yPos,9,strong);
+   yPos-=18;
+   write("OFFICE SIGNATURE: "+(job.office_signature||"Awaiting office review"),left,yPos,8.5,strong);
+   for(const [index,page] of sheetPages.entries()){
+    page.drawLine({start:{x:left,y:50},end:{x:right,y:50},thickness:.7,color:border});
+    page.drawText("JT Utilities Ltd | Inspection Sheet | "+jobNo,{x:left,y:36,font,size:8,color:ink});
+    page.drawText("Sheet "+(index+1)+" / "+sheetPages.length,{x:right-78,y:36,font,size:8,color:ink});
+    page.drawText("Not a statutory LOLER certificate or authorisation to release a safety hold.",{x:left,y:23,font,size:7,color:ink});
+   }
+  }
+  else if(String(job._workCategory||job.job_type)==="Pre-use / return-to-work check"){
    const preUsePage=doc.addPage([595.28,841.89]);
    const draw=(value:unknown,x:number,yPos:number,maxWidth:number,fontSize=9,face=font)=>{
     const chars=ascii(value??"").replace(/\n/g," ");
