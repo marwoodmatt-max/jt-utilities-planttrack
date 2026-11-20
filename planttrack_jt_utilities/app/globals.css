@@ -337,3 +337,17 @@ tbody tr:hover{background:#fff5f6}
 .daily-compliance-equation{margin:0 0 18px;padding:10px 13px;background:#f5f7fa;border-left:3px solid #cbd1dc;font-size:13px;color:#374151;line-height:1.6}
 @media(max-width:850px){.daily-compliance-stats{gap:12px}}
 @media(max-width:600px){.daily-compliance-stats{grid-template-columns:1fr!important}.daily-compliance-stat{min-height:135px}}
+
+
+/* Daily compliance filters: each control has its own label row and equal-height input row. */
+.daily-compliance-filters{display:grid;grid-template-columns:minmax(158px,.95fr) minmax(185px,1.2fr) minmax(190px,1.25fr) minmax(160px,1fr) minmax(170px,1fr);gap:12px;align-items:end;margin:20px 0 6px}
+.daily-compliance-filter{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:12px;font-weight:700;color:#202124}
+.daily-compliance-filter>input,.daily-compliance-filter>select,.daily-compliance-action>button{width:100%;min-width:0;height:46px;min-height:46px;margin:0;box-sizing:border-box}
+.daily-compliance-filter>select{padding-left:11px}
+.daily-compliance-test-control{height:46px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid #d6dbe4;border-radius:5px;background:white;font-size:12px;white-space:nowrap}
+.daily-compliance-test-control input{margin:0;width:15px;height:15px;flex-shrink:0}
+.daily-compliance-action-label{visibility:hidden}
+.daily-compliance-selected-date{margin:0 0 15px;color:#68727d;font-size:12px}
+@media(max-width:1350px){.daily-compliance-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:850px){.daily-compliance-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:530px){.daily-compliance-filters{grid-template-columns:1fr}}
