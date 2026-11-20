@@ -129,20 +129,26 @@ export default function DailyInspectionDashboard({supabase,onOpenChecks}:{supaba
  }
  return <section className="panel" id="daily-inspection-dashboard" style={{marginTop:24,borderTop:"4px solid #e31b36"}}>
   <div className="panel-head"><div><h3><ClipboardCheck size={19} style={{verticalAlign:"-4px",marginRight:8,color:"#e31b36"}}/>Daily Plant Inspection Compliance</h3><p>All registered equipment allocated to active projects · Test machine excluded by default</p></div><button type="button" className="secondary" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/> Refresh</button></div>
-  <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"end",margin:"15px 0"}}>
-   <label style={{fontSize:12,fontWeight:700}}>Inspection date
-    <input aria-label="Inspection date" type="date" max={ukDate(new Date())} value={date} onChange={e=>setDate(e.target.value)} style={{display:"block",marginTop:5,minWidth:145}}/>
-    <small style={{display:"block",fontWeight:400}}>Showing {displayDate(date)} (UK)</small>
+  <div className="daily-compliance-filters">
+   <label className="daily-compliance-filter">Inspection date
+    <input aria-label="Inspection date" type="date" max={ukDate(new Date())} value={date} onChange={e=>setDate(e.target.value)}/>
    </label>
-   <label style={{fontSize:12,fontWeight:700}}>Project
-    <select aria-label="Filter by project" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:185}}><option value="all">All active projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select>
+   <label className="daily-compliance-filter">Project
+    <select aria-label="Filter by project" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="all">All active projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_name}</option>)}</select>
    </label>
-   <label style={{fontSize:12,fontWeight:700}}>Inspection status
-    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{display:"block",marginTop:5,minWidth:150}}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option></select>
+   <label className="daily-compliance-filter">Inspection status
+    <select aria-label="Filter by inspection status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="missing">Not inspected</option><option value="checked">Inspected · no defect</option><option value="defect">Inspected · defect reported</option></select>
    </label>
-   <label style={{display:"flex",gap:7,alignItems:"center",fontSize:12,fontWeight:650,paddingBottom:6}}><input type="checkbox" checked={includeTestAssets} onChange={e=>setIncludeTestAssets(e.target.checked)}/> Include TEST-LOLER</label>
-   <button type="button" className="secondary" onClick={onOpenChecks}>Open Plant Checks</button>
+   <label className="daily-compliance-filter daily-compliance-test">
+    <span>Test machine</span>
+    <span className="daily-compliance-test-control"><input type="checkbox" checked={includeTestAssets} onChange={e=>setIncludeTestAssets(e.target.checked)}/> Include TEST-LOLER</span>
+   </label>
+   <div className="daily-compliance-filter daily-compliance-action">
+    <span className="daily-compliance-action-label">Plant inspections</span>
+    <button type="button" className="secondary" onClick={onOpenChecks}>Open Plant Checks</button>
+   </div>
   </div>
+  <p className="daily-compliance-selected-date">Showing <b>{displayDate(date)}</b> (UK)</p>
   {error&&<p className="auth-error" role="alert">{error}</p>}
   {loading?<p>Loading inspection compliance…</p>:<>
    <div className="daily-compliance-stats" style={{gridTemplateColumns:"repeat(2,minmax(0,1fr))"}}>
