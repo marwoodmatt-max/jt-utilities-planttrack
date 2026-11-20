@@ -437,3 +437,14 @@ tbody tr:hover{background:#fff5f6}
  .operator-sign-section canvas{height:155px!important}
  .operator-inspection-form .operator-final-reminder{position:static}
 }
+
+
+/* Visible, accessible independent office sign-off above long JT job-card previews. */
+.workshop-office-approval-panel{display:grid;gap:12px;padding:17px;border:2px solid #216e44;border-radius:7px;background:#f1fbf5;margin:12px 0}
+.workshop-office-approval-panel h4{margin:0;font-size:17px;color:#1c5937}
+.workshop-office-approval-panel p{font-size:13px;line-height:1.5;margin:0;color:#3b5648}
+.workshop-office-approval-panel label{display:grid;gap:6px;font-size:13px;font-weight:700}
+.workshop-office-approval-panel input,.workshop-office-approval-panel textarea{width:100%;box-sizing:border-box;min-height:47px;font-size:16px}
+.workshop-office-actions{display:flex;gap:10px;flex-wrap:wrap}
+.workshop-office-actions button{flex:1;min-height:50px}
+@media(max-width:700px){.workshop-office-approval-panel{padding:14px}.workshop-office-actions{display:grid;grid-template-columns:1fr}.workshop-office-actions button{width:100%}}
