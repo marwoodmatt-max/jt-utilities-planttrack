@@ -408,6 +408,7 @@ tbody tr:hover{background:#fff5f6}
  .operator-desktop-summary{display:none!important}
  .operator-inspection-form .operator-step-hidden{display:none!important}
  .operator-inspection-form .operator-machine-section{display:grid!important;grid-template-columns:1fr!important;gap:13px!important;padding:14px!important}
+ .operator-inspection-form .operator-machine-section.operator-step-hidden{display:none!important}
  .operator-machine-section>label{font-size:14px;font-weight:750;color:#243140}
  .operator-machine-section select,.operator-machine-section input{min-height:50px!important;font-size:16px!important;border-radius:5px!important;box-sizing:border-box}
  .operator-check-section>div:first-child{position:sticky;top:115px;z-index:3}
