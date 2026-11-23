@@ -386,7 +386,7 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
  {!jobs.length&&!error&&<p className="muted">No job cards raised yet.</p>}
  </section>;
 }
-function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
+function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activeOnly?:boolean}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [canDeleteTestJobs,setCanDeleteTestJobs]=useState(false);
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
@@ -400,20 +400,22 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  };
  const checklistByType:Record<string,string[]>={"HGV / trailer PMI":["Brakes","Steering","Tyres and wheels","Lights and electrics","Suspension and chassis","Safety equipment","Inspection result","Defects and action"],"LOLER thorough examination":["Identification and SWL","Structure and welds","Lifting components","Hydraulics and controls","Safety devices","Examination result","Defects and restrictions"],"Service":["Fluids and filters","Inspection checks","Service result"],"Pre-use / return-to-work check":["Fluid levels and visible leaks","Tyres / tracks and running gear","Brakes steering and controls","Guards alarms and safety devices","Functional test completed","Pre-use result","Outstanding defects / restrictions"]};
  const [checklist,setChecklist]=useState<Record<string,string>>({});
+ const [assetLolerDue,setAssetLolerDue]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
- const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">("approval");
+ const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">(activeOnly?"active":"approval");
  const [showSpecialistFields,setShowSpecialistFields]=useState(false);
  const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
-  const [j,a,r,e,profile]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle()]);
+  const [j,a,r,e,profile,loler]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle(),supabase.from("examinations").select("asset_id,next_due,examined_at").ilike("examination_type","%LOLER%").order("examined_at",{ascending:false})]);
   if(!active)return;
   setCanDeleteTestJobs(user.user.id==="2807b17d-6507-4808-9909-15e11e44637a"&&profile.data?.role==="admin"&&profile.data?.active===true);
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
+  if(!loler.error){const dates:Record<string,string>={};for(const exam of loler.data||[]){if(exam.asset_id&&exam.next_due&&!dates[exam.asset_id])dates[exam.asset_id]=String(exam.next_due).slice(0,10);}setAssetLolerDue(dates);}
  })();return()=>{active=false};},[supabase,refresh]);
  useEffect(()=>{const update=()=>setRefresh(n=>n+1);const channel=supabase.channel("mechanic-job-inbox").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},update).subscribe();window.addEventListener("focus",update);const timer=window.setInterval(update,30000);return()=>{window.clearInterval(timer);window.removeEventListener("focus",update);void supabase.removeChannel(channel);};},[supabase]);
  const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
@@ -421,7 +423,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
  const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
  const mechanicActive=(job:any)=>["Assigned","In progress","Returned for correction"].includes(job.status);
  const mechanicVisible=orderedJobs.filter(job=>mechanicFilter==="active"?mechanicActive(job):mechanicFilter==="waiting"?job.status==="Awaiting office approval":!mechanicActive(job)&&job.status!=="Awaiting office approval");
- const officeVisible=orderedJobs.filter(job=>officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
+ const officeVisible=orderedJobs.filter(job=>activeOnly?["New","Assigned","In progress","Returned for correction","Awaiting office approval"].includes(job.status):officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
@@ -443,7 +445,7 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <div className="workshop-pre-use-job-number"><span>Job card number (allocated automatically)</span><strong>{job.job_card_number||"Pending allocation"}</strong><small>Asset: {assetName(job.asset_id)}</small></div>
    <p className="workshop-pre-use-warning">JT UTILITIES PRE-USE INSPECTION SHEET · Before equipment returns to work. Complete each CHKD / N/A / DEFECT box and add comments or work done. Any defect must be described. A failed inspection can be sent to the office but it cannot be approved as safe to use.</p>
    <div className="workshop-pre-use-sheet-meta">
-    <label>Statutory inspection expiry date (if applicable)<input value={checklist["Statutory inspection expiry date"]||""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))} placeholder="DD-MM-YYYY or N/A"/></label>
+    <label>Next LOLER inspection due (where recorded)<input type="date" value={/^\d{4}-\d{2}-\d{2}$/.test(checklist["Statutory inspection expiry date"]||"")?checklist["Statutory inspection expiry date"]:""} onChange={e=>setChecklist(c=>({...c,"Statutory inspection expiry date":e.target.value}))}/><small>Pre-filled from the asset LOLER register where available. Check the current certificate before returning equipment to use.</small></label>
    </div>
    <p role="status" className="workshop-pre-use-progress">{completed} of {PRE_USE_ITEMS.length} checks marked · {PRE_USE_ITEMS.filter(k=>checklist[k]==="Defect").length} defect(s)</p>
    {PRE_USE_SECTIONS.map(group=><section className="workshop-pre-use-section" key={group.name}>
@@ -502,7 +504,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
   setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
   setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
   setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
-  setChecklist(job.completion_checklist||{});setLolerFields(job.completion_checklist||{});
+  const saved=job.completion_checklist||{};
+  setChecklist({...((preUseIsFullSheet(job)&&assetLolerDue[job.asset_id]&&!String(saved["Statutory inspection expiry date"]||"").trim())?{"Statutory inspection expiry date":assetLolerDue[job.asset_id]}:{}),...saved});setLolerFields(saved);
  };
  async function saveEngineerDraft(job:any){
   if(!Number.isFinite(Number(hours))||Number(hours)<0){setNotice("Enter a valid number of hours before saving.");return;}
@@ -622,38 +625,8 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    <p><strong>{jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path).length} older approved job card(s)</strong> need a separate JT Asset Job Card PDF. Original documents and statutory LOLER certificates stay untouched.</p>
    <button type="button" className="secondary" disabled={busy} onClick={()=>void fileMissingApprovedJobCards()}>{busy?"Filing documents…":"File missing JT job cards"}</button>
   </div>}
-  {role==="engineer"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="My assigned workshop jobs">
-   <div className="mechanic-inbox-tabs" role="group" aria-label="Job status">
-    <button type="button" className={mechanicFilter==="active"?"selected":""} onClick={()=>{setMechanicFilter("active");setSelected("");}}>To do ({jobs.filter(mechanicActive).length})</button>
-    <button type="button" className={mechanicFilter==="waiting"?"selected":""} onClick={()=>{setMechanicFilter("waiting");setSelected("");}}>With office ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
-    <button type="button" className={mechanicFilter==="done"?"selected":""} onClick={()=>{setMechanicFilter("done");setSelected("");}}>Done</button>
-   </div>
-   {mechanicVisible.length===0?<p className="muted">{mechanicFilter==="active"?"No outstanding assigned jobs.":mechanicFilter==="waiting"?"No jobs awaiting office approval.":"No completed jobs yet."}</p>:mechanicVisible.map(j=><article className="workshop-mobile-job" key={j.id}>
-    <div className="workshop-mobile-job-top"><span className={"tag "+(j.status==="Returned for correction"?"amber":"blue")}>{j.status==="Returned for correction"?"Correction requested":j.status==="Awaiting office approval"?"Sent to office":j.status}</span><span className="tag">{j.priority||"Normal"}</span></div>
-    <h4>{jobHeading(j)}</h4><p className="workshop-mobile-asset">{j.title}</p>
-    <p className="muted">{j.job_type||"General repair"}{j.certificate_number?" · Certificate "+j.certificate_number:""}</p>
-    <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":j.job_card_pdf_path?"View signed PDF":"View job"}</button>
-   </article>)}
-  </div>}
-  {role==="office"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="Office workshop job inbox">
-   <div className="mechanic-inbox-tabs" role="group" aria-label="Office job status">
-    <button type="button" className={officeFilter==="approval"?"selected":""} onClick={()=>{setOfficeFilter("approval");setSelected("");}}>Sign off ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
-    <button type="button" className={officeFilter==="active"?"selected":""} onClick={()=>{setOfficeFilter("active");setSelected("");}}>Open jobs</button>
-    <button type="button" className={officeFilter==="history"?"selected":""} onClick={()=>{setOfficeFilter("history");setSelected("");}}>History</button>
-   </div>
-   {officeVisible.length===0?<p className="muted">{officeFilter==="approval"?"No jobs awaiting your approval.":officeFilter==="active"?"No open workshop jobs.":"No previous workshop records."}</p>:officeVisible.map(job=><article className="workshop-mobile-job" key={job.id}>
-    <div className="workshop-mobile-job-top"><span className="tag blue">{job.status}</span><span className="tag">{job.priority||"Normal"}</span></div>
-    <h4>{jobHeading(job)}</h4><p className="workshop-mobile-asset">{job.title}</p>
-    <p className="muted">{job.job_type||"Workshop job"}</p>
-    <button type="button" className={job.status==="Awaiting office approval"?"primary":"secondary"} onClick={()=>openMechanicJob(job)}>{job.status==="Awaiting office approval"?"Review & sign":"View job"}</button>
-    {mayDeleteTestJob(job)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(job)}><X size={15}/> Delete this unsigned test job</button>}
-   </article>)}
-  </div>}
-  <div className={"table-wrap workshop-desktop-jobs"+(role==="engineer"?" workshop-mechanic-hide-table":"")}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
-   {(role==="engineer"?mechanicVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button>{mayDeleteTestJob(j)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(j)}><X size={14}/> Delete</button>}</td></tr></Fragment>)}
-  </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
-  {(role==="office"||role==="engineer")&&<><div className="workshop-mobile-add"><button type="button" className="primary" onClick={()=>{setShowCreateJob(v=>!v);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{showCreateJob?"Close new job":role==="engineer"?"New Ad Hoc Job":"Add job card"}</button></div><div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
-   <h3>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3>
+  {(role==="office"||role==="engineer")&&<><div className="workshop-new-job-toolbar" style={{display:"flex",justifyContent:"flex-end",margin:"14px 0"}}><button type="button" className="primary" onClick={()=>{setShowCreateJob(true);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{role==="engineer"?"New Ad Hoc Job":"Add New Job Card"}</button></div>{showCreateJob&&<div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
+   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}><h3 style={{margin:0}}>{role==="engineer"?"New Ad Hoc Job Card":"Raise and assign a job card"}</h3><button type="button" className="secondary" onClick={()=>{setShowCreateJob(false);setNotice("");}}>Cancel — back to jobs</button></div>
    <div className="workshop-job-number-notice"><FileText size={18}/><span><strong>JT job-card number:</strong> Automatically allocated when you create the card. It then appears in Workshop and the selected Asset Folder.</span></div>
    {role==="engineer"&&<p className="muted" style={{margin:"0 0 5px"}}>Choose the plant or vehicle, describe the unexpected work and create your own job card. It will appear in My Job Cards and go to the office for approval when you sign it off.</p>}
    <div className="workshop-asset-vehicle-pickers">
@@ -677,7 +650,39 @@ function WorkshopJobs({supabase}:{supabase:SupabaseClient}){
    {role==="office"&&<label>Assign mechanic / engineer<select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Unassigned — allocate later</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select></label>}
    {notice&&<p role="alert" style={{padding:"10px 12px",background:"#fff4e5",border:"1px solid #e4b66d",borderRadius:6,color:"#7c2d12",fontWeight:600}}>{notice}</p>}
    <button className="primary" disabled={busy} onClick={()=>{if(!asset||title.trim().length<3||instructions.trim().length<3){setNotice("Before creating the job card, select an asset, enter a job title (at least 3 characters), and enter work instructions (at least 3 characters).");return;}void perform(async()=>{const r=await supabase.rpc(role==="engineer"?"create_engineer_unplanned_job":"create_workshop_job_typed",{p_asset:asset,p_title:title,p_instructions:instructions,p_priority:priority,p_job_type:jobType,p_details:(jobType==="LOLER thorough examination"||jobType==="LOLER chains & accessories")?{...assetLolerDefaults(asset,jobType),...(jobType==="LOLER thorough examination"?plantLolerDefaults:{}),...jobDetails}:jobType==="Pre-use / return-to-work check"?{"Inspection sheet version":PRE_USE_SHEET_VERSION,"Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobType==="General repair"?{"Date of defect":new Date().toISOString().slice(0,10),Location:assets.find(a=>a.id===asset)?.location||"","Serial number":assets.find(a=>a.id===asset)?.serial_number||"",Description:assets.find(a=>a.id===asset)?.description||"","Asset Location":assets.find(a=>a.id===asset)?.location||"",...jobDetails}:jobDetails,...(role==="office"?{p_engineer:engineer||null}:{})});if(!r.error){setTitle("");setInstructions("");setJobDetails({});setAsset("");setShowCreateJob(false);if(role==="engineer"){setMechanicFilter("active");if(r.data)setSelected(String(r.data));}}return r;},role==="engineer"?"Ad hoc job card created and assigned to you. Open it to record your work.":"Job card created — certificate reference reserved for LOLER jobs");}}>{role==="engineer"?"Create my Ad Hoc Job":"Create job card"}</button>
-  </div></>}
+  </div>}</>}
+  {!showCreateJob&&<>
+  {role==="engineer"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="My assigned workshop jobs">
+   <div className="mechanic-inbox-tabs" role="group" aria-label="Job status">
+    <button type="button" className={mechanicFilter==="active"?"selected":""} onClick={()=>{setMechanicFilter("active");setSelected("");}}>To do ({jobs.filter(mechanicActive).length})</button>
+    <button type="button" className={mechanicFilter==="waiting"?"selected":""} onClick={()=>{setMechanicFilter("waiting");setSelected("");}}>With office ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
+    <button type="button" className={mechanicFilter==="done"?"selected":""} onClick={()=>{setMechanicFilter("done");setSelected("");}}>Done</button>
+   </div>
+   {mechanicVisible.length===0?<p className="muted">{mechanicFilter==="active"?"No outstanding assigned jobs.":mechanicFilter==="waiting"?"No jobs awaiting office approval.":"No completed jobs yet."}</p>:mechanicVisible.map(j=><article className="workshop-mobile-job" key={j.id}>
+    <div className="workshop-mobile-job-top"><span className={"tag "+(j.status==="Returned for correction"?"amber":"blue")}>{j.status==="Returned for correction"?"Correction requested":j.status==="Awaiting office approval"?"Sent to office":j.status}</span><span className="tag">{j.priority||"Normal"}</span></div>
+    <h4>{jobHeading(j)}</h4><p className="workshop-mobile-asset">{j.title}</p>
+    <p className="muted">{j.job_type||"General repair"}{j.certificate_number?" · Certificate "+j.certificate_number:""}</p>
+    <button type="button" className={mechanicActive(j)?"primary":"secondary"} onClick={()=>openMechanicJob(j)}>{mechanicActive(j)?"Open & complete job":j.job_card_pdf_path?"View signed PDF":"View job"}</button>
+   </article>)}
+  </div>}
+  {role==="office"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="Office workshop job inbox">
+   {!activeOnly&&<div className="mechanic-inbox-tabs" role="group" aria-label="Office job status">
+    <button type="button" className={officeFilter==="approval"?"selected":""} onClick={()=>{setOfficeFilter("approval");setSelected("");}}>Sign off ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
+    <button type="button" className={officeFilter==="active"?"selected":""} onClick={()=>{setOfficeFilter("active");setSelected("");}}>Open jobs</button>
+    <button type="button" className={officeFilter==="history"?"selected":""} onClick={()=>{setOfficeFilter("history");setSelected("");}}>History</button>
+   </div>}
+   {officeVisible.length===0?<p className="muted">{activeOnly?"No current open workshop job cards.":officeFilter==="approval"?"No jobs awaiting your approval.":officeFilter==="active"?"No open workshop jobs.":"No previous workshop records."}</p>:officeVisible.map(job=><article className="workshop-mobile-job" key={job.id}>
+    <div className="workshop-mobile-job-top"><span className="tag blue">{job.status}</span><span className="tag">{job.priority||"Normal"}</span></div>
+    <h4>{jobHeading(job)}</h4><p className="workshop-mobile-asset">{job.title}</p>
+    <p className="muted">{job.job_type||"Workshop job"}</p>
+    <button type="button" className={job.status==="Awaiting office approval"?"primary":"secondary"} onClick={()=>openMechanicJob(job)}>{job.status==="Awaiting office approval"?"Review & sign":"View job"}</button>
+    {mayDeleteTestJob(job)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(job)}><X size={15}/> Delete this unsigned test job</button>}
+   </article>)}
+  </div>}
+  <div className={"table-wrap workshop-desktop-jobs"+(role==="engineer"?" workshop-mechanic-hide-table":"")}><table><thead><tr><th>Asset</th><th>Job</th><th>Priority</th><th>Status</th><th>Action</th></tr></thead><tbody>
+   {(role==="engineer"?mechanicVisible:activeOnly?officeVisible:orderedJobs).map((j,index,displayJobs)=><Fragment key={j.id}>{(index===0||jobStage(displayJobs[index-1].status)!==jobStage(j.status))&&<tr><td colSpan={5} style={{fontWeight:700,background:"#eaf0f6"}}>{stageNames[jobStage(j.status)]} · {jobs.filter(x=>jobStage(x.status)===jobStage(j.status)).length}</td></tr>}<tr><td>{assetName(j.asset_id)}</td><td><b>{jobHeading(j)}</b><small>{j.title} · {j.job_type||"General repair"}{j.certificate_number?" · LOLER certificate "+j.certificate_number:""}</small></td><td>{j.priority}</td><td>{j.status}</td><td><button className="secondary" onClick={()=>openMechanicJob(j)}>Open job</button>{mayDeleteTestJob(j)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteTestJob(j)}><X size={14}/> Delete</button>}</td></tr></Fragment>)}
+  </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
+  </>}
   {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
    {role==="office"&&<button type="button" className="secondary workshop-office-mobile-back" onClick={()=>{setSelected("");setNotice("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to office jobs</button>}
    {role==="engineer"&&<div className="mechanic-mobile-completion">
@@ -808,6 +813,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
   const [showNew,setShowNew]=useState(false);
   const [mobileNav,setMobileNav]=useState(false);
   const [assetFilter,setAssetFilter]=useState("All");
+  const [workshopDashboardOnly,setWorkshopDashboardOnly]=useState(false);
   const [categoryFilter,setCategoryFilter]=useState("All");
   const [notice,setNotice]=useState("");
   const [notificationsOpen,setNotificationsOpen]=useState(false);
@@ -1062,14 +1068,14 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
     {!isOperator&&<aside className={`sidebar ${mobileNav?"open":""}`}>
       <div className="brand"><img className="brand-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd logo" /><div><b>JT UTILITIES LTD</b><small>PLANTTRACK</small></div><button className="close-nav" onClick={()=>setMobileNav(false)}><X size={18}/></button></div>
       <div className="nav-caption">WORKSPACE</div>
-      {nav.filter(([label])=>label!=="Plant checks"||isAdmin).map(([label,Icon])=>label==="Plant register"?<div key={label}><button onClick={()=>{setPage(label);setCategoryFilter("All");setAssetFilter("All");setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>{page==="Plant register"&&<div style={{paddingLeft:28,display:"grid",gap:3}}>{[["All assets","All"],["Vehicles","Vehicle"],["HGVs","HGV"],["Plant & Machinery","Plant"],["Lifting Equipment","Lifting equipment"],["Trailers","Trailer"],["Agricultural Equipment","Agricultural equipment"],["CAT & Genny","CAT & Genny calibration equipment"]].map(([label,value])=><button key={value} className={`nav-item ${categoryFilter===value?"active":""}`} style={{fontSize:13,padding:"7px 9px"}} onClick={()=>{setCategoryFilter(value);setAssetFilter("All");setPage("Plant register");setMobileNav(false)}}>{label}</button>)}</div>}</div>:<button key={label} onClick={()=>{setPage(label);setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>)}
+      {nav.filter(([label])=>label!=="Plant checks"||isAdmin).map(([label,Icon])=>label==="Plant register"?<div key={label}><button onClick={()=>{setPage(label);setCategoryFilter("All");setAssetFilter("All");setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>{page==="Plant register"&&<div style={{paddingLeft:28,display:"grid",gap:3}}>{[["All assets","All"],["Vehicles","Vehicle"],["HGVs","HGV"],["Plant & Machinery","Plant"],["Lifting Equipment","Lifting equipment"],["Trailers","Trailer"],["Agricultural Equipment","Agricultural equipment"],["CAT & Genny","CAT & Genny calibration equipment"]].map(([label,value])=><button key={value} className={`nav-item ${categoryFilter===value?"active":""}`} style={{fontSize:13,padding:"7px 9px"}} onClick={()=>{setCategoryFilter(value);setAssetFilter("All");setPage("Plant register");setMobileNav(false)}}>{label}</button>)}</div>}</div>:<button key={label} onClick={()=>{setWorkshopDashboardOnly(false);setPage(label);setMobileNav(false)}} className={`nav-item ${page===label?"active":""}`}><Icon size={18}/><span>{label}</span></button>)}
       <div className="sidebar-bottom"><div className="online-dot"/> Online workspace <small>PlantTrack</small></div>
     </aside>}
     {!isOperator&&mobileNav&&<div className="scrim" onClick={()=>setMobileNav(false)}/>}
     <main className="main">
       <header className="topbar">{!isOperator&&<button className="mobile-menu" onClick={()=>setMobileNav(true)}><Menu/></button>}{isOperator&&<img src="/jt-utilities-logo.jpg" alt="JT Utilities" style={{height:38,width:78,objectFit:"contain",background:"#fff",padding:3,borderRadius:3,marginRight:12}}/>}<div className="crumb">JT Utilities <span>/</span> {title}</div><div className="top-actions">{!isOperator&&<div style={{position:"relative"}}><button className="icon-btn" type="button" aria-label="Compliance notifications" aria-expanded={notificationsOpen} onClick={()=>{setNotificationsOpen(value=>!value);if(!notificationsOpen)void loadNotifications();}}><Bell size={18}/>{notifications.length>0&&<span style={{position:"absolute",top:-5,right:-6,minWidth:18,height:18,padding:"1px 4px",background:"#b91c1c",color:"#fff",borderRadius:12,fontSize:10,fontWeight:700}}>{notifications.length>99?"99+":notifications.length}</span>}</button>{notificationsOpen&&<div role="region" aria-label="Compliance notifications" style={{position:"absolute",right:0,top:42,width:"min(355px,90vw)",maxHeight:420,overflowY:"auto",zIndex:50,background:"#fff",color:"#17212b",border:"1px solid #cbd5e1",borderRadius:10,boxShadow:"0 12px 28px rgba(0,0,0,.18)",padding:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:9}}><strong>Compliance notifications</strong><div style={{display:"flex",gap:5}}><button className="secondary" type="button" disabled={notificationsLoading||clearingNotifications} onClick={()=>void loadNotifications()}>Refresh</button><button className="secondary" type="button" disabled={notificationsLoading||clearingNotifications||notifications.length===0} onClick={()=>void clearNotifications()}>{clearingNotifications?"Clearing…":"Clear all"}</button></div></div>{notificationsError&&<p role="alert">{notificationsError}</p>}{notificationsLoading?<p>Checking live records…</p>:notifications.length===0?<p>No new notifications. Existing MOT, LOLER and defect records are unchanged.</p>:notifications.map(item=><button type="button" key={item.key} onClick={()=>{setPage(item.page);setNotificationsOpen(false);if(item.key.startsWith("missing-plant-check-"))window.setTimeout(()=>document.getElementById("daily-inspection-dashboard")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}} style={{width:"100%",textAlign:"left",display:"block",background:item.priority<2?"#fff1f2":"#f8fafc",color:"#17212b",border:"1px solid #e2e8f0",borderRadius:7,padding:10,marginBottom:7,cursor:"pointer"}}><strong style={{display:"block",fontSize:12}}>{item.label}</strong><span style={{display:"block",fontSize:11,marginTop:3}}>{item.details}</span></button>)}</div>}</div>}<div className="avatar">JT</div></div></header>
       <div className="content">
-        <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · {isOperator?"OPERATOR INSPECTIONS":"PLANT MANAGEMENT"}</div><h1>{title}</h1><p>{isOperator?"Complete a pre-start inspection before using your machine.":"PlantTrack management workspace"}</p></div>{!isOperator&&<button className="primary" onClick={()=>{setPage("Workshop job cards");setNotice("Complete the job details below, then click Create job card.");}}><Plus size={17}/> New job card</button>}</div>
+        <div className="page-head"><div><div className="eyebrow">JT UTILITIES LTD · {isOperator?"OPERATOR INSPECTIONS":"PLANT MANAGEMENT"}</div><h1>{title}</h1><p>{isOperator?"Complete a pre-start inspection before using your machine.":"PlantTrack management workspace"}</p></div>{!isOperator&&<button className="primary" onClick={()=>{setWorkshopDashboardOnly(false);setPage("Workshop job cards");setNotice("Complete the job details below, then click Create job card.");}}><Plus size={17}/> New job card</button>}</div>
         {notice&&<div className="notice">{notice}</div>}
         {page==="Dashboard"&&<>
           <div className="welcome"><div><span className="eyebrow light">JT UTILITIES FLEET</span><h2>Your plant, ready for the work ahead.</h2><p>A live overview of the equipment your teams rely on every day.</p></div><div className="welcome-icon"><Truck size={58}/></div></div>
@@ -1081,7 +1087,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
               ["In workshop",assetsLoading?"…":String(assets.filter(a=>a.status==="In workshop").length),"Being worked on",Wrench],
               ["Out of service",assetsLoading?"…":String(assets.filter(a=>a.status==="Out of service").length),"Plant and machinery",AlertTriangle],
               ["Vehicle VOR",assetsLoading?"…":String(assets.filter(a=>a.status==="VOR").length),"HGVs, vehicles and trailers",AlertTriangle]
-            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{setAssetFilter(label==="Total assets"?"All":label==="Vehicle VOR"?"VOR":label);setCategoryFilter(label==="Vehicle VOR"?"Vehicle VOR":label==="Out of service"?"Plant Out of Service":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
+            ].map(([label,value,sub,Icon]:any)=><button type="button" className="stat" key={label} style={{textAlign:"left",cursor:"pointer"}} onClick={()=>{if(label==="In workshop"){setWorkshopDashboardOnly(true);setPage("Workshop job cards");return;}setWorkshopDashboardOnly(false);setAssetFilter(label==="Total assets"?"All":label==="Vehicle VOR"?"VOR":label);setCategoryFilter(label==="Vehicle VOR"?"Vehicle VOR":label==="Out of service"?"Plant Out of Service":"All");setPage("Plant register");}}><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><small>{sub} · Click to view</small></button>)}
           </div>
           {assetsError&&<p className="auth-error">{assetsError}</p>}
           {isAdmin&&<div className="stats" style={{marginTop:16}}>
@@ -1104,7 +1110,7 @@ function Dashboard({supabase,isAdmin,role}:{supabase:SupabaseClient;isAdmin:bool
         {page==="Plant register"&&<AssetManager supabase={supabase} isAdmin={isAdmin} categoryFilter={categoryFilter} statusFilter={assetFilter} onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Vehicle VOR management"&&<AssetManager supabase={supabase} isAdmin={isAdmin} vorOnly onOpenPmi={()=>{setPage("Workshop job cards");window.setTimeout(()=>document.getElementById("workshop-pmi-signoff")?.scrollIntoView({behavior:"smooth",block:"start"}),120);}}/>}
         {page==="Projects"&&<Projects supabase={supabase} isAdmin={isAdmin}/>}
-        {page==="Workshop job cards"&&<><WorkshopJobs supabase={supabase}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
+        {page==="Workshop job cards"&&<>{workshopDashboardOnly&&<div className="notice"><strong>Current workshop job cards</strong> — open and awaiting sign-off only. Completed and historical jobs are excluded. <button type="button" className="secondary" onClick={()=>setWorkshopDashboardOnly(false)}>Show all workshop jobs</button></div>}<WorkshopJobs key={workshopDashboardOnly?"current":"all"} supabase={supabase} activeOnly={workshopDashboardOnly}/><div id="workshop-pmi-signoff" className="workshop-office-pmi"><PmiDashboard supabase={supabase} showOverview={false} showSignoff onOpenCalendar={()=>setPage("Calander")}/></div></>}
         {page==="Calander"&&<Calendar supabase={supabase}/>}
         {page==="MOT Tracker"&&<MotChecker supabase={supabase}/>}
         {page==="Plant checks"&&(isOperator||isAdmin)&&<DailyPlantInspections supabase={supabase}/>}
