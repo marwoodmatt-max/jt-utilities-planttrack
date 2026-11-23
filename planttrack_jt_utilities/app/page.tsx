@@ -404,7 +404,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
- const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">(activeOnly?"active":"approval");
+ const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">("active");
  const [showSpecialistFields,setShowSpecialistFields]=useState(false);
  const [editCard,setEditCard]=useState(false),[editTitle,setEditTitle]=useState(""),[editInstructions,setEditInstructions]=useState(""),[editDetails,setEditDetails]=useState<Record<string,string>>({});
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
@@ -420,7 +420,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  useEffect(()=>{const update=()=>setRefresh(n=>n+1);const channel=supabase.channel("mechanic-job-inbox").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},update).subscribe();window.addEventListener("focus",update);const timer=window.setInterval(update,30000);return()=>{window.clearInterval(timer);window.removeEventListener("focus",update);void supabase.removeChannel(channel);};},[supabase]);
  const jobStage=(status:string)=>["New","Assigned","In progress","Returned for correction"].includes(status)?0:status==="Awaiting office approval"?1:2;
  const orderedJobs=[...jobs].sort((a,b)=>jobStage(a.status)-jobStage(b.status)||String(b.created_at||"").localeCompare(String(a.created_at||"")));
- const stageNames=["Assigned / awaiting work","Waiting for sign-off","Completed / done"];
+ const stageNames=["Work needing completion","Waiting for sign-off","Completed / history"];
  const mechanicActive=(job:any)=>["Assigned","In progress","Returned for correction"].includes(job.status);
  const mechanicVisible=orderedJobs.filter(job=>mechanicFilter==="active"?mechanicActive(job):mechanicFilter==="waiting"?job.status==="Awaiting office approval":!mechanicActive(job)&&job.status!=="Awaiting office approval");
  const officeVisible=orderedJobs.filter(job=>activeOnly?["New","Assigned","In progress","Returned for correction","Awaiting office approval"].includes(job.status):officeFilter==="approval"?job.status==="Awaiting office approval":officeFilter==="active"?["New","Assigned","In progress","Returned for correction"].includes(job.status):["Approved","Dismissed"].includes(job.status));
@@ -620,7 +620,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  return <section className="panel workshop-job-panel">
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
-  <h3 className="workshop-jobs-title">{role==="office"?"Office approval inbox":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>j.status==="Awaiting office approval").length+" awaiting review"}</h3>
+  <h3 className="workshop-jobs-title">{role==="office"?"Work needing completion":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>["New","Assigned","In progress","Returned for correction"].includes(j.status)).length+" open jobs"}</h3>
   {role==="office"&&jobs.some(j=>j.status==="Approved"&&!j.job_card_pdf_path)&&<div className="workshop-backfill">
    <p><strong>{jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path).length} older approved job card(s)</strong> need a separate JT Asset Job Card PDF. Original documents and statutory LOLER certificates stay untouched.</p>
    <button type="button" className="secondary" disabled={busy} onClick={()=>void fileMissingApprovedJobCards()}>{busy?"Filing documents…":"File missing JT job cards"}</button>
@@ -669,7 +669,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   {role==="office"&&<div className={"workshop-mobile-jobs"+(selected?" mechanic-inbox-hidden":"")} aria-label="Office workshop job inbox">
    {!activeOnly&&<div className="mechanic-inbox-tabs" role="group" aria-label="Office job status">
     <button type="button" className={officeFilter==="approval"?"selected":""} onClick={()=>{setOfficeFilter("approval");setSelected("");}}>Sign off ({jobs.filter(j=>j.status==="Awaiting office approval").length})</button>
-    <button type="button" className={officeFilter==="active"?"selected":""} onClick={()=>{setOfficeFilter("active");setSelected("");}}>Open jobs</button>
+    <button type="button" className={officeFilter==="active"?"selected":""} onClick={()=>{setOfficeFilter("active");setSelected("");}}>Work needing completion ({jobs.filter(j=>["New","Assigned","In progress","Returned for correction"].includes(j.status)).length})</button>
     <button type="button" className={officeFilter==="history"?"selected":""} onClick={()=>{setOfficeFilter("history");setSelected("");}}>History</button>
    </div>}
    {officeVisible.length===0?<p className="muted">{activeOnly?"No current open workshop job cards.":officeFilter==="approval"?"No jobs awaiting your approval.":officeFilter==="active"?"No open workshop jobs.":"No previous workshop records."}</p>:officeVisible.map(job=><article className="workshop-mobile-job" key={job.id}>
