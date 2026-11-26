@@ -41,14 +41,15 @@ export default function WorkshopJobPhotos({supabase,jobId,jobNumber,jobType,role
  if(isLoler)return null;
  async function add(files:FileList|null){
   if(!files||!canAdd||busy)return;
-  if(photos.length+files.length>8){setMessage("Maximum 8 photos per job.");return;}
+  const selectedFiles=Array.from(files);
+  if(photos.length+selectedFiles.length>8){setMessage("Maximum 8 photos per job.");return;}
   setBusy(true);setMessage("");
   const added:Photo[]=[];
   const links:Record<string,string>={};
   try{
    const {data:user,error:userError}=await supabase.auth.getUser();
    if(userError||!user.user)throw userError||new Error("Sign in required");
-   for(const file of Array.from(files)){
+   for(const file of selectedFiles){
     if(!["image/jpeg","image/png"].includes(file.type))throw new Error("Use JPEG or PNG pictures.");
     if(file.size>5*1024*1024)throw new Error("Each image must be smaller than 5 MB.");
     const path=jobId+"/"+crypto.randomUUID()+(file.type==="image/png"?".png":".jpg");
