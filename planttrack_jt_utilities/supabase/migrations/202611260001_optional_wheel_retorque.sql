@@ -39,57 +39,9 @@ begin
                where x.key like 'Wheel: %' and x.value='Yes')
  into has_position;
  if not has_position then raise exception 'Select at least one wheel position';end if;
- if (c->>'Refit date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} or
-    (c->>'2nd re-torque date') !~ '^\\d{4}-\\d{2}-\\d{2}$' or
-    (c->>'3rd re-torque date') !~ '^\\d{4}-\\d{2}-\\d{2}$' then
-  raise exception 'Enter valid ISO dates for all three wheel checks';
- end if;
- if (c->>'2nd re-torque date') < (c->>'Refit date') or
-    (c->>'3rd re-torque date') < (c->>'2nd re-torque date') then
-  raise exception 'Wheel re-torque check dates are out of order';
- end if;
- return new;
-end
-$function$;
-
-drop trigger if exists validate_wheel_retorque_on_submit on public.workshop_job_cards;
-create trigger validate_wheel_retorque_on_submit
-before insert or update of status,completion_checklist on public.workshop_job_cards
-for each row execute function public.validate_wheel_retorque_completion();
- or
-    (c->>'2nd re-torque date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} or
-    (c->>'3rd re-torque date') !~ '^\\d{4}-\\d{2}-\\d{2}$' then
-  raise exception 'Enter valid ISO dates for all three wheel checks';
- end if;
- if (c->>'2nd re-torque date') < (c->>'Refit date') or
-    (c->>'3rd re-torque date') < (c->>'2nd re-torque date') then
-  raise exception 'Wheel re-torque check dates are out of order';
- end if;
- return new;
-end
-$function$;
-
-drop trigger if exists validate_wheel_retorque_on_submit on public.workshop_job_cards;
-create trigger validate_wheel_retorque_on_submit
-before insert or update of status,completion_checklist on public.workshop_job_cards
-for each row execute function public.validate_wheel_retorque_completion();
- or
-    (c->>'3rd re-torque date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2} then
-  raise exception 'Enter valid ISO dates for all three wheel checks';
- end if;
- if (c->>'2nd re-torque date') < (c->>'Refit date') or
-    (c->>'3rd re-torque date') < (c->>'2nd re-torque date') then
-  raise exception 'Wheel re-torque check dates are out of order';
- end if;
- return new;
-end
-$function$;
-
-drop trigger if exists validate_wheel_retorque_on_submit on public.workshop_job_cards;
-create trigger validate_wheel_retorque_on_submit
-before insert or update of status,completion_checklist on public.workshop_job_cards
-for each row execute function public.validate_wheel_retorque_completion();
- then
+ if (c->>'Refit date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or
+    (c->>'2nd re-torque date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or
+    (c->>'3rd re-torque date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then
   raise exception 'Enter valid ISO dates for all three wheel checks';
  end if;
  if (c->>'2nd re-torque date') < (c->>'Refit date') or
