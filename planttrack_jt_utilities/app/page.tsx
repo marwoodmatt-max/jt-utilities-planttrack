@@ -620,7 +620,15 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   }catch(e){setNotice("Could not delete "+number+": "+(e instanceof Error?e.message:String(e)));}
   finally{setBusy(false);}
  }
- async function perform(fn:()=>PromiseLike<{error:any}>,success:string){setBusy(true);setNotice("");try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}catch(e){setNotice("Job action failed: "+(e instanceof Error?e.message:String(e)));}finally{setBusy(false);}}
+ async function perform(fn:()=>PromiseLike<{error:any}>,success:string){
+  setBusy(true);setNotice("");
+  try{const r=await fn();if(r.error)throw r.error;setNotice(success);setRefresh(x=>x+1);}
+  catch(e){
+   const error=e as {message?:string;details?:string;hint?:string;code?:string}|null;
+   const detail=error?.message||error?.details||error?.hint||(e instanceof Error?e.message:typeof e==="string"?e:JSON.stringify(e));
+   setNotice("Job action failed: "+(detail||"Unknown error")+(error?.code?" ("+error.code+")":""));
+  }finally{setBusy(false);}
+ }
  return <section className="panel workshop-job-panel">
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
