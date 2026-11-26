@@ -625,8 +625,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   <div className="panel-head"><div className="workshop-heading"><img className="workshop-header-logo" src="/jt-utilities-logo.jpg" alt="JT Utilities logo"/><div><h3>Workshop job cards · Engineer and office sign-off</h3><p>Office assigns work → engineer signs completion → office inbox reviews and signs off → asset history</p></div></div><button className="secondary" onClick={()=>setRefresh(x=>x+1)}>Refresh</button></div>
   {notice&&<p role="status">{notice}</p>}
   <h3 className="workshop-jobs-title">{role==="office"?"Work needing completion":"My assigned jobs"} · {role==="engineer"?jobs.filter(j=>["Assigned","In progress","Returned for correction"].includes(j.status)).length+" active":jobs.filter(j=>["New","Assigned","In progress","Returned for correction"].includes(j.status)).length+" open jobs"}</h3>
-  {role==="office"&&jobs.some(j=>j.status==="Approved"&&!j.job_card_pdf_path)&&<div className="workshop-backfill">
-   <p><strong>{jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path).length} older approved job card(s)</strong> need a separate JT Asset Job Card PDF. Original documents and statutory LOLER certificates stay untouched.</p>
+  {role==="office"&&jobs.some(j=>j.status==="Approved"&&!j.job_card_pdf_path&&j.job_type!==WHEEL_JOB_TYPE)&&<div className="workshop-backfill">
+   <p><strong>{jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path&&j.job_type!==WHEEL_JOB_TYPE).length} older approved job card(s)</strong> need a separate JT Asset Job Card PDF. Original documents and statutory LOLER certificates stay untouched.</p>
    <button type="button" className="secondary" disabled={busy} onClick={()=>void fileMissingApprovedJobCards()}>{busy?"Filing documents…":"File missing JT job cards"}</button>
   </div>}
   {(role==="office"||role==="engineer")&&<><div className="workshop-new-job-toolbar" style={{display:"flex",justifyContent:"flex-end",margin:"14px 0"}}><button type="button" className="primary" onClick={()=>{setShowCreateJob(true);setSelected("");setNotice("");setJobType(role==="engineer"?"Other / unexpected work":"General repair");setJobDetails({});}} aria-expanded={showCreateJob} aria-controls="workshop-new-job-form"><Plus size={18}/>{role==="engineer"?"New Ad Hoc Job":"Add New Job Card"}</button></div>{showCreateJob&&<div id="workshop-new-job-form" className={`workshop-create-form ${showCreateJob?"mobile-open":""}`} style={{display:"grid",gap:10,marginBottom:22}}>
@@ -689,6 +689,27 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   </>}
   {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
+   {chosen.job_type!==WHEEL_JOB_TYPE&&["office","engineer"].includes(role)&&<>
+    <div style={{display:"flex",justifyContent:"flex-start",gap:9}}>
+     <button type="button" className="secondary" disabled={busy} onClick={()=>setShowWheelCreate(v=>!v)} aria-expanded={showWheelCreate}>
+      <FileText size={16}/> {showWheelCreate?"Close wheel sheet":"Add wheel removal / re-torque sheet (if required)"}
+     </button>
+    </div>
+    {showWheelCreate&&<div style={{border:"1px solid #cbd5e1",borderRadius:9,padding:15,display:"grid",gap:9}}>
+     <strong>Start a separate wheel re-torque record</strong>
+     <p className="muted" style={{margin:0}}>Linked to {chosen.job_card_number||"this workshop job"} and {assetName(chosen.asset_id)}. This creates a new, independently numbered job card. It stays open until both follow-up checks are recorded, signed by the mechanic and approved by the office. A PDF is then filed in the asset folder.</p>
+     <div style={{display:"flex",gap:9,flexWrap:"wrap"}}>
+      <button type="button" className="primary" disabled={busy} onClick={()=>void perform(async()=>{
+       const payload:any={p_asset:chosen.asset_id,p_title:"Wheel removal and re-torque",p_instructions:"Record wheels removed/refitted, initial torque and 2nd / 3rd re-torque checks.",p_priority:"Normal",p_job_type:WHEEL_JOB_TYPE,p_details:{"Related workshop job":chosen.job_card_number||"","Related workshop job ID":chosen.id,...(role==="office"?{}:{})}};
+       if(role==="office")payload.p_engineer=chosen.assigned_engineer||null;
+       const result=await supabase.rpc(role==="office"?"create_workshop_job_typed":"create_engineer_unplanned_job",payload);
+       if(!result.error){setShowWheelCreate(false);setSelected(String(result.data));setShowSpecialistFields(true);}
+       return result;
+      },"Separate wheel job created. Its number is allocated automatically; complete the follow-up checks before signing.")}>Create numbered wheel sheet</button>
+      <button type="button" className="secondary" onClick={()=>setShowWheelCreate(false)}>Cancel</button>
+     </div>
+    </div>}
+   </>}
    {role==="office"&&<button type="button" className="secondary workshop-office-mobile-back" onClick={()=>{setSelected("");setNotice("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to office jobs</button>}
    {role==="engineer"&&<div className="mechanic-mobile-completion">
     <div className="mechanic-mobile-head">
