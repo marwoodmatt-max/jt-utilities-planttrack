@@ -26,8 +26,8 @@ export const missingWheelFields = (values: Record<string,string>)=>[
 ];
 
 const white=rgb(1,1,1),ink=rgb(.11,.15,.21),navy=rgb(.13,.18,.26),grey=rgb(.93,.95,.97),red=rgb(.82,.09,.16);
-const str=(v:unknown)=>String(v??"").replace(/[^\\x20-\\x7e]/g," ").trim();
-const shownDate=(v:unknown)=>{const s=str(v);const m=s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);return m?m[3]+"-"+m[2]+"-"+m[1]:s||"Not recorded";};
+const str=(v:unknown)=>String(v??"").replace(/[^\x20-\x7e]/g," ").trim();
+const shownDate=(v:unknown)=>{const s=str(v);const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+"-"+m[2]+"-"+m[1]:s||"Not recorded";};
 function fitted(value:unknown,font:PDFFont,size:number,width:number):string{
  let s=str(value);
  while(s&&font.widthOfTextAtSize(s,size)>width)s=s.slice(0,-1);
