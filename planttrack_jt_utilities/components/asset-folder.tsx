@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowLeft, Download, FileText, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 import PlantSafetyLockouts from "./plant-safety-lockouts";
+import AssetPhoto from "./asset-photo";
 
 type Asset = { id:string; asset_code:string; description:string; category:string|null; registration:string|null };
 type JobCertificate = { id:string;certificate_number:string|null;job_card_number:string|null;job_type:string|null;status:string;approved_pdf_path:string;job_card_pdf_path:string|null;office_signed_at:string|null;pdf_filed_at:string|null;pdf_filed_by_email:string|null;pdf_filed_by:string|null };
@@ -16,8 +17,13 @@ const types = ["Vehicle documents","MOT certificate","Service record","Inspectio
 const fleetTypes = ["Vehicle documents","MOT certificate","Tachograph calibration","PMI inspection","Plating certificate","Brake test","VOR record","Service / repair record","Insurance","Other"];
 const dateLabel = (value:string) => new Date(value).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-").replace(",","");
 
-export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onEdit,onDelete,deleting}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void;onEdit:()=>void;onDelete:()=>void;deleting:boolean}) {
+export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onEdit,onDelete,deleting,onImageChanged}:{supabase:SupabaseClient;asset:Asset;canUpload:boolean;isAdmin:boolean;onBack:()=>void;onEdit:()=>void;onDelete:()=>void;deleting:boolean;onImageChanged?:()=>void}) {
   const [docs,setDocs]=useState<Doc[]>([]);
+  const [assetPhotoPath,setAssetPhotoPath]=useState<string|null>(null);
+  const [assetPhotoUrl,setAssetPhotoUrl]=useState<string|null>(null);
+  const [photoBusy,setPhotoBusy]=useState(false);
+  const [photoNotice,setPhotoNotice]=useState("");
+  const photoInputRef=useRef<HTMLInputElement>(null);
   const [pmiReports,setPmiReports]=useState<PmiReport[]>([]);
   const [dailyReports,setDailyReports]=useState<DailyReport[]>([]);
   const [jobCards,setJobCards]=useState<JobCard[]>([]);
@@ -56,8 +62,57 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
    }catch(e){setError("Could not delete test job: "+(e instanceof Error?e.message:String(e)));}
    finally{setBusy(false);}
   }
+  async function refreshPhoto(){
+    const {data,error:photoError}=await supabase.from("assets").select("asset_image_path").eq("id",asset.id).single();
+    if(photoError){setError("Could not load asset photo: "+photoError.message);return;}
+    const path=(data?.asset_image_path||null) as string|null;
+    setAssetPhotoPath(path);
+    if(path){
+      const {data:link,error:linkError}=await supabase.storage.from("asset-images").createSignedUrl(path,3600);
+      setAssetPhotoUrl(!linkError&&link?link.signedUrl:null);
+    }else setAssetPhotoUrl(null);
+  }
+  async function uploadAssetPhoto(file?:File){
+    if(!file||!isAdmin)return;
+    setError("");setPhotoNotice("");
+    const allowed:Record<string,string>={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"};
+    if(!allowed[file.type]){setError("Choose a JPEG, PNG or WebP photo.");return;}
+    if(file.size>5*1024*1024){setError("The asset photo must be smaller than 5 MB.");return;}
+    setPhotoBusy(true);
+    try{
+      const path=asset.id+"/"+crypto.randomUUID()+"."+allowed[file.type];
+      const {error:uploadError}=await supabase.storage.from("asset-images").upload(path,file,{contentType:file.type,upsert:false});
+      if(uploadError)throw uploadError;
+      const {data:changed,error:saveError}=await supabase.from("assets").update({asset_image_path:path}).eq("id",asset.id).select("id").single();
+      if(saveError||!changed){
+        await supabase.storage.from("asset-images").remove([path]);
+        throw saveError||new Error("Photo could not be linked to this asset.");
+      }
+      const oldPath=assetPhotoPath;
+      await refreshPhoto();
+      if(oldPath&&oldPath!==path)await supabase.storage.from("asset-images").remove([oldPath]);
+      setPhotoNotice("Main photo saved against "+asset.asset_code+".");
+      onImageChanged?.();
+    }catch(e){setError("Photo upload failed: "+(e instanceof Error?e.message:String(e)));}
+    finally{setPhotoBusy(false);if(photoInputRef.current)photoInputRef.current.value="";}
+  }
+  async function removeAssetPhoto(){
+    if(!isAdmin||!assetPhotoPath||!window.confirm("Remove the main photo for "+asset.asset_code+"?"))return;
+    setPhotoBusy(true);setError("");setPhotoNotice("");
+    try{
+      const oldPath=assetPhotoPath;
+      const {error:saveError}=await supabase.from("assets").update({asset_image_path:null}).eq("id",asset.id);
+      if(saveError)throw saveError;
+      setAssetPhotoPath(null);setAssetPhotoUrl(null);
+      await supabase.storage.from("asset-images").remove([oldPath]);
+      setPhotoNotice("Main photo removed. Asset details retained.");
+      onImageChanged?.();
+    }catch(e){setError("Could not remove photo: "+(e instanceof Error?e.message:String(e)));}
+    finally{setPhotoBusy(false);}
+  }
   async function load() {
     setLoading(true); setError("");
+    await refreshPhoto();
     const [daily,jobs]=await Promise.all([supabase.from("inspections").select("id,submitted_at,result,report_path,answers,comments").eq("asset_id",asset.id).eq("inspection_type","daily_plant_pre_start").order("submitted_at",{ascending:false}),supabase.from("workshop_job_cards").select("id,title,status,priority,created_at,job_card_number,instructions,job_type,engineer_signed_at,office_signed_at,approved_pdf_path,job_card_pdf_path,certificate_number").eq("asset_id",asset.id).order("created_at",{ascending:false})]);
     if(daily.error)setError("Daily inspections could not load: "+daily.error.message);else setDailyReports((daily.data||[]) as DailyReport[]);
     if(jobs.error)setError("Job cards could not load: "+jobs.error.message);else setJobCards((jobs.data||[]) as JobCard[]);
@@ -167,6 +222,22 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
     <div className="panel-head">
       <div><button className="secondary" onClick={onBack}><ArrowLeft size={15}/> Back to asset register</button> {isAdmin&&<><button className="secondary" onClick={onEdit} style={{marginLeft:8}}>Edit asset</button><button className="secondary" onClick={onDelete} disabled={deleting} style={{marginLeft:8,color:"#b91c1c"}}>{deleting?"Deleting…":"Delete asset"}</button></>}<h2 style={{marginTop:14,display:"flex",alignItems:"center",gap:9}}><FolderOpen color="#c62828"/> {asset.asset_code} – Asset folder</h2><p>{asset.description} · {asset.category||"Uncategorised"}{asset.registration?" · "+asset.registration:""}</p></div>
       <button className="secondary" onClick={()=>void load()} disabled={loading}><RefreshCw size={15}/> Refresh</button>
+    </div>
+    <div className="asset-photo-section">
+      <AssetPhoto url={assetPhotoUrl} description={asset.description} category={asset.category} assetCode={asset.asset_code} large/>
+      <div className="asset-photo-details">
+        <h3>Main asset photo</h3>
+        <p className="muted">{assetPhotoPath?"Main image saved with this asset.":"No photo uploaded yet. The register shows this asset's description and category instead."}</p>
+        {isAdmin&&<div className="asset-photo-actions">
+          <label className="secondary asset-photo-upload-label">
+            {photoBusy?"Saving photo…":assetPhotoPath?"Replace photo":"Upload asset photo"}
+            <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={e=>void uploadAssetPhoto(e.target.files?.[0])}/>
+          </label>
+          {assetPhotoPath&&<button className="secondary" type="button" disabled={photoBusy} onClick={()=>void removeAssetPhoto()}>Remove photo</button>}
+        </div>}
+        {isAdmin&&<small>JPEG, PNG or WebP · maximum 5 MB · one main photo per asset</small>}
+        {photoNotice&&<p className="notice" role="status">{photoNotice}</p>}
+      </div>
     </div>
     <PlantSafetyLockouts supabase={supabase} isAdmin={isAdmin} assetId={asset.id}/>
     {notice&&<div className="notice" role="status">{notice}</div>}

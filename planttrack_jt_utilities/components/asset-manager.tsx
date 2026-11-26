@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import AssetFolder from "./asset-folder";
+import AssetPhoto from "./asset-photo";
 import { Plus, Search, Pencil, X, Save, RefreshCw, FolderOpen, Trash2 } from "lucide-react";
 
 type AssetRow = {
   id: string;
   asset_code: string;
+  asset_image_path?: string|null;
   ownership_type: "owned"|"hired_in";
   hire_supplier: string|null;
   description: string;
@@ -125,6 +127,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [includeCalculatedPmi,setIncludeCalculatedPmi]=useState(false);
   const [importConfirmed,setImportConfirmed]=useState(false);
   const [rows, setRows] = useState<AssetRow[]>([]);
+  const [assetPhotoUrls,setAssetPhotoUrls]=useState<Record<string,string>>({});
   const [lockedAssets,setLockedAssets]=useState<Set<string>>(new Set());
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,12 +145,22 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     setError("");
     const { data, error: loadError } = await supabase
       .from("assets")
-      .select("id, asset_code, ownership_type, hire_supplier, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due")
+      .select("id, asset_code, asset_image_path, ownership_type, hire_supplier, description, category, manufacturer, model, serial_number, registration, location, hour_meter, status, pmi_next_due, pmi_last_completed, mot_due, tacho_calibration_due")
       .order("asset_code", { ascending: true })
       .limit(1000);
     if (loadError) setError("Could not load assets: " + loadError.message);
     else {
       const assetRows = (data || []) as AssetRow[];
+      const imageAssets=assetRows.filter(a=>a.asset_image_path);
+      const photoUrls:Record<string,string>={};
+      for(let offset=0;offset<imageAssets.length;offset+=100){
+        const chunk=imageAssets.slice(offset,offset+100);
+        const {data:urls,error:photoError}=await supabase.storage.from("asset-images").createSignedUrls(chunk.map(a=>a.asset_image_path!),3600);
+        if(!photoError)(urls||[]).forEach((entry,index)=>{
+          if(entry.signedUrl)photoUrls[chunk[index].id]=entry.signedUrl;
+        });
+      }
+      setAssetPhotoUrls(photoUrls);
       const {data:locks,error:lockError}=await supabase.from("plant_safety_lockouts").select("asset_id").is("released_at",null);
       if(lockError)setError("Asset safety holds could not be checked: "+lockError.message);
       else setLockedAssets(new Set((locks||[]).map(l=>l.asset_id)));
@@ -407,7 +420,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     return () => window.cancelAnimationFrame(frame);
   }, [editing, selectedAsset, isAdmin]);
 
-  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} onEdit={() => {const asset=selectedAsset;setSelectedAsset(null);void startEdit(asset);}} onDelete={() => void deleteAsset(selectedAsset)} deleting={saving} />;
+  if (selectedAsset) return <AssetFolder supabase={supabase} asset={selectedAsset} canUpload={true} isAdmin={isAdmin} onBack={() => setSelectedAsset(null)} onEdit={() => {const asset=selectedAsset;setSelectedAsset(null);void startEdit(asset);}} onDelete={() => void deleteAsset(selectedAsset)} deleting={saving} onImageChanged={()=>void loadAssets()} />;
 
   const fieldStyle: React.CSSProperties = {
     width: "100%", padding: "10px 11px", border: "1px solid #dcdce0",
@@ -545,14 +558,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
       {categoryFilter.toLowerCase() === "hgv" ? <table><thead><tr><th>Registration</th><th>Description</th><th>Folder</th><th>Next PMI</th><th>Last PMI</th><th>MOT</th><th>Tacho Calibration</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
+        <td><div className="asset-register-identity"><AssetPhoto url={assetPhotoUrls[a.id]} description={a.description} category={a.category} assetCode={a.asset_code}/><div><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
         <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span>{lockedAssets.has(a.id)&&<span className="tag red" style={{marginLeft:6}}>SAFETY LOCKOUT</span>}</td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button> <button className="secondary" disabled={saving} onClick={() => void deleteAsset(a)}><Trash2 size={14}/> Delete</button></td>}
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><b>{a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</td>
+        <td><div className="asset-register-identity"><AssetPhoto url={assetPhotoUrls[a.id]} description={a.description} category={a.category} assetCode={a.asset_code}/><div><b>{a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td>
         <td>{a.description}{a.ownership_type==="hired_in"&&<span className="tag amber" style={{marginLeft:8}}>HIRED-IN</span>}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}{a.ownership_type==="hired_in"&&a.hire_supplier?" · Hire company: "+a.hire_supplier:""}</small></td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
