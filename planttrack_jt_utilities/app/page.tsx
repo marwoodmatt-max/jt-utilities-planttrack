@@ -3,6 +3,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
+import { generateWheelRetorquePdf, WHEEL_JOB_TYPE, WHEEL_REQUIRED, missingWheelFields } from "../lib/wheel-retorque-pdf";
+import WheelRetorqueFields from "../components/wheel-retorque-fields";
 import ManagementReports from "../components/management-reports";
 import { PRE_USE_SECTIONS, PRE_USE_ITEMS, PRE_USE_SHEET_VERSION, PRE_USE_RESULT_PASS, PRE_USE_RESULT_FAIL, preUseIsFullSheet, preUseHasDefects } from "../lib/pre-use-inspection";
 import LolerManager from "../components/loler-manager";
@@ -403,6 +405,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const [assetLolerDue,setAssetLolerDue]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
  const [showCreateJob,setShowCreateJob]=useState(false);
+ const [showWheelCreate,setShowWheelCreate]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
  const [officeFilter,setOfficeFilter]=useState<"approval"|"active"|"history">("active");
  const [showSpecialistFields,setShowSpecialistFields]=useState(false);
@@ -436,8 +439,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const assetLabel=(a:any)=>isRegisteredVehicle(a)?String(a.registration).trim():String(a.asset_code||"");
  const assetName=(id:string)=>{const a=assets.find(x=>x.id===id);return a?assetLabel(a)+" · "+a.description:id};
  const jobHeading=(job:any)=>[job.job_card_number||"Job card",new Date(job.created_at).toLocaleDateString("en-GB",{timeZone:"Europe/London"}).replaceAll("/","-"),assets.find(a=>a.id===job.asset_id)?assetLabel(assets.find(a=>a.id===job.asset_id)):"Asset"].join(" · ");
- const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service","Pre-use / return-to-work check"].includes(job.job_type);
- const requiredChecklist=(job:any)=>preUseIsFullSheet(job)?[...PRE_USE_ITEMS,"Pre-use result"]:checklistByType[job.job_type]||[];
+ const specialistJob=(job:any)=>["HGV / trailer PMI","LOLER thorough examination","LOLER chains & accessories","Service","Pre-use / return-to-work check",WHEEL_JOB_TYPE].includes(job.job_type);
+ const requiredChecklist=(job:any)=>job.job_type===WHEEL_JOB_TYPE?WHEEL_REQUIRED:preUseIsFullSheet(job)?[...PRE_USE_ITEMS,"Pre-use result"]:checklistByType[job.job_type]||[];
  const preUseFullSheet=(job:any)=>preUseIsFullSheet(job);
  const preUseSheetForm=(job:any)=>{
   const completed=PRE_USE_ITEMS.filter(k=>["Checked","N/A","Defect"].includes(checklist[k])).length;
@@ -494,14 +497,14 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   </select>:<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder={key==="Outstanding defects / restrictions"?"Enter None if no defects; otherwise list restrictions":"Enter the related job number or findings"}/>}
  </label>;
  const missingEngineerFields=(job:any)=>[
-  ...preUseMissing(job),
+  ...(job.job_type===WHEEL_JOB_TYPE?missingWheelFields(checklist):preUseMissing(job)),
   ...(preUseInconsistent(job)?["Final result cannot be PASS while a defect is marked; choose FAIL"]:[]),
   ...(work.trim().length<3?["Work completed"]:[]),
   ...(!Number.isFinite(Number(hours))||Number(hours)<0?["Valid hours worked"]:[]),
   ...(signature.trim().length<2?["Mechanic signature"]:[])
  ];
  const openMechanicJob=(job:any)=>{
-  setSelected(job.id);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
+  setSelected(job.id);setShowWheelCreate(false);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
   setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
   setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
   const saved=job.completion_checklist||{};
@@ -530,7 +533,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   // Ordinary work continues to file a JT Asset Job Card as the primary PDF.
   if(!job.approved_pdf_path){
    const path=job.asset_id+"/"+job.id+".pdf";
-   const pdf=await generateApprovedJobPdf(fullJob,assetName(job.asset_id));
+   const pdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(fullJob,assetName(job.asset_id)):await generateApprovedJobPdf(fullJob,assetName(job.asset_id));
    const upload=await bucket.upload(path,pdf,{contentType:"application/pdf",upsert:false});
    if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
    const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
@@ -538,7 +541,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   }
   // Every approved job gets its own signed JT Asset Job Card.
   // For LOLER, the original document above remains the separate statutory certificate.
-  if(!job.job_card_pdf_path){
+  if(job.job_type!==WHEEL_JOB_TYPE&&!job.job_card_pdf_path){
    await fileStandardJobCard(fullJob);
   }
  }
@@ -554,7 +557,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  }
  async function fileMissingApprovedJobCards(){
   if(busy)return;
-  const missing=jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path);
+  const missing=jobs.filter(j=>j.status==="Approved"&&!j.job_card_pdf_path&&j.job_type!==WHEEL_JOB_TYPE);
   if(!missing.length){setNotice("All approved jobs already have their JT Asset Job Cards filed.");return;}
   setBusy(true);setNotice("Filing "+missing.length+" missing JT job card(s)…");
   let completed=0;const problems:string[]=[];
@@ -575,14 +578,15 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    const {data:approved,error}=await supabase.from("workshop_job_cards").select("*").eq("id",job.id).single();
    if(error)throw error;
    await archiveApprovedPdf(approved||updated);
-   setNotice("Office signed and approved. The JT Asset Job Card has been filed"+(String(job.job_type||"").startsWith("LOLER")?" alongside the separate statutory LOLER certificate.":" against the machine."));
+   setNotice(job.job_type===WHEEL_JOB_TYPE?"Wheel removal / re-torque PDF filed against the asset under its own job number.":"Office signed and approved. The JT Asset Job Card has been filed"+(String(job.job_type||"").startsWith("LOLER")?" alongside the separate statutory LOLER certificate.":" against the machine."));
   }catch(e){setNotice("Approval or PDF filing needs attention: "+(e instanceof Error?e.message:String(e))+". If approved, use Retry PDF filing.");}
   finally{setBusy(false);setRefresh(n=>n+1);}
  }
  async function downloadJobCardPdf(job:any){
   try{
    const selectedAsset=assets.find(a=>a.id===job.asset_id);
-   const pdf=await generateAssetJobCardPdf({...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location},selectedAsset?.asset_code||assetName(job.asset_id),true);
+   const data={...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location};
+   const pdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(data,assetName(job.asset_id),true):await generateAssetJobCardPdf(data,selectedAsset?.asset_code||assetName(job.asset_id),true);
    const url=URL.createObjectURL(pdf);
    const link=document.createElement("a");link.href=url;link.download=(job.job_card_number||"JT-Job-Card")+".pdf";document.body.appendChild(link);link.click();link.remove();
    window.setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -702,7 +706,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
       {showSpecialistFields&&<div className="mechanic-specialist-fields">
        {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/></>}
        {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">Check every item before signing. Any failed check means the machine must NOT be sent back to work. A completed job card does not release a plant lockout or replace the operator's daily pre-start check.</p>}
-       {preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
+       {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
       </div>}
      </section>}
      <div className="mechanic-mobile-fields">
@@ -736,6 +740,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {role==="office"&&chosen.status==="Awaiting office approval"&&<div className="workshop-office-approval-panel">
     <h4>Office review & sign-off</h4>
     <p>Review the completed work and required inspection records before approving. The signed-in account and approval time are recorded for audit.</p>
+    {chosen.job_type===WHEEL_JOB_TYPE&&<WheelRetorqueFields values={chosen.completion_checklist||{}} readonly/>}
     {chosen.job_type==="Pre-use / return-to-work check"&&<div className="workshop-pre-use-office">
      <strong>Return-to-work safety review · {chosen.completion_checklist?.["Pre-use result"]||"Result not recorded"}</strong>
      <p>Verify every check below and the mechanic's signature. A failed check cannot be approved. An active safety hold must be released through the separate authorised process; this sign-off does not release it.</p>
@@ -762,17 +767,17 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
      <button className="primary" type="button" disabled={busy} onClick={()=>void perform(async()=>{const result=await supabase.rpc("update_open_workshop_job_card",{p_job:chosen.id,p_title:editTitle,p_instructions:editInstructions,p_details:editDetails});if(!result.error)setEditCard(false);return result;},"Job card updated — download a fresh PDF to see changes")}>Save job card changes</button>
     </div>}
    </div>}
-   {role!=="engineer"&&<div><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> {chosen.job_type==="Pre-use / return-to-work check"?"Download Pre-Use Inspection PDF":"Download JT Asset Job Card PDF"}</button>
-    {chosen.job_type!=="Pre-use / return-to-work check"&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}</div>}
+   {role!=="engineer"&&<div><button className="secondary" type="button" onClick={()=>void downloadJobCardPdf(chosen)}><FileText size={16}/> {chosen.job_type===WHEEL_JOB_TYPE?"Download wheel re-torque sheet":chosen.job_type==="Pre-use / return-to-work check"?"Download Pre-Use Inspection PDF":"Download JT Asset Job Card PDF"}</button>
+    {chosen.job_type!=="Pre-use / return-to-work check"&&chosen.job_type!==WHEEL_JOB_TYPE&&<GeneralRepairPaperForm job={chosen} asset={assets.find(a=>a.id===chosen.asset_id)}/>}</div>}
    {chosen.engineer_work&&<p><b>Engineer work:</b> {chosen.engineer_work}</p>}
    {chosen.engineer_parts&&<p><b>Parts:</b> {chosen.engineer_parts}</p>}
    {chosen.engineer_signature&&<p><b>Engineer signed:</b> {chosen.engineer_signature} · {new Date(chosen.engineer_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
-   {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>{String(chosen.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":"View original filed PDF"}</button>}
+   {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>{chosen.job_type===WHEEL_JOB_TYPE?"View filed wheel re-torque PDF":String(chosen.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":"View original filed PDF"}</button>}
    {chosen.job_card_pdf_path&&role!=="engineer"&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}>{chosen.job_type==="Pre-use / return-to-work check"?"View filed Pre-Use Inspection PDF":"View filed JT Asset Job Card"}</button>}
-   {role==="office"&&chosen.status==="Approved"&&(!chosen.approved_pdf_path||!chosen.job_card_pdf_path)&&<div className="workshop-missing-document">
+   {role==="office"&&chosen.status==="Approved"&&(!chosen.approved_pdf_path||(chosen.job_type!==WHEEL_JOB_TYPE&&!chosen.job_card_pdf_path))&&<div className="workshop-missing-document">
     <strong>Approved job — document filing needs attention</strong>
-    <p>{!chosen.approved_pdf_path?"Original approved document not filed. ":""}{!chosen.job_card_pdf_path?"JT Asset Job Card not separately filed.":""} The office sign-off is saved; existing PDFs will not be overwritten.</p>
+    <p>{!chosen.approved_pdf_path?"Original approved document not filed. ":""}{chosen.job_type!==WHEEL_JOB_TYPE&&!chosen.job_card_pdf_path?"JT Asset Job Card not separately filed.":""} The office sign-off is saved; existing PDFs will not be overwritten.</p>
     <button className="secondary" type="button" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"Missing PDF(s) filed against the asset. Original documents preserved.")}>{busy?"Filing…":"File missing job documents"}</button>
    </div>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
@@ -780,7 +785,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {(role==="engineer"||role==="office")&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
     {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
     {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">This pre-use inspection must pass before return to work. Safety holds and operator daily checks remain separate.</p>}
-    {preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
+    {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <div style={{display:"grid",gap:8}}>
      <strong>Parts added</strong>
