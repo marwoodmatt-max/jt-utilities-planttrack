@@ -678,3 +678,281 @@ tbody tr:hover{background:#fff5f6}
 .asset-photo-upload-label input{position:absolute!important;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .asset-photo-upload-label:focus-within{outline:3px solid #e89aa8;outline-offset:2px}
 @media(max-width:700px){.asset-photo-section{padding:13px;align-items:stretch;gap:15px}.asset-photo-large{width:100%;height:205px}.asset-register-identity{min-width:170px}.asset-photo{width:68px;height:60px;flex-basis:68px}.asset-photo-large{width:100%;height:205px;flex-basis:auto}}
+
+/* ===============================================================
+   PlantTrack 2026 UI refresh — visual only.
+   Keep workflow, role checks, safety states and PDF generation intact.
+   =============================================================== */
+:root{
+ --red:#da203b;
+ --ink:#172236;
+ --muted:#657287;
+ --line:#e0e7f0;
+ --bg:#f3f6fb;
+ --white:#fff;
+ --shadow:0 3px 18px rgba(23,40,68,.045);
+}
+html{color-scheme:light}
+body{
+ background:var(--bg);
+ color:var(--ink);
+ font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ letter-spacing:-.008em;
+}
+button,input,select,textarea{font-family:inherit}
+button{touch-action:manipulation}
+::selection{background:#ffdce2;color:#691a2a}
+:focus-visible{outline:3px solid rgba(218,32,59,.35);outline-offset:2px}
+.office-shell .sidebar{
+ background:#101b2c;
+ color:#f6f8fc;
+ border-right:1px solid #263a50;
+ box-shadow:6px 0 28px rgba(18,31,52,.10);
+ padding:23px 13px 16px;
+}
+.office-shell .brand{
+ margin:0 2px 21px;
+ padding:8px 10px 23px;
+ border-bottom:1px solid rgba(255,255,255,.13);
+}
+.office-shell .brand b{color:#fff;font-size:13px;letter-spacing:.06em}
+.office-shell .brand small{color:#ff798a;letter-spacing:.18em}
+.office-shell .brand-logo{border:1px solid #e8edf4;background:#fff;border-radius:11px;padding:5px}
+.office-shell .nav-caption{color:#8092ab;font-size:10px;letter-spacing:.16em;padding:7px 13px 11px}
+.office-shell .nav-item{
+ color:#b5c3d4;
+ background:transparent;
+ border-radius:11px;
+ margin:3px 0;
+ padding:11px 13px;
+ font-size:13px;
+ font-weight:650;
+ letter-spacing:0;
+}
+.office-shell .nav-item:hover{
+ color:#fff;
+ background:#22324a;
+ transform:none;
+}
+.office-shell .nav-item.active{
+ color:#fff;
+ background:#334056;
+ box-shadow:inset 3px 0 #fa556b,0 2px 7px rgba(0,0,0,.09);
+}
+.office-shell .nav-item.active svg{color:#ff7587}
+.office-shell .sidebar-bottom{border-color:#344357;color:#b0bdce}
+.office-shell .sidebar-bottom small{color:#8190a5}
+.office-shell .online-dot{background:#40c69a;box-shadow:0 0 0 3px rgba(64,198,154,.12)}
+.office-shell .topbar{
+ height:70px;
+ background:rgba(255,255,255,.94);
+ border-bottom:1px solid #e3e9f1;
+ backdrop-filter:blur(16px);
+}
+.office-shell .crumb{font-size:13px;font-weight:650;color:#546276}
+.office-shell .content{max-width:1580px;padding:31px clamp(20px,2.8vw,46px) 66px}
+.office-shell .page-head{margin-bottom:24px;align-items:flex-start;gap:16px}
+.office-shell .page-head h1{
+ font-size:clamp(25px,2.35vw,35px);
+ line-height:1.15;
+ font-weight:800;
+ letter-spacing:-.045em;
+ color:#15233a;
+}
+.office-shell .page-head p{font-size:13px;margin-top:7px}
+.office-shell .eyebrow{letter-spacing:.13em;font-size:10px}
+.office-shell .welcome{
+ min-height:163px;
+ padding:30px 33px;
+ border:1px solid #273c55;
+ border-radius:19px;
+ background:linear-gradient(115deg,#111d30 2%,#223752 66%,#283a51 100%);
+ box-shadow:0 12px 30px rgba(23,40,68,.09);
+}
+.office-shell .welcome:after{width:5px;background:#f04460}
+.office-shell .welcome h2{font-size:clamp(21px,2.2vw,29px);letter-spacing:-.04em}
+.office-shell .welcome p{color:#c7d2e1;font-size:13px}
+.office-shell .welcome-icon{color:#778da7;opacity:.55;margin-right:30px}
+.office-shell .stats{gap:14px;margin:18px 0 22px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.office-shell .stat{
+ position:relative;
+ min-width:0;
+ text-align:left;
+ padding:21px 22px;
+ border:1px solid #e0e8f0;
+ border-radius:16px;
+ background:#fff;
+ box-shadow:0 3px 13px rgba(20,37,59,.035);
+ transition:transform .16s,border-color .16s,box-shadow .16s;
+}
+.office-shell button.stat:hover{transform:translateY(-2px);border-color:#b9c7d6;box-shadow:0 11px 24px rgba(20,37,59,.08)}
+.office-shell button.stat:focus-visible{outline-offset:3px}
+.office-shell .stat-top{font-size:12px;font-weight:700;color:#5d6e84}
+.office-shell .stat-top svg{color:#da203b;opacity:.88}
+.office-shell .stat strong{font-size:clamp(28px,3vw,36px);line-height:1.14;margin:18px 0 7px;color:#142337}
+.office-shell .stat small{font-size:12px;color:#718094;line-height:1.45}
+.office-shell .panel{
+ border:1px solid #e1e8f0;
+ border-radius:18px;
+ padding:clamp(17px,2vw,25px);
+ background:#fff;
+ box-shadow:0 4px 20px rgba(22,37,57,.038);
+}
+.office-shell .panel-head{margin-bottom:19px}
+.office-shell .panel-head h3,.office-shell .panel h3{font-size:17px;font-weight:800;color:#182942;letter-spacing:-.025em}
+.office-shell .panel-head p{margin-top:5px}
+.office-shell .primary,.office-shell .secondary{
+ border-radius:10px;
+ padding:10px 15px;
+ min-height:42px;
+ font-weight:750;
+ font-size:12px;
+ box-shadow:none;
+}
+.office-shell .primary{background:#d9223c;border-color:#d9223c;color:#fff}
+.office-shell .primary:hover:not(:disabled){background:#b81932;border-color:#b81932;transform:translateY(-1px)}
+.office-shell .secondary{background:#fff;color:#23334b;border-color:#cfd9e5}
+.office-shell .secondary:hover:not(:disabled){background:#f4f7fb;border-color:#aebed0;transform:none}
+.office-shell .icon-btn{border-radius:10px}
+.office-shell .icon-btn:hover{background:#f1f4f8}
+.office-shell .avatar{background:#182a44;border-radius:11px;box-shadow:0 0 0 3px #eef2f7}
+.office-shell .table-wrap{
+ max-width:100%;
+ overflow-x:auto;
+ border:1px solid #e3e9f1;
+ border-radius:12px;
+ background:#fff;
+}
+.office-shell table{border-collapse:separate;border-spacing:0;font-size:12px;min-width:560px}
+.office-shell th{
+ position:relative;
+ padding:14px 15px;
+ background:#f5f7fb;
+ color:#57677d;
+ font-size:10px;
+ letter-spacing:.09em;
+ text-transform:uppercase;
+ border-bottom:1px solid #e1e8f0;
+}
+.office-shell td{
+ padding:13px 15px;
+ border-bottom:1px solid #edf1f5;
+ color:#2b3b51;
+ vertical-align:middle;
+}
+.office-shell tbody tr:last-child td{border-bottom:0}
+.office-shell tbody tr:hover td{background:#fafbfd}
+.office-shell td b,.office-shell td strong{color:#172940}
+.office-shell td small{color:#738197;line-height:1.45}
+.office-shell label{font-weight:700;color:#33445a}
+.office-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.office-shell select,.office-shell textarea{
+ color:#1f3046;
+ border-color:#d0dbe7;
+ border-radius:10px;
+ background:#fff;
+}
+.office-shell input:focus-visible,.office-shell select:focus-visible,.office-shell textarea:focus-visible{border-color:#809ab6}
+.office-shell .search{border-radius:12px;background:#fff}
+.office-shell .tag{border-radius:999px;padding:5px 10px;font-weight:800;letter-spacing:.01em}
+.office-shell .tag.green{background:#e9f7ee;color:#176b3a;border-color:#bbdfc8}
+.office-shell .tag.amber{background:#fff4e2;color:#8f570f;border-color:#f6d9a3}
+.office-shell .tag.red{background:#fff0f2;color:#ac2337;border-color:#f2bfc8}
+.office-shell .tag.blue{background:#edf3fb;color:#274c7c;border-color:#cbdcf1}
+.office-shell .workshop-create-form{
+ border:1px solid #cfdbe9;
+ border-radius:15px;
+ padding:21px;
+ background:#f8fafd;
+}
+.office-shell .workshop-new-job-toolbar .primary{min-height:44px}
+.office-shell .workshop-mobile-job{
+ border:1px solid #e0e8f0;
+ border-radius:14px;
+ box-shadow:0 2px 10px rgba(22,38,62,.04);
+}
+.office-shell .notice{background:#16263d;color:#fff;border-left-color:#f4475e;border-radius:10px;padding:13px 16px}
+.office-shell .workshop-job-number-notice{border-radius:11px}
+.office-shell .workshop-selected-job{min-width:0}
+.office-shell .workshop-selected-job .mechanic-specialist-fields{min-width:0}
+.office-shell .auth-error{border:1px solid #efc5ce;border-radius:10px}
+@media (max-width:1050px){
+ .office-shell .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .office-shell .content{padding:24px 20px 48px}
+}
+@media (max-width:700px){
+ .office-shell .sidebar{width:min(290px,86vw)}
+ .office-shell .topbar{height:60px;padding:0 13px}
+ .office-shell .content{padding:18px 12px 42px}
+ .office-shell .page-head{align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+ .office-shell .page-head h1{font-size:25px}
+ .office-shell .welcome{padding:21px 20px;min-height:126px;border-radius:15px}
+ .office-shell .stats{gap:9px;margin:13px 0 18px}
+ .office-shell .stat{padding:15px 13px;border-radius:12px}
+ .office-shell .stat strong{font-size:27px;margin:12px 0 5px}
+ .office-shell .stat-top{font-size:11px}
+ .office-shell .stat small{font-size:11px}
+ .office-shell .panel{padding:15px;border-radius:13px}
+ .office-shell .panel-head h3{font-size:16px}
+ .office-shell .table-wrap{border-radius:9px}
+ .office-shell table{min-width:530px}
+ .office-shell td,.office-shell th{padding:12px 11px}
+ .office-shell .workshop-create-form{padding:14px}
+ .office-shell .primary,.office-shell .secondary{min-height:44px}
+}
+@media (prefers-reduced-motion:reduce){
+ .office-shell button,.office-shell .stat,.office-shell .nav-item{transition:none!important;transform:none!important}
+}
+
+/* High-visibility compliance notification bell — desktop and mobile */
+.office-shell .top-actions .notification-bell-button{
+ position:relative;
+ display:inline-flex;
+ align-items:center;
+ justify-content:center;
+ flex:0 0 auto;
+ width:47px;
+ height:47px;
+ padding:9px;
+ background:#f0f4f9;
+ color:#132845;
+ border:1.5px solid #c7d4e3;
+ border-radius:13px;
+ box-shadow:0 2px 6px rgba(17,34,59,.09);
+}
+.office-shell .top-actions .notification-bell-button:hover{
+ background:#e6edf7;
+ color:#0d2341;
+ border-color:#8fa5c0;
+ box-shadow:0 3px 11px rgba(17,34,59,.14);
+}
+.office-shell .top-actions .notification-bell-button.has-notifications{
+ background:#fff0f2;
+ color:#b51a34;
+ border-color:#ef9cad;
+ box-shadow:0 2px 10px rgba(191,32,57,.12);
+}
+.office-shell .top-actions .notification-bell-button.has-notifications:hover{background:#ffe5ea}
+.office-shell .top-actions .notification-bell-count{
+ position:absolute;
+ top:-8px;
+ right:-9px;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ min-width:24px;
+ height:24px;
+ padding:0 5px;
+ background:#c91736;
+ border:2px solid #fff;
+ border-radius:99px;
+ color:#fff;
+ font-size:11px;
+ font-weight:900;
+ line-height:1;
+ box-shadow:0 2px 5px rgba(125,18,35,.25);
+}
+@media(max-width:700px){
+ .office-shell .top-actions .notification-bell-button{width:43px;height:43px;padding:8px;border-radius:11px}
+ .office-shell .top-actions .notification-bell-count{top:-6px;right:-7px;min-width:22px;height:22px}
+}
