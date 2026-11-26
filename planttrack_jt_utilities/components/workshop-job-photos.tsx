@@ -99,7 +99,11 @@ export default function WorkshopJobPhotos({supabase,jobId,jobNumber,jobType,role
    <p className="muted">Attach photos of faults, repairs or completed work when needed. Photos stay with this job and are included as extra pages on the approved PDF. They are optional and unavailable on LOLER certificates.</p>
    {canAdd&&<div className="workshop-job-photo-upload">
     <label>Photo notes (optional)<input value={caption} maxLength={160} onChange={e=>setCaption(e.target.value)} placeholder="e.g. repaired brake hose, completed work"/></label>
-    <label className="secondary workshop-photo-pick"><ImagePlus size={17}/> {busy?"Uploading…":"Take or add photos"}<input type="file" accept="image/jpeg,image/png" multiple disabled={busy||photos.length>=8} onChange={e=>{void add(e.target.files);e.target.value="";}}/></label>
+    
+    <div className="workshop-photo-pick-actions">
+      <label className="secondary workshop-photo-pick"><Camera size={18}/> {busy?"Uploading…":"Take photo"}<input type="file" accept="image/*" capture="environment" disabled={busy||photos.length>=8} aria-label="Take a job photo using the camera" onChange={e=>{void add(e.target.files);e.target.value="";}}/></label>
+      <label className="secondary workshop-photo-pick"><ImagePlus size={18}/> Choose from album<input type="file" accept="image/jpeg,image/png" multiple disabled={busy||photos.length>=8} aria-label="Choose job photos from album" onChange={e=>{void add(e.target.files);e.target.value="";}}/></label>
+    </div>
     <small>Up to 8 photos per job · JPG or PNG · maximum 5 MB each. Save photos before the mechanic signs the job.</small>
    </div>}
    {photos.length>0?<div className="workshop-photo-grid">{photos.map(photo=><div className="workshop-photo-tile" key={photo.id}>
