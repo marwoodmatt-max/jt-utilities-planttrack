@@ -10,6 +10,7 @@ create table if not exists public.workshop_job_photos (
 );
 create index if not exists workshop_job_photos_job_idx on public.workshop_job_photos(job_id,created_at,id);
 alter table public.workshop_job_photos enable row level security;
+grant select,insert,delete on public.workshop_job_photos to authenticated;
 
 create or replace function public.can_access_workshop_job_photos(p_job uuid,p_write boolean default false)
 returns boolean language sql stable security definer set search_path to ''
