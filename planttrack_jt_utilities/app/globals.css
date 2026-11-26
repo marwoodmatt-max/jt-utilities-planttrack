@@ -740,3 +740,10 @@ tbody tr:hover{background:#fff5f6}
  z-index:1;
 }
 @media(max-width:700px){.asset-register-photo-upload{width:78px;flex-basis:78px;padding:3px 0}.asset-register-photo-upload-label{font-size:10px}}
+
+/* Distinct camera and album entry points for mechanic job photos. */
+.workshop-photo-pick-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.workshop-photo-pick-actions .workshop-photo-pick{min-width:165px;max-width:none;margin:0!important;padding:12px 15px;min-height:52px;gap:9px}
+.workshop-photo-pick-actions .workshop-photo-pick:first-child{background:#182b47;color:#fff;border-color:#182b47}
+.workshop-photo-pick-actions .workshop-photo-pick:first-child:hover{background:#304665;color:#fff}
+@media(max-width:700px){.workshop-photo-pick-actions{display:grid;grid-template-columns:1fr;gap:9px}.workshop-photo-pick-actions .workshop-photo-pick{width:100%;min-width:0;justify-content:center}}
