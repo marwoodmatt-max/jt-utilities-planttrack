@@ -128,6 +128,7 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [importConfirmed,setImportConfirmed]=useState(false);
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [assetPhotoUrls,setAssetPhotoUrls]=useState<Record<string,string>>({});
+  const [photoUploadingId,setPhotoUploadingId]=useState<string|null>(null);
   const [lockedAssets,setLockedAssets]=useState<Set<string>>(new Set());
   const [selectedAsset, setSelectedAsset] = useState<AssetRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,6 +141,49 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  async function uploadRegisterPhoto(asset:AssetRow,file?:File){
+    if(!file||!isAdmin||photoUploadingId)return;
+    setMessage("");setError("");
+    const extensions:Record<string,string>={"image/jpeg":"jpg","image/png":"png","image/webp":"webp"};
+    if(!extensions[file.type]){
+      setError("Choose a JPG, PNG or WebP photo for "+asset.asset_code+".");
+      return;
+    }
+    if(file.size>5*1024*1024){
+      setError("Photos must be no larger than 5 MB.");
+      return;
+    }
+    setPhotoUploadingId(asset.id);
+    const path=asset.id+"/"+crypto.randomUUID()+"."+extensions[file.type];
+    try{
+      const bucket=supabase.storage.from("asset-images");
+      const uploaded=await bucket.upload(path,file,{contentType:file.type,upsert:false});
+      if(uploaded.error)throw uploaded.error;
+      const saved=await supabase.from("assets").update({asset_image_path:path}).eq("id",asset.id).select("id").single();
+      if(saved.error||!saved.data){
+        await bucket.remove([path]);
+        throw saved.error||new Error("Asset photo could not be linked.");
+      }
+      if(asset.asset_image_path&&asset.asset_image_path!==path){
+        await bucket.remove([asset.asset_image_path]);
+      }
+      setMessage("Photo saved for "+asset.asset_code+".");
+      await loadAssets();
+    }catch(e){
+      setError("Could not save photo for "+asset.asset_code+": "+(e instanceof Error?e.message:String(e)));
+    }finally{
+      setPhotoUploadingId(null);
+    }
+  }
+  const registerPhoto=(asset:AssetRow)=>{
+    const photo=<AssetPhoto url={assetPhotoUrls[asset.id]} description={asset.description} category={asset.category} assetCode={asset.asset_code}/>;
+    if(!isAdmin)return photo;
+    return <label className="asset-register-photo-upload" title={"Add or replace photo for "+asset.asset_code}>
+      {photo}
+      <span className="asset-register-photo-upload-label">{photoUploadingId===asset.id?"Saving…":asset.asset_image_path?"Change photo":"+ Add photo"}</span>
+      <input type="file" accept="image/jpeg,image/png,image/webp" aria-label={"Upload asset photo for "+asset.asset_code} disabled={!!photoUploadingId} onChange={e=>{const file=e.target.files?.[0];e.target.value="";void uploadRegisterPhoto(asset,file);}}/>
+    </label>;
+  };
   async function loadAssets() {
     setLoading(true);
     setError("");
@@ -558,14 +602,14 @@ export default function AssetManager({ supabase, isAdmin, categoryFilter = "All"
     {loading ? <p className="muted">Loading assets…</p> : <div className="table-wrap">
       {categoryFilter.toLowerCase() === "hgv" ? <table><thead><tr><th>Registration</th><th>Description</th><th>Folder</th><th>Next PMI</th><th>Last PMI</th><th>MOT</th><th>Tacho Calibration</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><div className="asset-register-identity"><AssetPhoto url={assetPhotoUrls[a.id]} description={a.description} category={a.category} assetCode={a.asset_code}/><div><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
+        <td><div className="asset-register-identity">{registerPhoto(a)}<div><b>{a.registration || a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td><td>{a.description}{a.asset_code.toUpperCase()==="C545766" && <small>Trailer · C545766</small>}</td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td>
         <td><span className={a.pmi_next_due && a.pmi_next_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.pmi_next_due)}</span></td><td>{formatDate(a.pmi_last_completed)}</td><td><span className={a.mot_due && a.mot_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.mot_due)}</span></td><td><span className={a.tacho_calibration_due && a.tacho_calibration_due < new Date().toISOString().slice(0,10) ? "tag red" : "tag"}>{formatDate(a.tacho_calibration_due)}</span></td>
         <td><span className={a.status === "out_of_service" ? "tag red" : "tag green"}>{statusLabel(a)}</span>{lockedAssets.has(a.id)&&<span className="tag red" style={{marginLeft:6}}>SAFETY LOCKOUT</span>}</td>
         {isAdmin && <td><button className="secondary" onClick={() => startEdit(a)}><Pencil size={14}/> Edit</button> <button className="secondary" disabled={saving} onClick={() => void deleteAsset(a)}><Trash2 size={14}/> Delete</button></td>}
       </tr>)}</tbody></table> : <table><thead><tr><th>Asset code</th><th>Description</th><th>Folder</th><th>Registration</th><th>Location</th><th>Hours</th><th>Next LOLER due</th><th>Last LOLER examination</th><th>Status</th>{isAdmin && <th>Action</th>}</tr></thead>
       <tbody>{filtered.map((a) => <tr key={a.id}>
-        <td><div className="asset-register-identity"><AssetPhoto url={assetPhotoUrls[a.id]} description={a.description} category={a.category} assetCode={a.asset_code}/><div><b>{a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td>
+        <td><div className="asset-register-identity">{registerPhoto(a)}<div><b>{a.asset_code}</b>{isAdmin&&<div style={{marginTop:7}}><button type="button" className="secondary" style={{padding:"5px 9px",minHeight:30}} onClick={()=>void startEdit(a)}><Pencil size={13}/> Edit asset</button></div>}</div></div></td>
         <td>{a.description}{a.ownership_type==="hired_in"&&<span className="tag amber" style={{marginLeft:8}}>HIRED-IN</span>}<small>{a.category || "Uncategorised"}{a.manufacturer ? " · " + a.manufacturer : ""}{a.model ? " " + a.model : ""}{a.ownership_type==="hired_in"&&a.hire_supplier?" · Hire company: "+a.hire_supplier:""}</small></td>
         <td><button className="secondary" onClick={() => setSelectedAsset(a)}><FolderOpen size={14}/> Open folder</button></td><td>{a.registration || "—"}</td><td>{a.location || "Not recorded"}</td>
         <td>{a.hour_meter == null ? "—" : a.hour_meter}</td>
