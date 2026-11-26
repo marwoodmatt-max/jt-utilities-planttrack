@@ -14,9 +14,9 @@ as $function$
    )
    and p.active=true
    and nullif(trim(p.full_name),'') is not null
-   and (
-     p.role::text in ('mechanic','admin')
-     or p.id=auth.uid()
+   and exists (
+     select 1 from public.planttrack_roles worker
+     where worker.user_id=p.id and worker.role='engineer'
    )
  order by 2
 $function$;
