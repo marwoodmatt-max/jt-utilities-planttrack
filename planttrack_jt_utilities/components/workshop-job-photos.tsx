@@ -80,11 +80,12 @@ export default function WorkshopJobPhotos({supabase,jobId,jobNumber,jobType,role
   if(!canAdd||busy||!window.confirm("Remove this photo from the job?"))return;
   setBusy(true);setMessage("");
   try{
+   // Storage DELETE policy validates the existing photo database entry.
+   const storage=await supabase.storage.from("workshop-job-photos").remove([photo.storage_path]);
+   if(storage.error)throw storage.error;
    const row=await supabase.from("workshop_job_photos").delete().eq("id",photo.id);
    if(row.error)throw row.error;
-   const storage=await supabase.storage.from("workshop-job-photos").remove([photo.storage_path]);
-   if(storage.error)setMessage("Photo detached; storage clean-up needs attention: "+storage.error.message);
-   else setMessage("Photo removed.");
+   setMessage("Photo removed.");
    setPhotos(prev=>prev.filter(p=>p.id!==photo.id));
   }catch(e){setMessage("Could not remove photo: "+(e instanceof Error?e.message:String(e)));}
   finally{setBusy(false);}
