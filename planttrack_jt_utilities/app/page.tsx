@@ -5,6 +5,8 @@ import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
 import { generateWheelRetorquePdf, WHEEL_JOB_TYPE, WHEEL_REQUIRED, missingWheelFields } from "../lib/wheel-retorque-pdf";
 import WheelRetorqueFields from "../components/wheel-retorque-fields";
+import WorkshopJobPhotos from "../components/workshop-job-photos";
+import { appendWorkshopPhotosToPdf } from "../lib/workshop-photo-pdf";
 import ManagementReports from "../components/management-reports";
 import { PRE_USE_SECTIONS, PRE_USE_ITEMS, PRE_USE_SHEET_VERSION, PRE_USE_RESULT_PASS, PRE_USE_RESULT_FAIL, preUseIsFullSheet, preUseHasDefects } from "../lib/pre-use-inspection";
 import LolerManager from "../components/loler-manager";
@@ -537,7 +539,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   // Ordinary work continues to file a JT Asset Job Card as the primary PDF.
   if(!job.approved_pdf_path){
    const path=job.asset_id+"/"+job.id+".pdf";
-   const pdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(fullJob,assetName(job.asset_id)):await generateApprovedJobPdf(fullJob,assetName(job.asset_id));
+   const basicPdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(fullJob,assetName(job.asset_id)):await generateApprovedJobPdf(fullJob,assetName(job.asset_id));
+   const pdf=await appendWorkshopPhotosToPdf(supabase,fullJob,basicPdf);
    const upload=await bucket.upload(path,pdf,{contentType:"application/pdf",upsert:false});
    if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
    const attached=await supabase.rpc("attach_approved_job_pdf",{p_job:job.id,p_path:path});
@@ -553,7 +556,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   const chosenAsset=assets.find(a=>a.id===job.asset_id);
   const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
   const path=job.asset_id+"/"+job.id+"-job-card.pdf";
-  const pdf=await generateAssetJobCardPdf(fullJob,assetName(job.asset_id));
+  const basicPdf=await generateAssetJobCardPdf(fullJob,assetName(job.asset_id));
+  const pdf=await appendWorkshopPhotosToPdf(supabase,fullJob,basicPdf);
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
   const linked=await supabase.rpc("attach_workshop_job_card_pdf",{p_job:job.id,p_path:path});
@@ -590,7 +594,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   try{
    const selectedAsset=assets.find(a=>a.id===job.asset_id);
    const data={...job,asset_code:selectedAsset?.asset_code,asset_description:selectedAsset?.description,asset_serial_number:selectedAsset?.serial_number,asset_location:selectedAsset?.location};
-   const pdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(data,assetName(job.asset_id),true):await generateAssetJobCardPdf(data,selectedAsset?.asset_code||assetName(job.asset_id),true);
+   const basicPdf=job.job_type===WHEEL_JOB_TYPE?await generateWheelRetorquePdf(data,assetName(job.asset_id),true):await generateAssetJobCardPdf(data,selectedAsset?.asset_code||assetName(job.asset_id),true);
+   const pdf=await appendWorkshopPhotosToPdf(supabase,data,basicPdf);
    const url=URL.createObjectURL(pdf);
    const link=document.createElement("a");link.href=url;link.download=(job.job_card_number||"JT-Job-Card")+".pdf";document.body.appendChild(link);link.click();link.remove();
    window.setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -701,6 +706,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   </>}
   {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
+   {!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
    {chosen.job_type!==WHEEL_JOB_TYPE&&["office","engineer"].includes(role)&&<>
     <div style={{display:"flex",justifyContent:"flex-start",gap:9}}>
      <button type="button" className="secondary" disabled={busy} onClick={()=>setShowWheelCreate(v=>!v)} aria-expanded={showWheelCreate}>
