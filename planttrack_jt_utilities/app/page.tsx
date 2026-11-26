@@ -706,7 +706,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   </>}
   {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
-   {!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
+   {role==="office"&&!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
    {chosen.job_type!==WHEEL_JOB_TYPE&&["office","engineer"].includes(role)&&<>
     <div style={{display:"flex",justifyContent:"flex-start",gap:9}}>
      <button type="button" className="secondary" disabled={busy} onClick={()=>setShowWheelCreate(v=>!v)} aria-expanded={showWheelCreate}>
@@ -753,6 +753,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
       <label>2. Parts or materials used <textarea rows={2} value={parts} onChange={e=>{setParts(e.target.value);setPartItems(e.target.value.split("\n"));}} placeholder="Enter parts used, one per line, or None"/></label>
       <label>3. Hours worked <input type="number" inputMode="decimal" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
       <button type="button" className="secondary mechanic-save-btn" disabled={busy} onClick={()=>void saveEngineerDraft(chosen)}>{busy?"Saving…":"Save progress (not submitted)"}</button>
+      {!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
       <div className="mechanic-mobile-sign">
        <label>4. Mechanic signature — full name <input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Type your full name"/></label>
        <p>Your signed-in account and submission time will be recorded automatically for audit.</p>
@@ -835,7 +836,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
      <button className="secondary" type="button" onClick={()=>setPartItems(items=>[...items,""])}>+ Add another part</button>
     </div>
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
-    {role==="office"&&<><p className="muted">Office can prepare and save these details. Only the assigned mechanic can sign and submit the job.</p><button className="primary" type="button" disabled={busy} onClick={()=>void perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours)}),"Workshop details saved — awaiting mechanic signature")}>Save workshop details</button></>}{role==="engineer"&&<><label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
+    {role==="office"&&<><p className="muted">Office can prepare and save these details. Only the assigned mechanic can sign and submit the job.</p><button className="primary" type="button" disabled={busy} onClick={()=>void perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours)}),"Workshop details saved — awaiting mechanic signature")}>Save workshop details</button></>}{role==="engineer"&&<>{!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}<label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
     {(work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim()))&&<p role="status" style={{color:"#92400e",background:"#fffbeb",padding:"10px 12px",borderRadius:6,fontSize:13}}><strong>Before you can sign and submit:</strong>{" "}{[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])].join(", ")}. Complete these fields below the examination form.</p>}
     <button type="button" className="primary" disabled={busy} onClick={()=>void submitEngineerJob(chosen)}>Sign and submit to office</button>
    </>}
