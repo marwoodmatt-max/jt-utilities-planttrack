@@ -391,6 +391,8 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
 function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activeOnly?:boolean}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [canDeleteTestJobs,setCanDeleteTestJobs]=useState(false);
+ const [wheelStaff,setWheelStaff]=useState<{user_id:string;display_name:string}[]>([]);
+ const [wheelCurrentUserId,setWheelCurrentUserId]=useState("");
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
  const jobTypes=[["General repair","Job Card"],["Other / unexpected work","Ad hoc / unexpected work"],["Breakdown","Breakdown"],["Service","Service"],["Pre-use / return-to-work check","Pre-Use / Return-to-Work Check"],["HGV / trailer PMI","PMI"],["LOLER thorough examination","LOLERs"]];
  const plantLolerDefaults={"NAME OF INSPECTOR":"Simon Squire","QUALIFICATIONS":"NPORS N039 and IRTEC Level 3","COMPANY":"JT Utilities LTD"};
@@ -413,11 +415,13 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const [selected,setSelected]=useState(""),[work,setWork]=useState(""),[parts,setParts]=useState(""),[partItems,setPartItems]=useState<string[]>([""]),[hours,setHours]=useState("0"),[signature,setSignature]=useState(""),[comments,setComments]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
  useEffect(()=>{let active=true;(async()=>{
   const {data:user}=await supabase.auth.getUser();if(!user.user)return;
-  const [j,a,r,e,profile,loler]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle(),supabase.from("examinations").select("asset_id,next_due,examined_at").ilike("examination_type","%LOLER%").order("examined_at",{ascending:false})]);
+  setWheelCurrentUserId(user.user.id);
+  const [j,a,r,e,profile,loler,staff]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle(),supabase.from("examinations").select("asset_id,next_due,examined_at").ilike("examination_type","%LOLER%").order("examined_at",{ascending:false}),supabase.rpc("list_wheel_retorque_staff")]);
   if(!active)return;
   setCanDeleteTestJobs(user.user.id==="2807b17d-6507-4808-9909-15e11e44637a"&&profile.data?.role==="admin"&&profile.data?.active===true);
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
+  if(!staff.error)setWheelStaff((staff.data||[]) as {user_id:string;display_name:string}[]);
   if(!loler.error){const dates:Record<string,string>={};for(const exam of loler.data||[]){if(exam.asset_id&&exam.next_due&&!dates[exam.asset_id])dates[exam.asset_id]=String(exam.next_due).slice(0,10);}setAssetLolerDue(dates);}
  })();return()=>{active=false};},[supabase,refresh]);
  useEffect(()=>{const update=()=>setRefresh(n=>n+1);const channel=supabase.channel("mechanic-job-inbox").on("postgres_changes",{event:"*",schema:"public",table:"workshop_job_cards"},update).subscribe();window.addEventListener("focus",update);const timer=window.setInterval(update,30000);return()=>{window.clearInterval(timer);window.removeEventListener("focus",update);void supabase.removeChannel(channel);};},[supabase]);
@@ -735,7 +739,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
       {showSpecialistFields&&<div className="mechanic-specialist-fields">
        {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/></>}
        {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">Check every item before signing. Any failed check means the machine must NOT be sent back to work. A completed job card does not release a plant lockout or replace the operator's daily pre-start check.</p>}
-       {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
+       {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields staff={wheelStaff} currentUserId={wheelCurrentUserId} values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
       </div>}
      </section>}
      <div className="mechanic-mobile-fields">
@@ -769,7 +773,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {role==="office"&&chosen.status==="Awaiting office approval"&&<div className="workshop-office-approval-panel">
     <h4>Office review & sign-off</h4>
     <p>Review the completed work and required inspection records before approving. The signed-in account and approval time are recorded for audit.</p>
-    {chosen.job_type===WHEEL_JOB_TYPE&&<WheelRetorqueFields values={chosen.completion_checklist||{}} readonly/>}
+    {chosen.job_type===WHEEL_JOB_TYPE&&<WheelRetorqueFields staff={wheelStaff} currentUserId={wheelCurrentUserId} values={chosen.completion_checklist||{}} readonly/>}
     {chosen.job_type==="Pre-use / return-to-work check"&&<div className="workshop-pre-use-office">
      <strong>Return-to-work safety review · {chosen.completion_checklist?.["Pre-use result"]||"Result not recorded"}</strong>
      <p>Verify every check below and the mechanic's signature. A failed check cannot be approved. An active safety hold must be released through the separate authorised process; this sign-off does not release it.</p>
@@ -814,7 +818,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {(role==="engineer"||role==="office")&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
     {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))}/>} 
     {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">This pre-use inspection must pass before return to work. Safety holds and operator daily checks remain separate.</p>}
-    {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
+    {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields staff={wheelStaff} currentUserId={wheelCurrentUserId} values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
     <div style={{display:"grid",gap:8}}>
      <strong>Parts added</strong>
