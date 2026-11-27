@@ -569,7 +569,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  async function fileStandardJobCard(job:any){
   const chosenAsset=assets.find(a=>a.id===job.asset_id);
   const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
-  const path=job.asset_id+"/"+job.id+"-job-card.pdf";
+  const path=job.asset_id+"/"+job.id+"-job-card-"+new Date().toISOString().replace(/[^0-9]/g,"").slice(0,17)+".pdf";
   const basicPdf=await generateAssetJobCardPdf(fullJob,assetName(job.asset_id));
   const withContributions=await appendWorkshopContributionsToPdf(supabase,{...fullJob,job_type:String(job.job_type||"").startsWith("LOLER")?"General repair":job.job_type},basicPdf);
   const pdf=await appendWorkshopPhotosToPdf(supabase,fullJob,withContributions);
@@ -841,9 +841,9 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {chosen.job_card_number&&<p><b>Job card number:</b> {chosen.job_card_number}</p>}
    {chosen.approved_pdf_path&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.approved_pdf_path)}>{chosen.job_type===WHEEL_JOB_TYPE?"View filed wheel re-torque PDF":String(chosen.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":"View original filed PDF"}</button>}
    {chosen.job_card_pdf_path&&role!=="engineer"&&<button className="secondary" onClick={()=>void viewArchivedPdf(chosen.job_card_pdf_path)}>{chosen.job_type==="Pre-use / return-to-work check"?"View filed Pre-Use Inspection PDF":"View filed JT Asset Job Card"}</button>}
-   {role==="office"&&chosen.status==="Approved"&&String(chosen.job_type||"").startsWith("LOLER")&&!chosen.approved_pdf_path&&!chosen.job_card_pdf_path&&<div className="workshop-missing-document">
+   {role==="office"&&chosen.status==="Approved"&&String(chosen.job_type||"").startsWith("LOLER")&&!chosen.approved_pdf_path&&<div className="workshop-missing-document">
     <strong>Inspector needs to sign again?</strong>
-    <p>Return this approved LOLER examination to the assigned mechanic for a fresh signature. This clears the current approval and signature, removes the unfiled examination from the active register, and keeps the previous records in the audit history.</p>
+    <p>Return this approved LOLER examination to the assigned mechanic for a fresh signature. This clears the current approval and signature, removes the provisional examination from the active register, and preserves the earlier filed JT Job Card and previous approvals in the audit history. A fresh job card will be generated after re-signing.</p>
     <button type="button" className="secondary" disabled={busy} onClick={()=>void (async()=>{
       if(!window.confirm("Return "+(chosen.job_card_number||"this LOLER examination")+" to the inspector for re-signing? The current approval will be revoked."))return;
       await perform(()=>supabase.rpc("return_approved_loler_for_resigning",{p_job:chosen.id}),"LOLER examination returned to inspector for re-signing. Previous sign-offs retained in audit history.");
