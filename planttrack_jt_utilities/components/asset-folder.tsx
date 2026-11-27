@@ -41,7 +41,7 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
   const fileRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{let active=true;void supabase.auth.getUser().then(({data})=>{
-   if(active)setOwnerCanDelete(isAdmin&&data.user?.id==="2807b17d-6507-4808-9909-15e11e44637a");
+   if(active)setOwnerCanDelete(isAdmin&&!!data.user&&["2807b17d-6507-4808-9909-15e11e44637a","cee033cb-7cab-48d6-b7b8-cbc86d97cd71"].includes(data.user.id));
   });return()=>{active=false;};},[supabase,isAdmin]);
   const canDeleteUnsigned=(job:JobCard)=>ownerCanDelete&&
    ["New","Assigned","In progress","Returned for correction"].includes(job.status)&&

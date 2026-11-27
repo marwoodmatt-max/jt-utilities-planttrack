@@ -420,7 +420,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   setWheelCurrentUserId(user.user.id);
   const [j,a,r,e,profile,loler,staff]=await Promise.all([supabase.from("workshop_job_cards").select("*").order("created_at",{ascending:false}),supabase.from("assets").select("id,asset_code,description,category,serial_number,location,manufacturer,model,registration").order("asset_code"),supabase.from("planttrack_roles").select("role").eq("user_id",user.user.id).maybeSingle(),supabase.rpc("list_assignable_workshop_engineers"),supabase.from("profiles").select("role,active").eq("id",user.user.id).maybeSingle(),supabase.from("examinations").select("asset_id,next_due,examined_at").ilike("examination_type","%LOLER%").order("examined_at",{ascending:false}),supabase.rpc("list_wheel_retorque_staff")]);
   if(!active)return;
-  setCanDeleteTestJobs(user.user.id==="2807b17d-6507-4808-9909-15e11e44637a"&&profile.data?.role==="admin"&&profile.data?.active===true);
+  setCanDeleteTestJobs(["2807b17d-6507-4808-9909-15e11e44637a","cee033cb-7cab-48d6-b7b8-cbc86d97cd71"].includes(user.user.id)&&profile.data?.role==="admin"&&profile.data?.active===true);
   if(j.error)setNotice(j.error.message);else setJobs(j.data||[]);
   setAssets(a.data||[]);setRole(r.data?.role||"");setEngineers(e.data||[]);
   if(!staff.error)setWheelStaff((staff.data||[]) as {user_id:string;display_name:string}[]);
