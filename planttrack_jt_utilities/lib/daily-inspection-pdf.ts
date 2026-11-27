@@ -63,7 +63,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
   yDetail-=38;
  }
  write(p1,bold,"Safety-critical defects: lock/tag out, report and do not operate until rectified.",left+8,yDetail-26,9,500,12,2,rgb(.65,.1,.15));
- footer(p1,regular,1,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
+
  const p2=pdf.addPage([W,H]);
  headerBar(p2,bold,"1. Audit","32 / 32 ("+Math.round(passCount/32*100)+"%)",809);
  write(p2,bold,"Date:",left+12,751,9,95);
@@ -78,7 +78,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  headerBar(p2,bold,"1.1. Conditional Checks","",y-5);
  y-=43;
  for(const key of checks.slice(9,17)){row(p2,regular,bold,key,input.answers?.[key]||"",y,29);y-=29;}
- footer(p2,regular,2,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
+
  const p3=pdf.addPage([W,H]);
  let y3=813;
  for(const key of checks.slice(17)){row(p3,regular,bold,key,input.answers?.[key]||"",y3,35);y3-=35;}
@@ -96,9 +96,9 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  }
  write(p3,regular,input.operator,left+195,y3-33,11,295);
  write(p3,regular,date+" "+time+" UK - electronic acknowledgement",left+95,y3-50,9,410);
- footer(p3,regular,3,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
 
- const totalPages=3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0);
+
+
  if(flags>0){
   const faultPage=pdf.addPage([W,H]);
   write(faultPage,bold,"JT UTILITIES — OPERATOR DEFECT REPORT",left,798,14,515);
@@ -124,7 +124,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
     chunk.forEach((line,i)=>write(active,regular,line,left+9,position-41-i*13,9,487,13,1));
     position-=height+11;
   }
-  footer(faultPage,regular,4,totalPages);
+
  }
  if(input.photos?.length){
   for(let offset=0;offset<input.photos.length;offset+=3){
@@ -144,8 +144,9 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
     }catch{write(imagePage,regular,"Photo stored separately with the inspection.",left+9,photoY-24,9,470);}
     photoY-=228;
    }
-   footer(imagePage,regular,pdf.getPageCount(),totalPages);
+
   }
  }
+ pdf.getPages().forEach((page,index)=>footer(page,regular,index+1,pdf.getPageCount()));
  return new Blob([new Uint8Array(await pdf.save())],{type:"application/pdf"});
 }
