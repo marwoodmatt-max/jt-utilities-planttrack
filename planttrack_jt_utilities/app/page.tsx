@@ -9,6 +9,7 @@ import DrawnSignature from "../components/drawn-signature";
 import WorkshopJobPhotos from "../components/workshop-job-photos";
 import WorkshopContributions from "../components/workshop-contributions";
 import WorkshopReassignment from "../components/workshop-reassignment";
+import OperatorDefectEvidence from "../components/operator-defect-evidence";
 import { appendWorkshopContributionsToPdf } from "../lib/workshop-contributions-pdf";
 import { appendWorkshopPhotosToPdf } from "../lib/workshop-photo-pdf";
 import ManagementReports from "../components/management-reports";
@@ -767,6 +768,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   </tbody></table>{!jobs.length&&<p className="muted">No job cards yet. Create one above to start.</p>}</div>
   </>}
   {chosen&&<div ref={selectedJobRef} className={"workshop-selected-job"+(role==="engineer"?" workshop-mechanic-selected":"")} style={{marginTop:20,display:"grid",gap:10}}>
+   {chosen.inspection_id&&<OperatorDefectEvidence supabase={supabase} inspectionId={chosen.inspection_id}/>}
    {role==="office"&&!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
    {chosen.job_type!==WHEEL_JOB_TYPE&&["office","engineer"].includes(role)&&<>
     <div style={{display:"flex",justifyContent:"flex-start",gap:9}}>
