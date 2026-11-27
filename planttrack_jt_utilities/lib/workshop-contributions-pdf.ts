@@ -37,7 +37,14 @@ export async function appendWorkshopContributionsToPdf(
   .eq("job_id",job.id).order("created_at",{ascending:true});
  if(error)throw new Error("Cannot file job PDF without its team work history: "+error.message);
  const entries=(data||[]) as Contribution[];
- if(!entries.length)return original;
+ const transferResult=await supabase.from("workshop_job_reassignments")
+  .select("previous_lead_name,new_lead_name,reassigned_by_name,reason,created_at")
+  .eq("job_id",job.id).order("created_at",{ascending:true});
+ if(transferResult.error)throw new Error("Cannot file job PDF without its lead reassignment history: "+transferResult.error.message);
+ const transfers=(transferResult.data||[]) as {
+  previous_lead_name:string;new_lead_name:string;reassigned_by_name:string;reason:string;created_at:string
+ }[];
+ if(!entries.length&&!transfers.length)return original;
  const pdf=await PDFDocument.load(await original.arrayBuffer());
  const font=await pdf.embedFont(StandardFonts.Helvetica);
  const bold=await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -71,6 +78,20 @@ export async function appendWorkshopContributionsToPdf(
   if(entry.parts_used)write("Parts: "+entry.parts_used,9,false,8);
   write("Hours: "+Number(entry.hours_worked).toFixed(2),9,false,8);
   y-=14;
+ }
+ if(transfers.length){
+  if(y<175)newPage();
+  write("LEAD MECHANIC REASSIGNMENT HISTORY",12,true);
+  y-=10;
+  for(let i=0;i<transfers.length;i++){
+   const move=transfers[i];
+   if(y<165)newPage();
+   write("Transfer "+(i+1)+": "+move.previous_lead_name+" to "+move.new_lead_name,10,true);
+   write("Changed by "+move.reassigned_by_name+" on "+
+    new Date(move.created_at).toLocaleString("en-GB",{timeZone:"Europe/London"}),9);
+   write("Reason: "+move.reason,9);
+   y-=13;
+  }
  }
  return new Blob([new Uint8Array(await pdf.save())],{type:"application/pdf"});
 }
