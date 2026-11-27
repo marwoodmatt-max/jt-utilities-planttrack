@@ -69,6 +69,8 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const [hiredReference,setHiredReference]=useState("");
   const [randomPhotoQuestions,setRandomPhotoQuestions]=useState<string[]>([]);
   const [photos,setPhotos]=useState<Record<string,File>>({});
+  const [defectDetails,setDefectDetails]=useState<Record<string,string>>({});
+  const [defectPhotos,setDefectPhotos]=useState<Record<string,File>>({});
   const [photoLinks,setPhotoLinks]=useState<{prompt:string;url:string}[]>([]);
   const [showingPhotoId,setShowingPhotoId]=useState<string|null>(null);
   const [records,setRecords]=useState<InspectionRow[]>([]);
@@ -94,6 +96,9 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const assetLocked=Boolean(assetId&&lockedAssets.has(assetId));
   const answered=dailyPlantChecks.filter(k=>Boolean(answers[k])).length;
   const defects=dailyPlantChecks.filter(k=>failAnswer(answers[k]));
+  const missingDefectDetails=defects.filter(key=>!defectDetails[key]?.trim());
+  const defectSummary=defects.map(key=>key+": "+(defectDetails[key]||"").trim()).join("\n");
+  const combinedComments=[defectSummary,comments.trim()].filter(Boolean).join("\n\nAdditional operator comments: ");
   const score=dailyPlantChecks.filter(k=>isSuccess(answers[k])||answers[k]==="N/A").length;
   const [mobileStep,setMobileStep]=useState(0);
   const stepNames=["Machine","Checks 1–9","Checks 10–20","Checks 21–32","Photos","Sign & send"];
@@ -101,7 +106,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const stepAnswered=[0,dailyPlantChecks.slice(0,9).filter(k=>answers[k]).length,dailyPlantChecks.slice(9,20).filter(k=>answers[k]).length,dailyPlantChecks.slice(20).filter(k=>answers[k]).length,randomPhotoQuestions.filter(prompt=>Boolean(photos[prompt])).length,0];
   const selectedMachine=plantSource==="own"?!!assetId:!!assetId||!!hiredPlant.trim();
   const projectReady=!!projectId&&selectedMachine&&hours.trim()!==""&&Number.isFinite(Number(hours))&&Number(hours)>=0;
-  const completedStep=(step:number)=>step===0?projectReady:step>=1&&step<=3?stepAnswered[step]===stepCounts[step]:step===4?randomPhotoQuestions.length===3&&stepAnswered[4]===3:!!confirmed&&!!signature&&(!defects.length||!!comments.trim());
+  const completedStep=(step:number)=>step===0?projectReady:step>=1&&step<=3?stepAnswered[step]===stepCounts[step]:step===4?randomPhotoQuestions.length===3&&stepAnswered[4]===3:!!confirmed&&!!signature&&missingDefectDetails.length===0;
   const nextMobileStep=()=>{
     if(!completedStep(mobileStep)){setError(mobileStep===0?"Choose your project and machine, then enter the hours reading.":mobileStep<=3?"Complete each check. Tap Not applicable when a check does not apply.":mobileStep===4?"Take all three required photographs.":"Complete your signature and declaration.");return;}
     setError("");setMobileStep(n=>Math.min(n+1,5));
@@ -143,7 +148,22 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   function uploadPhotoSelection(prompt:string,file:File|undefined){if(!file){setPhotos(old=>{const result={...old};delete result[prompt];return result;});return;}if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>12*1024*1024){setError("Choose a JPG, PNG or WebP photo under 12 MB.");return;}setError("");setPhotos(old=>({...old,[prompt]:file}));}
   async function showPhotos(row:InspectionRow){setShowingPhotoId(row.id);setPhotoLinks([]);setError("");const evidence=row.answers?._photo_evidence as unknown as Evidence[]|undefined;if(!evidence?.length)return;const links:typeof photoLinks=[];for(const entry of evidence){const {data,error}=await supabase.storage.from("plant-inspection-photos").createSignedUrl(entry.path,3600);if(error){setError("Could not open photo evidence: "+error.message);return;}links.push({prompt:entry.prompt,url:data.signedUrl});}setPhotoLinks(links);}
   useEffect(()=>{if(answered===32&&randomPhotoQuestions.length===0)setRandomPhotoQuestions(randomPrompts());},[answered,randomPhotoQuestions.length]);
-  function updateAnswer(key:string,value:string){setAnswers(old=>({...old,[key]:value}));setMessage("");}
+  function updateAnswer(key:string,value:string){
+    setAnswers(old=>({...old,[key]:value}));
+    if(!failAnswer(value)){
+      setDefectDetails(old=>{const next={...old};delete next[key];return next;});
+      setDefectPhotos(old=>{const next={...old};delete next[key];return next;});
+    }
+    setMessage("");
+  }
+  function selectDefectPhoto(key:string,file?:File){
+    if(!file)return;
+    if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>12*1024*1024){
+      setError("Use a JPG, PNG or WebP defect photo no larger than 12 MB.");return;
+    }
+    setError("");
+    setDefectPhotos(old=>({...old,[key]:file}));
+  }
 
   async function generateEvidenceReport(row:{asset_id:string|null;hired_plant_name:string|null;submitted_at:string;meter_reading:number|null;result:string;answers:Record<string,unknown>;comments:string|null}){
     const asset=row.asset_id?assetMap.get(row.asset_id):undefined;
@@ -193,7 +213,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
     if(answered!==32){setError("Complete all 32 checks. Select N/A for items that do not apply.");return;}
     if(!projectId||((plantSource==="own"&&!assetId)||(plantSource==="hired"&&!assetId&&!hiredPlant.trim()))||!operator.trim()||!confirmed||!signature){setError("Select a project and machine (or enter hired plant), sign and confirm the declaration.");return;}
     if(hours.trim()===""||!Number.isFinite(Number(hours))||Number(hours)<0){setError("Enter a valid hours reading.");return;}
-    if(defects.length&&!comments.trim()){setError("Describe all unsafe items in the comments. Defective critical equipment must not be operated.");return;}
+    if(missingDefectDetails.length){setError("Describe each unsafe item before submitting: "+missingDefectDetails.join("; ")+". Defective critical equipment must not be operated.");return;}
     if(randomPhotoQuestions.length!==3||randomPhotoQuestions.some(prompt=>!photos[prompt])){setError("Take each of the three randomly selected machine photographs before submitting.");return;}
     setSaving(true);
     const {data,error:userError}=await supabase.auth.getUser();
@@ -208,14 +228,28 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       if(photoError){if(evidence.length)await supabase.storage.from("plant-inspection-photos").remove(evidence.map(x=>x.path));setError("Mandatory photos could not be saved: "+photoError.message);setSaving(false);return;}
       evidence.push({prompt,path});
     }
+    for(const [i,key] of defects.entries()){
+      const file=defectPhotos[key];
+      if(!file)continue;
+      const ext=file.type==="image/png"?"png":file.type==="image/webp"?"webp":"jpg";
+      const path=data.user.id+"/"+inspectionId+"/defect-"+(i+1)+"."+ext;
+      const {error:photoError}=await supabase.storage.from("plant-inspection-photos")
+        .upload(path,file,{upsert:false,contentType:file.type});
+      if(photoError){
+        await supabase.storage.from("plant-inspection-photos").remove(evidence.map(x=>x.path));
+        setError("Defect photo could not be saved: "+photoError.message);
+        setSaving(false);return;
+      }
+      evidence.push({prompt:"Defect: "+key,path});
+    }
     const submittedAt=new Date().toISOString();
     const {error:saveError}=await supabase.from("inspections").insert({
       submitted_at:submittedAt,
       id:inspectionId,project_id:projectId,
       hired_plant_name:plantSource==="hired"&&!assetId?hiredPlant.trim():null,hired_plant_reference:plantSource==="hired"&&!assetId?(hiredReference.trim()||null):null,
       asset_id:assetId||null,inspection_type:"daily_plant_pre_start",result:defects.length?"fail":"pass",
-      answers:{...answers,_template:"JT Utilities Plant & Machinery Pre Start Inspection",_template_version:"2026-09",_operator:operator.trim(),_location:site.trim(),_signed:true,_signature:signature,_score:score,_photo_evidence:evidence,_project_name:projects.find(p=>p.id===projectId)?.project_name||""},
-      comments:comments.trim()||null,meter_reading:Number(hours),submitted_by:data.user.id,
+      answers:{...answers,_template:"JT Utilities Plant & Machinery Pre Start Inspection",_template_version:"2026-09",_operator:operator.trim(),_location:site.trim(),_signed:true,_signature:signature,_score:score,_defect_details:Object.fromEntries(defects.map(key=>[key,defectDetails[key].trim()])),_photo_evidence:evidence,_project_name:projects.find(p=>p.id===projectId)?.project_name||""},
+      comments:combinedComments||null,meter_reading:Number(hours),submitted_by:data.user.id,
       status:defects.length?"defect_reported":"submitted"
     });
     if(saveError){await supabase.storage.from("plant-inspection-photos").remove(evidence.map(x=>x.path));setError("Unable to save inspection: "+saveError.message);}
@@ -225,8 +259,8 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         const report=await generateEvidenceReport({
           asset_id:assetId||null,hired_plant_name:hiredPlant||null,submitted_at:submittedAt,meter_reading:Number(hours),
           result:defects.length?"fail":"pass",
-          answers:{...answers,_operator:operator.trim(),_location:site.trim(),_signature:signature,_photo_evidence:evidence},
-          comments:comments.trim()
+          answers:{...answers,_operator:operator.trim(),_location:site.trim(),_signature:signature,_defect_details:Object.fromEntries(defects.map(key=>[key,defectDetails[key].trim()])),_photo_evidence:evidence},
+          comments:combinedComments
         });
         const path=data.user.id+"/"+inspectionId+".pdf";
         const uploaded=await supabase.storage.from("plant-inspection-reports").upload(path,report,{contentType:"application/pdf",upsert:false});
@@ -235,7 +269,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         if(linked.error)throw linked.error;
       }catch(err){warning=" PDF filing needs a retry: "+(err instanceof Error?err.message:String(err))+". Use File PDF below.";}
       setMessage((defects.length?"Inspection saved with defects. STOP: lock/tag out critical faults immediately. A workshop job card has been raised for admin review.":"Inspection saved successfully. PDF and three photographs are filed against the asset.")+warning);
-      setMobileStep(0);setAnswers({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
+      setMobileStep(0);setAnswers({});setDefectDetails({});setDefectPhotos({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
     }
     setSaving(false);
   }
@@ -261,6 +295,23 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       style={{height:"100%",minHeight:47,width:"100%",fontWeight:750,textAlign:"center",borderRadius:0,background:failAnswer(answers[key])?"#dc2626":answers[key]==="N/A"?"#74777e":answers[key]?(answers[key]==="Yes"?"#a1b83d":"#059669"):"#fff",color:answers[key]?"#fff":"#333",border:"1px solid #d2d7dd"}}>
       <option value="">Select</option>{statuses(key).map(status=><option key={status} value={status}>{status}</option>)}
     </select>
+    {failAnswer(answers[key])&&<div className="operator-defect-detail">
+      <strong>Defect found — describe the problem for the workshop</strong>
+      <label>What is wrong? (required)
+        <textarea rows={3} maxLength={1000} required value={defectDetails[key]||""}
+          onChange={e=>setDefectDetails(old=>({...old,[key]:e.target.value}))}
+          placeholder="e.g. Hydraulic hose leaking at the boom ram. Oil visible on the ground."/>
+      </label>
+      <div className="operator-defect-pickers">
+        <label className="secondary">📷 Take defect photo
+          <input type="file" accept="image/*" capture="environment" onChange={e=>selectDefectPhoto(key,e.target.files?.[0])}/>
+        </label>
+        <label className="secondary">Choose existing photo
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>selectDefectPhoto(key,e.target.files?.[0])}/>
+        </label>
+      </div>
+      <small>{defectPhotos[key]?"Photo selected: "+defectPhotos[key].name:"Photo optional — attach one if it helps the workshop identify the fault."}</small>
+    </div>}
   </div>;
   const stepNav=(step:number)=><div className="operator-step-nav">
     {step>0&&<button type="button" className="secondary" onClick={()=>{setMobileStep(step-1);setError("");window.scrollTo({top:0,behavior:"smooth"});}}>Back</button>}
@@ -320,7 +371,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       </div>}
       <div className={"operator-sign-section operator-section"+(mobileStep!==5?" operator-step-hidden":"")} style={{padding:15}}>
         {defects.length>0&&<p role="alert" style={{color:"#b91c1c",fontWeight:750}}>Unsafe / No selected on {defects.length} check(s). Equipment with critical defects must not be operated. Report faults immediately.</p>}
-        <label>Comments / defect details{defects.length>0?" (required)":""}<textarea rows={3} required={defects.length>0} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Enter observations, faults or remedial action" style={{width:"100%",marginTop:7}}/></label>
+        <label>Additional comments (optional)<textarea rows={3} value={comments} onChange={e=>setComments(e.target.value)} placeholder="Any other information for the workshop" style={{width:"100%",marginTop:7}}/></label>
         <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>Signed by operator</p>
         <div style={{border:"1px solid #cbd5e1",padding:12,background:"#f8fafc",fontSize:13}}><strong>{operator||"Signed-in operator"}</strong><div style={{fontSize:12,margin:"7px 0"}}>Draw your signature in the box below (finger, mouse or stylus).</div><canvas ref={signatureRef} width={650} height={125} aria-label="Operator handwritten signature pad" onPointerDown={beginSignature} onPointerMove={drawSignature} onPointerUp={endSignature} onPointerCancel={endSignature} style={{display:"block",width:"100%",maxWidth:650,height:125,background:"#fff",border:"1px solid #9da8b5",touchAction:"none",cursor:"crosshair"}}/><button type="button" className="secondary" onClick={clearSignature} style={{marginTop:8}}>Clear signature</button><div style={{color:"#64748b",fontSize:11,marginTop:7}}>Signature and submission date/time are stored with the inspection report.</div></div>
         <label style={{display:"flex",alignItems:"start",gap:9,fontWeight:500}}><input type="checkbox" required checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> I have carried out the above checks and confirmed that I have checked around the machine before moving off.</label>
@@ -332,7 +383,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
       <div className="panel-head"><div><h3>Completed inspection reports</h3><p>Saved against each asset · Download the three-page PDF</p></div><select aria-label="Filter inspection history by asset" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">All assets</option>{assets.map(a=><option key={a.id} value={a.id}>{a.asset_code}</option>)}</select></div>
       {loading?<p>Loading inspections…</p>:filtered.length===0?<p className="muted">No daily pre-start inspections recorded yet.</p>:<div className="table-wrap"><table><thead><tr><th>Project</th><th>Asset</th><th>Date / time</th><th>Operator</th><th>Result</th><th>Report</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id}><td>{projects.find(p=>p.id===r.project_id)?.project_name||r.answers?._project_name||"Not recorded"}</td><td>{r.asset_id?assetMap.get(r.asset_id)?.asset_code||"Asset":r.hired_plant_name||"Hired plant"}</td><td>{showDate(r.submitted_at)}</td><td>{r.answers?._operator||"Not recorded"}</td><td><span className={"tag "+(r.result==="fail"?"red":"green")}>{r.result==="fail"?"Defects flagged":"Complete"}</span></td><td><button className="secondary" type="button" onClick={()=>void download(r)}>Download PDF</button> {!r.report_path&&<button className="secondary" type="button" disabled={filing===r.id} onClick={()=>void fileReport(r)}>{filing===r.id?"Filing…":"File PDF"}</button>} <button type="button" className="secondary" onClick={()=>setExpanded(expanded===r.id?null:r.id)}>Details</button> {(r.answers?._photo_evidence as unknown as Evidence[]|undefined)?.length?<button type="button" className="secondary" onClick={()=>void showPhotos(r)}>View photos</button>:null}</td></tr>)}</tbody></table>
       {showingPhotoId&&<div style={{padding:14,borderTop:"1px solid #ddd"}}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><strong>Photo evidence</strong><button className="secondary" type="button" onClick={()=>{setShowingPhotoId(null);setPhotoLinks([]);}}>Close</button></div>{photoLinks.map((p,i)=><div key={i} style={{marginTop:13}}><p><strong>{p.prompt}</strong></p><a href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt={p.prompt} style={{maxWidth:340,width:"100%",height:"auto",border:"1px solid #ddd"}}/></a></div>)}</div>}
-      {expanded&&records.find(r=>r.id===expanded)&&<div style={{padding:15,borderTop:"1px solid #ddd"}}>{(()=>{const r=records.find(row=>row.id===expanded)!;return <><strong>Inspection responses</strong><p>{r.comments||"No comments"}</p>{dailyPlantChecks.map(k=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:12,borderBottom:"1px solid #eee",padding:"5px 0"}}><span>{k}</span><strong>{r.answers?.[k]||"—"}</strong></div>)}</>})()}</div>}</div>}
+      {expanded&&records.find(r=>r.id===expanded)&&<div style={{padding:15,borderTop:"1px solid #ddd"}}>{(()=>{const r=records.find(row=>row.id===expanded)!;return <><strong>Inspection responses</strong><p style={{whiteSpace:"pre-wrap"}}>{r.comments||"No comments"}</p>{dailyPlantChecks.map(k=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:12,borderBottom:"1px solid #eee",padding:"5px 0"}}><span>{k}</span><strong>{r.answers?.[k]||"—"}</strong></div>)}</>})()}</div>}</div>}
     </div>
   </section>;
 }
