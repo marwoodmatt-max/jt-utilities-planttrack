@@ -63,7 +63,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
   yDetail-=38;
  }
  write(p1,bold,"Safety-critical defects: lock/tag out, report and do not operate until rectified.",left+8,yDetail-26,9,500,12,2,rgb(.65,.1,.15));
- footer(p1,regular,1,input.photos?.length?4:3);
+ footer(p1,regular,1,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
  const p2=pdf.addPage([W,H]);
  headerBar(p2,bold,"1. Audit","32 / 32 ("+Math.round(passCount/32*100)+"%)",809);
  write(p2,bold,"Date:",left+12,751,9,95);
@@ -78,7 +78,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  headerBar(p2,bold,"1.1. Conditional Checks","",y-5);
  y-=43;
  for(const key of checks.slice(9,17)){row(p2,regular,bold,key,input.answers?.[key]||"",y,29);y-=29;}
- footer(p2,regular,2,input.photos?.length?4:3);
+ footer(p2,regular,2,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
  const p3=pdf.addPage([W,H]);
  let y3=813;
  for(const key of checks.slice(17)){row(p3,regular,bold,key,input.answers?.[key]||"",y3,35);y3-=35;}
@@ -96,24 +96,56 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
  }
  write(p3,regular,input.operator,left+195,y3-33,11,295);
  write(p3,regular,date+" "+time+" UK - electronic acknowledgement",left+95,y3-50,9,410);
- footer(p3,regular,3,input.photos?.length?4:3);
- if(input.photos?.length){
-  const p4=pdf.addPage([W,H]);
-  write(p4,bold,"JT UTILITIES - INSPECTION PHOTO EVIDENCE",left,801,15,520);
-  write(p4,regular,input.assetName,left,782,9,500);
-  write(p4,regular,date+" "+time+" UK",left,766,9,500);
-  p4.drawLine({start:{x:left,y:753},end:{x:right,y:753},thickness:1.5,color:rgb(.85,.12,.2)});
-  let photoY=731;
-  for(let i=0;i<Math.min(3,input.photos.length);i++){
-   const photo=input.photos[i];write(p4,bold,(i+1)+". "+photo.prompt,left+8,photoY,10,490);
-   try{
-    const embedded=photo.mimeType==="image/png"?await pdf.embedPng(photo.bytes):await pdf.embedJpg(photo.bytes);
-    const size=embedded.scaleToFit(320,192);
-    p4.drawImage(embedded,{x:left+9,y:photoY-202,width:size.width,height:size.height});
-   }catch{write(p4,regular,"Photo stored separately with the inspection.",left+9,photoY-24,9,470);}
-   photoY-=228;
+ footer(p3,regular,3,3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0));
+
+ const totalPages=3+Math.ceil((input.photos?.length||0)/3)+(flags>0?1:0);
+ if(flags>0){
+  const faultPage=pdf.addPage([W,H]);
+  write(faultPage,bold,"JT UTILITIES — OPERATOR DEFECT REPORT",left,798,14,515);
+  write(faultPage,regular,input.assetName+"  |  "+date+" "+time+" UK",left,779,9,510);
+  faultPage.drawLine({start:{x:left,y:764},end:{x:right,y:764},thickness:1.5,color:red});
+  write(faultPage,regular,"ATTENTION WORKSHOP — Unsafe equipment must not be operated until assessed and made safe.",left,745,9,500,12,2,red);
+  let position=715;
+  const descriptions=(input.answers?._defect_details||{}) as Record<string,string>;
+  for(const key of checks.filter(check=>["Unsafe","No"].includes(input.answers?.[check]))){
+    const details=String(descriptions[key]||"See inspection comments");
+    const rows=wrap(regular,details,9,490);
+    const height=37+rows.length*13;
+    if(position-height<65){
+     // A defect can be lengthy. Continue on a fresh report page.
+     const next=pdf.addPage([W,H]);position=785;
+     write(next,bold,"OPERATOR DEFECT REPORT — CONTINUED",left,position,13,510);
+     position-=31;
+    }
+    const active=pdf.getPages()[pdf.getPageCount()-1];
+    active.drawRectangle({x:left,y:position-22,width:right-left,height:26,color:rgb(.97,.91,.92)});
+    write(active,bold,key+" — UNSAFE / NO",left+8,position-13,9,490);
+    const chunk=rows.length?rows:["No further details provided"];
+    chunk.forEach((line,i)=>write(active,regular,line,left+9,position-41-i*13,9,487,13,1));
+    position-=height+11;
   }
-  footer(p4,regular,4,4);
+  footer(faultPage,regular,4,totalPages);
+ }
+ if(input.photos?.length){
+  for(let offset=0;offset<input.photos.length;offset+=3){
+   const imagePage=pdf.addPage([W,H]);
+   write(imagePage,bold,"JT UTILITIES - INSPECTION PHOTO EVIDENCE",left,801,15,520);
+   write(imagePage,regular,input.assetName,left,782,9,500);
+   write(imagePage,regular,date+" "+time+" UK",left,766,9,500);
+   imagePage.drawLine({start:{x:left,y:753},end:{x:right,y:753},thickness:1.5,color:rgb(.85,.12,.2)});
+   let photoY=731;
+   for(let i=offset;i<Math.min(offset+3,input.photos.length);i++){
+    const photo=input.photos[i];
+    write(imagePage,bold,(i+1)+". "+photo.prompt,left+8,photoY,10,490,12,2);
+    try{
+     const embedded=photo.mimeType==="image/png"?await pdf.embedPng(photo.bytes):await pdf.embedJpg(photo.bytes);
+     const size=embedded.scaleToFit(320,188);
+     imagePage.drawImage(embedded,{x:left+9,y:photoY-199,width:size.width,height:size.height});
+    }catch{write(imagePage,regular,"Photo stored separately with the inspection.",left+9,photoY-24,9,470);}
+    photoY-=228;
+   }
+   footer(imagePage,regular,pdf.getPageCount(),totalPages);
+  }
  }
  return new Blob([new Uint8Array(await pdf.save())],{type:"application/pdf"});
 }
