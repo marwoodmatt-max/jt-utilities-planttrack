@@ -396,6 +396,8 @@ function WorkshopDashboardSummary({supabase,onOpen}:{supabase:SupabaseClient;onO
 function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activeOnly?:boolean}){
  const [jobs,setJobs]=useState<any[]>([]),[assets,setAssets]=useState<any[]>([]),[role,setRole]=useState(""),[engineers,setEngineers]=useState<any[]>([]);
  const [canDeleteTestJobs,setCanDeleteTestJobs]=useState(false);
+ const [filingJobId,setFilingJobId]=useState<string|null>(null);
+ const [filingFeedback,setFilingFeedback]=useState<Record<string,string>>({});
  const [wheelStaff,setWheelStaff]=useState<{user_id:string;display_name:string}[]>([]);
  const [wheelCurrentUserId,setWheelCurrentUserId]=useState("");
  const [asset,setAsset]=useState(""),[title,setTitle]=useState(""),[instructions,setInstructions]=useState(""),[priority,setPriority]=useState("Normal"),[engineer,setEngineer]=useState("");
@@ -842,7 +844,8 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {role==="office"&&chosen.status==="Approved"&&(!chosen.approved_pdf_path||(chosen.job_type!==WHEEL_JOB_TYPE&&!chosen.job_card_pdf_path))&&<div className="workshop-missing-document">
     <strong>Approved job — document filing needs attention</strong>
     <p>{!chosen.approved_pdf_path?"Original approved document not filed. ":""}{chosen.job_type!==WHEEL_JOB_TYPE&&!chosen.job_card_pdf_path?"JT Asset Job Card not separately filed.":""} The office sign-off is saved; existing PDFs will not be overwritten.</p>
-    <button className="secondary" type="button" disabled={busy} onClick={()=>void perform(async()=>{await archiveApprovedPdf(chosen);return {error:null};},"Missing PDF(s) filed against the asset. Original documents preserved.")}>{busy?"Filing…":"File missing job documents"}</button>
+    <button className="secondary" type="button" disabled={filingJobId===chosen.id} onClick={()=>void (async()=>{setFilingJobId(chosen.id);setFilingFeedback(prev=>({...prev,[chosen.id]:"Generating and filing approved PDFs…"}));try{await archiveApprovedPdf(chosen);setFilingFeedback(prev=>({...prev,[chosen.id]:"PDF filing completed. Refreshing the asset records…"}));setRefresh(v=>v+1);}catch(e){const details=e instanceof Error?e.message:(typeof e==="string"?e:JSON.stringify(e));setFilingFeedback(prev=>({...prev,[chosen.id]:"PDF filing failed: "+details}));}finally{setFilingJobId(null);}})()}>{filingJobId===chosen.id?"Filing documents…":"File missing job documents"}</button>
+    {filingFeedback[chosen.id]&&<p role="status" aria-live="polite" style={{fontWeight:600,color:filingFeedback[chosen.id].startsWith("PDF filing failed")?"#9a3412":"#164e63"}}>{filingFeedback[chosen.id]}</p>}
    </div>}
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
