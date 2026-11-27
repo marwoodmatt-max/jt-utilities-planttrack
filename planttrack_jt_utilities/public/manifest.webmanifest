@@ -14,6 +14,12 @@
   "theme_color": "#14243a",
   "icons": [
     {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/planttrack-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
