@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Plant, inspections, LOLER and workshop maintenance management.",
   manifest: "/manifest.webmanifest",
   applicationName: "JT Utilities PlantTrack",
-  icons: { icon: [{ url: "/planttrack-icon.svg", type: "image/svg+xml" }], apple: "/planttrack-icon.svg" },
+  icons: { icon: [{ url: "/planttrack-icon.svg", type: "image/svg+xml" }], apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }] },
   appleWebApp: { capable: true, title: "PlantTrack", statusBarStyle: "default" }
 };
 export default function RootLayout({ children }: Readonly<{children: React.ReactNode}>) {
