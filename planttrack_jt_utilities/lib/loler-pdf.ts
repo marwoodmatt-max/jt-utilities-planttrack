@@ -296,9 +296,46 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   const interval:[string,string][]=[["ACCESSORIES 6 MONTHLY","ACCESSORIES 6 MONTHLY"],["LIFTING PERSONS 6 MONTHLY","LIFTING PERSONS 6 MONTHLY"],["APPLIANCES 12 MONTHLY","APPLIANCES 12 MONTHLY"],["EXAMINATION SCHEME","EXAMINATION SCHEME"],["EXCEPTIONAL CIRCUMSTANCES","EXCEPTIONAL CIRCUMSTANCES"]];
   interval.forEach(([label,key],i)=>{const yy=594-i*24;text(label,404,yy,6.6,regular,127,2);page.drawRectangle({x:539,y:yy-4,width:11,height:11,borderColor:edge,borderWidth:.5});mark(key,541,yy-1);});
   const cols=[58,85,183,58,64,69],labels=["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"];
+  const equipmentKeys=["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"];
+  let equipmentRows:Record<string,unknown>[]=[];
+  try{const parsed=JSON.parse(String(details["LOLER EQUIPMENT LINES"]||"[]"));if(Array.isArray(parsed))equipmentRows=parsed.filter(item=>item&&typeof item==="object");}catch{}
+  if(!equipmentRows.length)equipmentRows=[Object.fromEntries(equipmentKeys.map(key=>[key,v(key)]))];
+  const equipmentValues=equipmentRows.map((row,index)=>equipmentKeys.map(key=>ascii(row[key]??(index===0?details[key]:"")).trim()));
   let xx=37;cols.forEach((w,i)=>{cell(xx,464,w,35,labels[i],undefined,w);xx+=w;});
-  const vals=[v("QUANTITY"),v("ID NO/S")||assetLabel.split(" ")[0],v("EQUIPMENT DESCRIPTION")||assetLabel,v("SWL/WLL"),v("PROOF LOAD"),v("NEXT EXAMINATION / TEST DUE DATE")];
-  xx=37;cols.forEach((w,i)=>{cell(xx,429,w,118,"",vals[i],0,7);xx+=w;});
+  const rowHeight=118/5;
+  for(let n=0;n<5;n++){
+   const vals=equipmentValues[n]||equipmentKeys.map(()=>"");
+   let x=37;cols.forEach((w,i)=>{cell(x,429-n*rowHeight,w,rowHeight,"",vals[i],0,6.4);x+=w;});
+  }
+  // Preserve every additional attachment on a continuation page.
+  if(equipmentValues.length>5){
+   let annex=pdf.addPage([595.3,841.9]);
+   let top=780;
+   const heading=()=>{
+    annex.drawText("JT UTILITIES LTD - LOLER ATTACHMENTS / EQUIPMENT CONTINUED",{x:37,y:812,size:10,font:bold,color:navy});
+    annex.drawText(ascii("Certificate "+c+" / "+String(job.job_card_number||"")),{x:37,y:795,size:8,font:regular,color:ink});
+    let x=37;cols.forEach((w,i)=>{
+     annex.drawRectangle({x,y:top-35,width:w,height:35,color:shade,borderColor:edge,borderWidth:.55});
+     const title=ascii(labels[i]);const midpoint=Math.max(1,Math.floor(title.length/2));
+     annex.drawText(title.slice(0,midpoint),{x:x+3,y:top-12,size:6,font:bold,color:ink});
+     annex.drawText(title.slice(midpoint),{x:x+3,y:top-23,size:6,font:bold,color:ink});
+     x+=w;
+    });top-=35;
+   };
+   heading();
+   for(let index=5;index<equipmentValues.length;index++){
+    if(top<85){annex=pdf.addPage([595.3,841.9]);top=780;heading();}
+    const vals=equipmentValues[index];let x=37;
+    cols.forEach((w,col)=>{
+     annex.drawRectangle({x,y:top-48,width:w,height:48,borderColor:edge,borderWidth:.55});
+     const raw=ascii(vals[col]);const maxChars=Math.max(8,Math.floor((w-8)/3.5));
+     for(let i=0;i<4;i++){
+      const slice=raw.slice(i*maxChars,(i+1)*maxChars).trim();
+      if(slice)annex.drawText(slice,{x:x+4,y:top-11-i*9,size:6.4,font:regular,color:ink});
+     }x+=w;
+    });top-=48;
+   }
+  }
   cell(37,296,520,27,"CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR 'NONE'",v("CRITICAL DEFECTS FOUND DURING EXAMINATION/TESTING OR ‘NONE’"),273,6.6);
   cell(37,269,520,27,"FURTHER DETAILS OR REMEDIAL ACTION REQUIRED",v("FURTHER DETAILS OR REMEDIAL ACTION REQUIRED")||job.engineer_work,273,6.6);
   page.drawRectangle({x:37,y:225,width:520,height:17,color:shade,borderColor:edge,borderWidth:.55});text("DECLARATION BY INSPECTOR",43,230,8,regular,490);
