@@ -747,3 +747,31 @@ tbody tr:hover{background:#fff5f6}
 .workshop-photo-pick-actions .workshop-photo-pick:first-child{background:#182b47;color:#fff;border-color:#182b47}
 .workshop-photo-pick-actions .workshop-photo-pick:first-child:hover{background:#304665;color:#fff}
 @media(max-width:700px){.workshop-photo-pick-actions{display:grid;grid-template-columns:1fr;gap:9px}.workshop-photo-pick-actions .workshop-photo-pick{width:100%;min-width:0;justify-content:center}}
+
+/* Searchable asset picker and shared, auditable workshop job contributions */
+.workshop-asset-search-label{display:grid;gap:8px;margin:7px 0 14px!important;color:#1c314b;font-size:14px;font-weight:800}
+.workshop-asset-search-label input{width:100%;min-height:51px;font-size:16px;padding:11px 14px;background:#fff;border:1.5px solid #9baec4;border-radius:10px}
+.workshop-asset-search-label input:focus-visible{outline:3px solid rgba(45,102,166,.25);border-color:#527eaf}
+.workshop-team-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.workshop-team-tabs button{min-height:51px;padding:11px 12px;background:#fff;color:#263954;border:2px solid #b7c4d3;border-radius:10px;font-size:15px;font-weight:850;cursor:pointer}
+.workshop-team-tabs button.selected{background:#1b2c45;color:#fff;border-color:#1b2c45}
+.workshop-helper-notice{background:#edf5ff;padding:12px;border:1px solid #b6c9df;border-radius:9px;font-size:13px;color:#233e63;line-height:1.5}
+.workshop-contributions{display:grid;gap:13px;padding:16px;margin:7px 0 12px;background:#f5f8fc;border:1px solid #ccd9e8;border-radius:13px;min-width:0}
+.workshop-contributions-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px}
+.workshop-contributions-head h4{display:flex;gap:8px;align-items:center;font-size:16px;margin:0 0 7px;color:#1b304a}
+.workshop-contributions-head p{margin:0;max-width:600px}
+.workshop-contributions-list{display:grid;gap:9px;max-height:440px;overflow-y:auto}
+.workshop-contribution-entry{display:grid;gap:7px;padding:12px;border:1px solid #d5e0ec;background:#fff;border-radius:10px}
+.workshop-contribution-entry>div{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.workshop-contribution-entry>div strong{color:#122b4a;font-size:13px}
+.workshop-contribution-entry>div span{display:inline-flex;align-items:center;gap:5px;color:#64758a;font-size:11px}
+.workshop-contribution-entry p{margin:0;white-space:pre-wrap;font-size:13px;line-height:1.55}
+.workshop-contribution-entry small{color:#54677e;overflow-wrap:anywhere}
+.workshop-contribution-form{display:grid;gap:12px;padding:14px;background:#fff;border:1px solid #c5d6e8;border-radius:11px}
+.workshop-contribution-form>strong{display:flex;align-items:center;gap:7px;color:#1b304a}
+.workshop-contribution-form label{display:grid;gap:7px;margin:0!important;font-weight:750;font-size:13px}
+.workshop-contribution-form textarea,.workshop-contribution-form input{width:100%;font-size:16px;min-height:49px;padding:11px;border:1px solid #aebed0;border-radius:8px;background:#fff}
+.workshop-contribution-form textarea{min-height:75px}
+.workshop-contribution-form button{min-height:52px;font-size:14px;justify-content:center}
+.workshop-contribution-form small{color:#63758b;line-height:1.5}
+@media(max-width:700px){.workshop-contributions{padding:12px;gap:12px;margin:7px 0}.workshop-contributions-head h4{font-size:15px}.workshop-team-tabs button{font-size:14px;min-height:54px}.workshop-contribution-entry{padding:10px}.workshop-contribution-form{padding:11px}}
