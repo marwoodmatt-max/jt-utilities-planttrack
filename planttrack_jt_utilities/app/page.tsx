@@ -7,6 +7,7 @@ import { generateWheelRetorquePdf, WHEEL_JOB_TYPE, WHEEL_REQUIRED, missingWheelF
 import WheelRetorqueFields from "../components/wheel-retorque-fields";
 import WorkshopJobPhotos from "../components/workshop-job-photos";
 import WorkshopContributions from "../components/workshop-contributions";
+import WorkshopReassignment from "../components/workshop-reassignment";
 import { appendWorkshopContributionsToPdf } from "../lib/workshop-contributions-pdf";
 import { appendWorkshopPhotosToPdf } from "../lib/workshop-photo-pdf";
 import ManagementReports from "../components/management-reports";
@@ -749,6 +750,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
     </div>}
    </>}
    {role==="office"&&<button type="button" className="secondary workshop-office-mobile-back" onClick={()=>{setSelected("");setNotice("");window.scrollTo({top:0,behavior:"smooth"});}}>← Back to office jobs</button>}
+   <WorkshopReassignment supabase={supabase} jobId={chosen.id} jobType={chosen.job_type} status={chosen.status} leadId={chosen.assigned_engineer} staff={wheelStaff} canReassign={role==="engineer"||role==="office"} onReassigned={()=>{setSelected("");setRefresh(n=>n+1);setNotice("Lead mechanic reassigned. Open the job to view the new assignment and audit trail.");}}/>
    <WorkshopContributions supabase={supabase} jobId={chosen.id} leadName={leadName(chosen)} editable={role==="engineer"&&mechanicActive(chosen)&&!!chosen.assigned_engineer}/>
    {role==="engineer"&&<div className="mechanic-mobile-completion">
     <div className="mechanic-mobile-head">
