@@ -775,3 +775,19 @@ tbody tr:hover{background:#fff5f6}
 .workshop-contribution-form button{min-height:52px;font-size:14px;justify-content:center}
 .workshop-contribution-form small{color:#63758b;line-height:1.5}
 @media(max-width:700px){.workshop-contributions{padding:12px;gap:12px;margin:7px 0}.workshop-contributions-head h4{font-size:15px}.workshop-team-tabs button{font-size:14px;min-height:54px}.workshop-contribution-entry{padding:10px}.workshop-contribution-form{padding:11px}}
+
+/* Reassign unfinished workshop jobs with a clear reason and permanent history */
+.workshop-reassignment{display:grid;gap:12px;border:1px solid #c9d9e9;border-radius:13px;background:#fff;padding:15px;margin:7px 0}
+.workshop-reassignment-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.workshop-reassignment-heading>strong,.workshop-reassignment-history>strong{display:inline-flex;align-items:center;gap:7px;font-size:14px;color:#1e334f}
+.workshop-reassignment-heading button{min-height:43px}
+.workshop-reassignment-form{display:grid;gap:13px;padding:13px;background:#f5f8fc;border:1px solid #dbe5ef;border-radius:10px}
+.workshop-reassignment-form>p{margin:0;font-size:13px;line-height:1.55}
+.workshop-reassignment-form>label{display:grid;gap:6px;font-size:13px;font-weight:750;margin:0}
+.workshop-reassignment-form select,.workshop-reassignment-form textarea{display:block;width:100%;background:#fff;font-size:16px;padding:10px 12px;border:1px solid #b2c2d3;border-radius:8px}
+.workshop-reassignment-form button{min-height:49px}
+.workshop-reassignment-history{display:grid;gap:10px}
+.workshop-reassignment-history article{display:grid;gap:5px;padding:12px;background:#f8fafc;border:1px solid #dae4ed;border-radius:9px}
+.workshop-reassignment-history article b{font-size:13px}
+.workshop-reassignment-history article small{font-size:11px;color:#687991}
+.workshop-reassignment-history article p{margin:0;white-space:pre-wrap;line-height:1.5;font-size:13px}
