@@ -106,7 +106,7 @@ export async function generateDailyInspectionPdf(input:Input):Promise<Blob>{
   faultPage.drawLine({start:{x:left,y:764},end:{x:right,y:764},thickness:1.5,color:red});
   write(faultPage,regular,"ATTENTION WORKSHOP — Unsafe equipment must not be operated until assessed and made safe.",left,745,9,500,12,2,red);
   let position=715;
-  const descriptions=(input.answers?._defect_details||{}) as Record<string,string>;
+  const descriptions=(input.answers?._defect_details||{}) as unknown as Record<string,string>;
   for(const key of checks.filter(check=>["Unsafe","No"].includes(input.answers?.[check]))){
     const details=String(descriptions[key]||"See inspection comments");
     const rows=wrap(regular,details,9,490);
