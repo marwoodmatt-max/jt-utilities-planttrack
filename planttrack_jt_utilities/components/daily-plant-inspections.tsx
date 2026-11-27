@@ -106,9 +106,9 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
   const stepAnswered=[0,dailyPlantChecks.slice(0,9).filter(k=>answers[k]).length,dailyPlantChecks.slice(9,20).filter(k=>answers[k]).length,dailyPlantChecks.slice(20).filter(k=>answers[k]).length,randomPhotoQuestions.filter(prompt=>Boolean(photos[prompt])).length,0];
   const selectedMachine=plantSource==="own"?!!assetId:!!assetId||!!hiredPlant.trim();
   const projectReady=!!projectId&&selectedMachine&&hours.trim()!==""&&Number.isFinite(Number(hours))&&Number(hours)>=0;
-  const completedStep=(step:number)=>step===0?projectReady:step>=1&&step<=3?stepAnswered[step]===stepCounts[step]:step===4?randomPhotoQuestions.length===3&&stepAnswered[4]===3:!!confirmed&&!!signature&&missingDefectDetails.length===0;
+  const completedStep=(step:number)=>step===0?projectReady:step>=1&&step<=3?stepAnswered[step]===stepCounts[step]&&dailyPlantChecks.slice(step===1?0:step===2?9:20,step===1?9:step===2?20:32).every(k=>!failAnswer(answers[k])||!!defectDetails[k]?.trim()):step===4?randomPhotoQuestions.length===3&&stepAnswered[4]===3:!!confirmed&&!!signature&&missingDefectDetails.length===0;
   const nextMobileStep=()=>{
-    if(!completedStep(mobileStep)){setError(mobileStep===0?"Choose your project and machine, then enter the hours reading.":mobileStep<=3?"Complete each check. Tap Not applicable when a check does not apply.":mobileStep===4?"Take all three required photographs.":"Complete your signature and declaration.");return;}
+    if(!completedStep(mobileStep)){setError(mobileStep===0?"Choose your project and machine, then enter the hours reading.":mobileStep<=3?"Complete each check. If you select Unsafe or No, describe that particular defect before continuing.":mobileStep===4?"Take all three required photographs.":"Complete your signature and declaration.");return;}
     setError("");setMobileStep(n=>Math.min(n+1,5));
     window.scrollTo({top:0,behavior:"smooth"});
   };
@@ -268,7 +268,7 @@ export default function DailyPlantInspections({supabase}:{supabase:SupabaseClien
         const linked=await supabase.from("inspections").update({report_path:path}).eq("id",inspectionId);
         if(linked.error)throw linked.error;
       }catch(err){warning=" PDF filing needs a retry: "+(err instanceof Error?err.message:String(err))+". Use File PDF below.";}
-      setMessage((defects.length?"Inspection saved with defects. STOP: lock/tag out critical faults immediately. A workshop job card has been raised for admin review.":"Inspection saved successfully. PDF and three photographs are filed against the asset.")+warning);
+      setMessage((defects.length?"Inspection saved with "+defects.length+" defect(s) and workshop descriptions. STOP: lock/tag out critical faults immediately. A workshop job card has been raised for admin review.":"Inspection saved successfully. PDF and three photographs are filed against the asset.")+warning);
       setMobileStep(0);setAnswers({});setDefectDetails({});setDefectPhotos({});setComments("");setConfirmed(false);clearSignature();setHours("");setAssetId("");setProjectId("");setHiredPlant("");setHiredReference("");setPhotos({});setRandomPhotoQuestions([]);setSite("");await load();
     }
     setSaving(false);
