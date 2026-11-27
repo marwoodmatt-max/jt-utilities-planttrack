@@ -568,7 +568,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   const fullJob={...job,asset_code:chosenAsset?.asset_code,asset_description:chosenAsset?.description,asset_serial_number:chosenAsset?.serial_number,asset_location:chosenAsset?.location};
   const path=job.asset_id+"/"+job.id+"-job-card.pdf";
   const basicPdf=await generateAssetJobCardPdf(fullJob,assetName(job.asset_id));
-  const withContributions=await appendWorkshopContributionsToPdf(supabase,fullJob,basicPdf);
+  const withContributions=await appendWorkshopContributionsToPdf(supabase,{...fullJob,job_type:String(job.job_type||"").startsWith("LOLER")?"General repair":job.job_type},basicPdf);
   const pdf=await appendWorkshopPhotosToPdf(supabase,fullJob,withContributions);
   const upload=await supabase.storage.from("planttrack-job-certificates").upload(path,pdf,{contentType:"application/pdf",upsert:false});
   if(upload.error&&!upload.error.message.toLowerCase().includes("already exists"))throw upload.error;
