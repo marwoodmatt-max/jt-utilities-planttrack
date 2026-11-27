@@ -302,9 +302,10 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   if(!equipmentRows.length)equipmentRows=[Object.fromEntries(equipmentKeys.map(key=>[key,v(key)]))];
   const equipmentValues=equipmentRows.map((row,index)=>equipmentKeys.map(key=>ascii(row[key]??(index===0?details[key]:"")).trim()));
   let xx=37;cols.forEach((w,i)=>{cell(xx,464,w,35,labels[i],undefined,w);xx+=w;});
-  const rowHeight=118/5;
-  for(let n=0;n<5;n++){
-   const vals=equipmentValues[n]||equipmentKeys.map(()=>"");
+  const visibleRows=Math.min(5,equipmentValues.length);
+  const rowHeight=118/Math.max(1,visibleRows);
+  for(let n=0;n<visibleRows;n++){
+   const vals=equipmentValues[n];
    let x=37;cols.forEach((w,i)=>{cell(x,429-n*rowHeight,w,rowHeight,"",vals[i],0,6.4);x+=w;});
   }
   // Preserve every additional attachment on a continuation page.
