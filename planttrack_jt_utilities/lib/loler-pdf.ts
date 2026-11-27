@@ -306,7 +306,16 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   page.drawRectangle({x:37,y:194,width:520,height:31,borderColor:edge,borderWidth:.55});
   const declaration=test?"TEST ONLY: This is a simulated software test. No thorough examination or valid inspector declaration has taken place.":defects.toUpperCase()==="NONE"?"I hereby certify that no critical defects were found on the equipment described on this certificate at the time of inspection and that this equipment was found to be fit for use.":"Inspector declaration withheld pending confirmed examination findings and competent-person sign-off.";
   text(declaration,43,213,8,regular,508,3);
-  cell(37,194,260,24,"NAME OF INSPECTOR",v("NAME OF INSPECTOR"),101);cell(297,194,260,24,"SIGNATURE",test?"TEST ONLY - SIMULATED":job.engineer_signature,109,6.5);
+  cell(37,194,260,24,"NAME OF INSPECTOR",v("NAME OF INSPECTOR"),101);
+  const handwritten=typeof details["Inspector handwritten signature PNG"]==="string"?details["Inspector handwritten signature PNG"]:"";
+  if(!test&&handwritten.startsWith("data:image/png;base64,")){
+   cell(297,194,260,24,"SIGNATURE",undefined,109,6.5);
+   try{
+    const signImage=await pdf.embedPng(handwritten);
+    const scaled=signImage.scaleToFit(145,21);
+    page.drawImage(signImage,{x:412,y:171+(21-scaled.height)/2,width:scaled.width,height:scaled.height});
+   }catch{throw new Error("The handwritten inspector signature cannot be embedded in the LOLER PDF. Please sign again.");}
+  }else cell(297,194,260,24,"SIGNATURE",test?"TEST ONLY - SIMULATED":"Signature not recorded",109,6.5);
   cell(37,170,520,22,"QUALIFICATIONS",v("QUALIFICATIONS"),101);cell(37,148,520,22,"COMPANY",v("COMPANY"),101);
   text("JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR",145,90,8,regular,370,2);
   if(test)text("TEST ONLY - NOT FOR STATUTORY USE OR EVIDENCE OF EXAMINATION",37,64,8,bold,520,2,red);
