@@ -266,7 +266,7 @@ export async function generateApprovedJobPdf(job:Job,assetLabel:string,draft=fal
   const details=values;
   const v=(key:string)=>ascii(details[key]??"").trim();
   const text=(str:unknown,x:number,y:number,size=7,font=regular,width=100,maxLines=2,color=ink)=>{
-   const words=ascii(str||"").split(/\\s+/);let lines:string[]=[];let line="";
+   const words=ascii(str||"").split(/\s+/).filter(Boolean);let lines:string[]=[];let line="";
    for(const word of words){let chunk="";for(const ch of word){if(chunk&&font.widthOfTextAtSize(chunk+ch,size)>width){if(line){lines.push(line);line="";}lines.push(chunk);chunk="";}chunk+=ch;}
     const candidate=line?line+" "+chunk:chunk;if(font.widthOfTextAtSize(candidate,size)>width&&line){lines.push(line);line=chunk;}else line=candidate;
    }if(line)lines.push(line);

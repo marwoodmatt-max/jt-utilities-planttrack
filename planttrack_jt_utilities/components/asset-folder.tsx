@@ -260,7 +260,11 @@ export default function AssetFolder({supabase,asset,canUpload,isAdmin,onBack,onE
      <td><b>{job.job_card_number||"Number pending"}</b></td>
      <td><strong>{job.job_type||"Workshop job"}</strong><small>{job.title}</small></td>
      <td>{dateLabel(job.created_at)}</td><td>{job.status}</td>
-     <td>{job.job_card_pdf_path||job.job_type==="Wheel removal / re-torque"&&job.approved_pdf_path?<button type="button" className="secondary" onClick={()=>void openStoredPdf((job.job_card_pdf_path||job.approved_pdf_path)!)}><FileText size={15}/> {job.job_type==="Wheel removal / re-torque"?"View wheel re-torque PDF":"View filed PDF"}</button>:<span className="muted">{job.status==="Approved"?"PDF filing pending":"Pending completion / office approval"}</span>}
+     <td>
+      {job.job_card_pdf_path&&<button type="button" className="secondary" onClick={()=>void openStoredPdf(job.job_card_pdf_path!)}><FileText size={15}/> View JT Job Card</button>}
+      {job.approved_pdf_path&&<button type="button" className="secondary" onClick={()=>void openStoredPdf(job.approved_pdf_path!)}><FileText size={15}/> {String(job.job_type||"").startsWith("LOLER")?"View statutory LOLER certificate":job.job_type==="Wheel removal / re-torque"?"View wheel re-torque PDF":"View original filed PDF"}</button>}
+      {!job.job_card_pdf_path&&!job.approved_pdf_path&&<span className="muted">{job.status==="Approved"?"PDF filing pending":"Pending completion / office approval"}</span>}
+      {String(job.job_type||"").startsWith("LOLER")&&job.status==="Approved"&&!job.approved_pdf_path&&<small className="muted" style={{display:"block"}}>Statutory LOLER certificate filing pending</small>}
       {canDeleteUnsigned(job)&&<button type="button" className="secondary workshop-delete-test" disabled={busy} onClick={()=>void deleteUnsigned(job)}><Trash2 size={14}/> Delete unsigned test</button>}
      </td></tr>)}</tbody></table></div>}
     {sectionTitle("Pre-Use / Return-to-Work PDFs",certificates.filter(cert=>cert.job_type==="Pre-use / return-to-work check").length)}
