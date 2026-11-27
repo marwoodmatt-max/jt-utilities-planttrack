@@ -5,6 +5,7 @@ import AssetManager from "../components/asset-manager";
 import { generateApprovedJobPdf, generateAssetJobCardPdf } from "../lib/loler-pdf";
 import { generateWheelRetorquePdf, WHEEL_JOB_TYPE, WHEEL_REQUIRED, missingWheelFields } from "../lib/wheel-retorque-pdf";
 import WheelRetorqueFields from "../components/wheel-retorque-fields";
+import DrawnSignature from "../components/drawn-signature";
 import WorkshopJobPhotos from "../components/workshop-job-photos";
 import WorkshopContributions from "../components/workshop-contributions";
 import WorkshopReassignment from "../components/workshop-reassignment";
@@ -307,7 +308,36 @@ function GeneralRepairPaperForm({job,asset}: {job:any;asset:any}){
   <p style={{textAlign:"center",fontSize:12,marginTop:12}}>Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR · www.jtutilities.com · 020 3840 4826</p>
  </div>;
 }
-function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,onExaminerSignatureChange,signedAt}:{kind:"plant"|"chains";values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly?:boolean;examinerSignature?:string;onExaminerSignatureChange?:(value:string)=>void;signedAt?:string|null}){
+const lolerEquipmentKeys=["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"] as const;
+function LolerEquipmentLines({values,onChange,readOnly}:{values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly:boolean}){
+ const stored=values["LOLER EQUIPMENT LINES"];
+ let parsed:Record<string,string>[]=[];
+ try{const data=JSON.parse(stored||"[]");if(Array.isArray(data))parsed=data.filter(item=>item&&typeof item==="object").map(item=>Object.fromEntries(lolerEquipmentKeys.map(k=>[k,String(item[k]||"")])));}catch{}
+ const initial=Object.fromEntries(lolerEquipmentKeys.map(k=>[k,values[k]||(k==="QUANTITY"?"1":"")])) as Record<string,string>;
+ const rows=parsed.length?parsed:[initial];
+ const setRows=(next:Record<string,string>[])=>onChange("LOLER EQUIPMENT LINES",JSON.stringify(next));
+ return <section style={{borderTop:"1px solid #64748b",padding:"12px 0"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:8}}>
+   <div><strong>EQUIPMENT AND ATTACHMENTS</strong><p style={{fontSize:12,margin:"4px 0"}}>The first line is filled from the selected asset. Add one line per attachment or lifting accessory; each additional line can have its own quantity, ID, safe working load and due date.</p></div>
+   {!readOnly&&<button type="button" className="secondary" onClick={()=>setRows([...rows,Object.fromEntries(lolerEquipmentKeys.map(k=>[k,""]))])}>+ Add attachment / equipment line</button>}
+  </div>
+  <div style={{display:"grid",gap:10}}>
+   {rows.map((row,i)=><div key={i} style={{border:"1px solid #cbd5e1",borderRadius:6,padding:10,background:"#f8fafc"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+     <b style={{fontSize:12}}>Line {i+1}{i===0?" · Main machine / equipment":" · Attachment / accessory"}</b>
+     {!readOnly&&rows.length>1&&<button type="button" className="secondary" onClick={()=>setRows(rows.filter((_,j)=>j!==i))}>Remove line</button>}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:9}}>
+     {lolerEquipmentKeys.map(key=><label key={key} style={{fontSize:11,fontWeight:600}}>{key}
+       <input type="text" readOnly={readOnly} value={row[key]||""} onChange={e=>setRows(rows.map((r,j)=>j===i?{...r,[key]:e.target.value}:r))}
+         style={{width:"100%",marginTop:5,background:readOnly?"#f1f5f9":"#fff"}}/>
+     </label>)}
+    </div>
+   </div>)}
+  </div>
+ </section>;
+}
+function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,onExaminerSignatureChange,drawnSignature,onDrawnSignatureChange,signedAt}:{kind:"plant"|"chains";values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly?:boolean;examinerSignature?:string;onExaminerSignatureChange?:(value:string)=>void;drawnSignature?:string;onDrawnSignatureChange?:(value:string)=>void;signedAt?:string|null}){
  const chains=kind==="chains";
  const fields=chains?[
  ["Date of Thorough Examination","Date of report","Report number"],
@@ -334,7 +364,7 @@ function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,o
  const choice=(key:string)=>(chains&&["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"].includes(key))||(!chains&&plantIntervalKeys.includes(key));
  return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:18,margin:"14px 0",borderRadius:4}}>
   {chains?<h3 style={{textAlign:"center",color:"#17212b"}}>REPORT OF A THOROUGH EXAMINATION OF LIFTING EQUIPMENT & ACCESSORIES</h3>:<div style={{display:"flex",gap:18,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",marginBottom:20}}><img src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd" style={{maxWidth:210,width:"35%",height:"auto",objectFit:"contain"}}/><div style={{flex:"1 1 340px",textAlign:"right",color:"#17496b"}}><strong style={{fontSize:15}}>Report of Thorough Examination and/or Test of Equipment</strong><div style={{fontSize:12,marginTop:5}}>Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307</div><div style={{fontSize:12,marginTop:5}}>Provision and Use of Work Equipment Regulations P.U.W.E.R 1998 SI 2306</div><div style={{fontSize:12,marginTop:5}}>Supply of Machinery (Safety) Regulations 2008</div></div></div>}
-  {fields.map((group,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
+  {fields.map((group,i)=>!chains&&group.includes("QUANTITY")?<LolerEquipmentLines key={i} values={values} onChange={onChange} readOnly={readOnly}/>:<div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
    {group.map(key=><label key={key} style={{borderRight:"1px solid #cbd5e1",padding:8,fontSize:12,fontWeight:600,color:"#17212b"}}>{key}
     {choice(key)?<select disabled={readOnly} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6}}><option value="">Not selected</option><option value="Yes">{chains?"Yes":"Selected (X)"}</option><option value="No">{chains?"No":"Not applicable"}</option></select>:
     <textarea readOnly={readOnly} rows={key.length>70?3:2} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6,background:readOnly?"#f1f5f9":"#fff"}}/>}
@@ -347,7 +377,12 @@ function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,o
    <p style={{fontSize:12}}>C - Observations on the condition of the equipment or accessories, comments & recommendations</p>
    <p style={{fontSize:12}}>This report complies with the requirements of the Lifting Operations and Lifting Equipment Regulations 1998</p>
   </>:<p style={{fontSize:12,marginTop:12}}><b>DECLARATION BY INSPECTOR</b><br/>I hereby certify that no critical defects were found on the equipment described on this certificate at the time of inspection and that this equipment was found to be fit for use.</p>}
-  {!chains&&<div style={{border:"1px solid #64748b",minHeight:90,padding:10,marginTop:12}}><b>INSPECTOR SIGNATURE</b><p style={{fontSize:12}}>The competent person carrying out this examination must enter their full name and sign the job. The signature, signed-in account and timestamp are recorded on submission and appear on the filed LOLER certificate.</p>{!readOnly&&onExaminerSignatureChange?<label style={{display:"block",fontSize:12,fontWeight:600}}>Examiner signature — full name<input autoComplete="name" value={examinerSignature||""} onChange={e=>onExaminerSignatureChange(e.target.value)} placeholder="Type your full name to sign the examination" style={{display:"block",width:"100%",marginTop:6}}/></label>:<p style={{fontSize:13,fontWeight:600}}>{examinerSignature||"To be signed by the mechanic when completing the inspection"}</p>}{readOnly&&<p style={{fontSize:13,fontWeight:600}}>{examinerSignature||"Not yet signed"}{signedAt?" · "+new Date(signedAt).toLocaleString("en-GB"):""}</p>}</div>}
+  <div style={{border:"1px solid #64748b",padding:12,marginTop:12,borderRadius:6}}>
+   <b>INSPECTOR HANDWRITTEN SIGNATURE</b>
+   <p style={{fontSize:12}}>The competent examiner must draw their own signature below. Their printed name, authenticated account and signing time will also be recorded when the examination is submitted.</p>
+   {!readOnly&&onDrawnSignatureChange?<DrawnSignature value={drawnSignature||""} onChange={onDrawnSignatureChange}/>:drawnSignature?.startsWith("data:image/png;base64,")?<DrawnSignature value={drawnSignature} readOnly/>:<p style={{fontSize:12,color:"#64748b"}}>No handwritten signature recorded</p>}
+   {readOnly?<p style={{fontSize:12}}>Inspector: <strong>{examinerSignature||"Not signed"}</strong>{signedAt?" · "+new Date(signedAt).toLocaleString("en-GB"):""}</p>:<p style={{fontSize:12}}>Your printed name is entered in the mechanic sign-off field below. Drawing here does not submit or approve the examination.</p>}
+  </div>
   <p style={{fontSize:12}}>The examiner signature is finalised when the mechanic selects “Sign and submit to office”.</p>
  </div>;
 }
@@ -413,6 +448,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const [checklist,setChecklist]=useState<Record<string,string>>({});
  const [assetLolerDue,setAssetLolerDue]=useState<Record<string,string>>({});
  const [lolerFields,setLolerFields]=useState<Record<string,string>>({});
+ const [lolerDrawing,setLolerDrawing]=useState("");
  const [showCreateJob,setShowCreateJob]=useState(false);
  const [showWheelCreate,setShowWheelCreate]=useState(false);
  const [mechanicFilter,setMechanicFilter]=useState<"active"|"waiting"|"done">("active");
@@ -445,7 +481,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
  const selectedJobRef=useRef<HTMLDivElement|null>(null);
  useEffect(()=>{if(selected){const el=selectedJobRef.current;if(el){el.scrollIntoView({behavior:"smooth",block:"start"});}}},[selected]);
  const suggestedLolerDate=(months:number)=>{const d=new Date();const day=d.getUTCDate();d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10);};
- const assetLolerDefaults=(assetId:string,kind:string,certificateNo?:string,jobNo?:string):Record<string,string>=>{const a=assets.find(x=>x.id===assetId);if(!a)return {};const description=[a.manufacturer,a.model,a.description].filter(Boolean).join(" · ");const common:Record<string,string>=kind==="LOLER thorough examination"?{"EXAMINATION/TEST DATE":new Date().toISOString().slice(0,10),"CERTIFICATE NO":certificateNo||jobNo||"","NAME AND ADDRESS OF EQUIPMENT OWNER":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","LOCATION OF EQUIPMENT WHEN EXAMINED":a.location||"","ITEM":a.asset_code||"","ID NO/S":a.asset_code||"","EQUIPMENT DESCRIPTION":description||a.asset_code||"","NEXT EXAMINATION / TEST DUE DATE":suggestedLolerDate(12)}:{"Date of Thorough Examination":new Date().toISOString().slice(0,10),"Date of report":new Date().toISOString().slice(0,10),"Latest date by which next thorough examination must be carried out:":suggestedLolerDate(6),"Report number":certificateNo||jobNo||"","Name & address of employer for whom the Thorough Examination was made":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","Address of premises at which the Examination took place":a.location||"","Description & identification of the equipment or accessories":[a.asset_code,description].filter(Boolean).join(" · "),"Serial no:":a.serial_number||""};return common;};
+ const assetLolerDefaults=(assetId:string,kind:string,certificateNo?:string,jobNo?:string):Record<string,string>=>{const a=assets.find(x=>x.id===assetId);if(!a)return {};const description=[a.manufacturer,a.model,a.description].filter(Boolean).join(" · ");const common:Record<string,string>=kind==="LOLER thorough examination"?{"EXAMINATION/TEST DATE":new Date().toISOString().slice(0,10),"CERTIFICATE NO":certificateNo||jobNo||"","NAME AND ADDRESS OF EQUIPMENT OWNER":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","LOCATION OF EQUIPMENT WHEN EXAMINED":a.location||"","ITEM":a.asset_code||"","QUANTITY":"1","ID NO/S":a.asset_code||"","EQUIPMENT DESCRIPTION":description||a.asset_code||"","NEXT EXAMINATION / TEST DUE DATE":suggestedLolerDate(12)}:{"Date of Thorough Examination":new Date().toISOString().slice(0,10),"Date of report":new Date().toISOString().slice(0,10),"Latest date by which next thorough examination must be carried out:":suggestedLolerDate(6),"Report number":certificateNo||jobNo||"","Name & address of employer for whom the Thorough Examination was made":"JT Utilities LTD, Greendown Farm, Chittlehampton, Nr Umberleigh, Devon EX37 9QR","Address of premises at which the Examination took place":a.location||"","Description & identification of the equipment or accessories":[a.asset_code,description].filter(Boolean).join(" · "),"Serial no:":a.serial_number||""};return common;};
  const chosen=jobs.find(j=>j.id===selected);
  // Vehicle and HGV jobs use registrations; plant and equipment use asset codes.
  const isRegisteredVehicle=(a:any)=>["vehicle","hgv"].includes(String(a.category||"").trim().toLowerCase())&&Boolean(String(a.registration||"").trim());
@@ -520,20 +556,22 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   ...(preUseInconsistent(job)?["Final result cannot be PASS while a defect is marked; choose FAIL"]:[]),
   ...(work.trim().length<3?["Work completed"]:[]),
   ...(!Number.isFinite(Number(hours))||Number(hours)<0?["Valid hours worked"]:[]),
-  ...(signature.trim().length<2?["Mechanic signature"]:[])
+  ...(signature.trim().length<2?["Mechanic full name"]:[]),
+  ...(job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories"?(!lolerDrawing.startsWith("data:image/png;base64,")?["Drawn inspector signature"]:[]):[])
  ];
  const openMechanicJob=(job:any)=>{
   setSelected(job.id);setShowWheelCreate(false);setNotice("");setEditCard(false);setShowSpecialistFields(specialistJob(job));
-  setComments("");setSignature("");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
+  setComments("");setSignature(String(job.job_type||"").startsWith("LOLER")&&leadName(job)!=="Assigned mechanic"?leadName(job):"");setWork(job.engineer_work||"");setParts(job.engineer_parts||"");
   setPartItems(job.engineer_parts?job.engineer_parts.split("\n"):[""]);setHours(String(job.engineer_hours??0));
   const saved=job.completion_checklist||{};
+  setLolerDrawing(typeof saved["Inspector handwritten signature PNG"]==="string"?saved["Inspector handwritten signature PNG"]:"");
   setChecklist({...((preUseIsFullSheet(job)&&assetLolerDue[job.asset_id]&&!String(saved["Statutory inspection expiry date"]||"").trim())?{"Statutory inspection expiry date":assetLolerDue[job.asset_id]}:{}),...saved});setLolerFields(saved);
  };
  async function saveEngineerDraft(job:any){
   if(!Number.isFinite(Number(hours))||Number(hours)<0){setNotice("Enter a valid number of hours before saving.");return;}
   await perform(()=>supabase.rpc("save_engineer_workshop_draft",{
    p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours),
-   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields}:{})}
+   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields,"Inspector handwritten signature PNG":lolerDrawing}:{})}
   }),"Progress and any inspection findings saved. Job has not been signed or submitted.");
  }
  async function submitEngineerJob(job:any){
@@ -541,7 +579,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
   if(missing.length){setNotice("Please complete these fields to send the job: "+missing.join("; "));if(requiredChecklist(job).length)setShowSpecialistFields(true);window.setTimeout(()=>document.getElementById("mechanic-submit-feedback")?.scrollIntoView({behavior:"smooth",block:"center"}),30);return;}
   await perform(()=>supabase.rpc("sign_engineer_job_typed",{
    p_job:job.id,p_work:work,p_parts:parts,p_hours:Number(hours),p_signature:signature,
-   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields}:{})}
+   p_checklist:{...checklist,...((job.job_type==="LOLER thorough examination"||job.job_type==="LOLER chains & accessories")?{...assetLolerDefaults(job.asset_id,job.job_type,job.certificate_number,job.job_card_number),...lolerFields,"Inspector handwritten signature PNG":lolerDrawing}:{})}
   }),"Signed and sent to office for approval. Your signature and time have been recorded.");
  }
  async function archiveApprovedPdf(job:any){
@@ -768,7 +806,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
      {specialistJob(chosen)&&<section className="mechanic-specialist">
       <button type="button" className="secondary mechanic-specialist-toggle" onClick={()=>setShowSpecialistFields(v=>!v)} aria-expanded={showSpecialistFields}>{showSpecialistFields?"Hide":"Show"} {String(chosen.job_type||"").startsWith("LOLER")?"LOLER examination & mandatory checklist":"Required inspection checklist"} ({requiredChecklist(chosen).length} checks)</button>
       {showSpecialistFields&&<div className="mechanic-specialist-fields">
-       {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))} examinerSignature={signature} onExaminerSignatureChange={setSignature}/></>}
+       {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<><p className="muted">Complete and verify all statutory LOLER certificate particulars. This job card does not replace the legal certificate.</p><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))} examinerSignature={signature} onExaminerSignatureChange={setSignature} drawnSignature={lolerDrawing} onDrawnSignatureChange={setLolerDrawing}/></>}
        {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">Check every item before signing. Any failed check means the machine must NOT be sent back to work. A completed job card does not release a plant lockout or replace the operator's daily pre-start check.</p>}
        {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields staff={wheelStaff} currentUserId={wheelCurrentUserId} values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):requiredChecklist(chosen).map((key:string)=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(key):<label key={key}>{key}<textarea rows={2} value={checklist[key]||""} onChange={e=>setChecklist(c=>({...c,[key]:e.target.value}))} placeholder="Record findings or inspection result"/></label>)}
       </div>}
@@ -780,7 +818,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
       <button type="button" className="secondary mechanic-save-btn" disabled={busy} onClick={()=>void saveEngineerDraft(chosen)}>{busy?"Saving…":"Save progress (not submitted)"}</button>
       {!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}
       <div className="mechanic-mobile-sign">
-       <label>4. Mechanic signature — full name <input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Type your full name"/></label>
+       {String(chosen.job_type||"").startsWith("LOLER")&&signature.trim()?<p><strong>Inspector printed name:</strong> {signature} · Draw your signature in the LOLER form above.</p>:<label>4. Mechanic printed name <input autoComplete="name" value={signature} onChange={e=>setSignature(e.target.value)} placeholder="Enter your full name"/></label>}
        <p>Your signed-in account and submission time will be recorded automatically for audit.</p>
       </div>
       {missingEngineerFields(chosen).length>0&&<p className="mechanic-missing" role="status">To submit, complete: {missingEngineerFields(chosen).join(", ")}</p>}
@@ -822,7 +860,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    </div>}
    {role==="office"&&chosen.status==="New"&&<div style={{display:"flex",gap:8,alignItems:"center"}}><select value={engineer} onChange={e=>setEngineer(e.target.value)}><option value="">Choose mechanic</option>{engineers.map(x=><option key={x.user_id} value={x.user_id}>{x.display_name}</option>)}</select><button className="primary" disabled={!engineer||busy} onClick={()=>void perform(()=>supabase.rpc("assign_workshop_job",{p_job:chosen.id,p_engineer:engineer}),"Job assigned to mechanic")}>Assign job</button></div>}
    {role==="office"&&chosen.job_type!=="Pre-use / return-to-work check"&&Object.keys(chosen.completion_checklist||{}).length>0&&<details><summary style={{cursor:"pointer",fontWeight:700}}>Inspection details</summary>{Object.entries(chosen.completion_checklist||{}).map(([key,value])=><p key={key}><b>{key}:</b> {String(value)}</p>)}</details>}
-   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly examinerSignature={chosen.engineer_signature||""} signedAt={chosen.engineer_signed_at}/></details>}
+   {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<details><summary style={{cursor:"pointer",fontWeight:600}}>View certificate details</summary><LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...(chosen.completion_checklist||{})}} onChange={()=>{}} readOnly examinerSignature={chosen.engineer_signature||""} signedAt={chosen.engineer_signed_at} drawnSignature={String(chosen.completion_checklist?.["Inspector handwritten signature PNG"]||"")}/></details>}
    {chosen.job_type==="General repair"&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&(role==="office"||role==="engineer")&&<div style={{marginBottom:12}}>
     <button className="secondary" type="button" onClick={()=>{if(editCard){setEditCard(false);return;}setEditTitle(chosen.title||"");setEditInstructions(chosen.instructions||"");setEditDetails({...chosen.job_details});setEditCard(true);}}>{editCard?"Cancel editing":"Edit Asset Job Card"}</button>
     {editCard&&<div style={{display:"grid",gap:12,padding:14,marginTop:10,border:"1px solid #cbd5e1",borderRadius:8}}>
@@ -858,7 +896,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
    {chosen.office_comments&&<p><b>Office comments:</b> {chosen.office_comments}</p>}
    {chosen.office_signature&&<p><b>Office signed:</b> {chosen.office_signature} · {new Date(chosen.office_signed_at).toLocaleString("en-GB",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-")}</p>}
    {(role==="office"||(role==="engineer"&&chosen.assigned_engineer===wheelCurrentUserId))&&["New","Assigned","In progress","Returned for correction"].includes(chosen.status)&&<>
-    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))} examinerSignature={signature} onExaminerSignatureChange={setSignature}/>} 
+    {(chosen.job_type==="LOLER thorough examination"||chosen.job_type==="LOLER chains & accessories")&&<LolerPaperForm kind={chosen.job_type==="LOLER thorough examination"?"plant":"chains"} values={{...assetLolerDefaults(chosen.asset_id,chosen.job_type,chosen.certificate_number,chosen.job_card_number),...(chosen.job_type==="LOLER thorough examination"?plantLolerDefaults:{}),...(chosen.job_details||{}),...lolerFields}} onChange={(key,value)=>setLolerFields(d=>({...d,[key]:value}))} examinerSignature={signature} onExaminerSignatureChange={setSignature} drawnSignature={lolerDrawing} onDrawnSignatureChange={setLolerDrawing}/>} 
     {chosen.job_type==="Pre-use / return-to-work check"&&<p role="note" className="workshop-pre-use-warning">This pre-use inspection must pass before return to work. Safety holds and operator daily checks remain separate.</p>}
     {chosen.job_type===WHEEL_JOB_TYPE?<WheelRetorqueFields staff={wheelStaff} currentUserId={wheelCurrentUserId} values={checklist} onChange={(key,value)=>setChecklist(c=>({...c,[key]:value}))}/>:preUseFullSheet(chosen)?preUseSheetForm(chosen):(checklistByType[chosen.job_type]||[]).map(field=>chosen.job_type==="Pre-use / return-to-work check"?preUseField(field):<label key={field}>{field}<textarea value={checklist[field]||""} onChange={e=>setChecklist(c=>({...c,[field]:e.target.value}))} placeholder={field.includes("result")||field.includes("Result")?"Record outcome and any restrictions":"Record inspection findings"}/></label>)}
     <label>Work completed<textarea value={work} onChange={e=>setWork(e.target.value)}/></label>
@@ -871,7 +909,7 @@ function WorkshopJobs({supabase,activeOnly=false}:{supabase:SupabaseClient;activ
      <button className="secondary" type="button" onClick={()=>setPartItems(items=>[...items,""])}>+ Add another part</button>
     </div>
     <label>Hours worked<input type="number" min="0" step=".25" value={hours} onChange={e=>setHours(e.target.value)}/></label>
-    {role==="office"&&<><p className="muted">Office can prepare and save these details. Only the assigned mechanic can sign and submit the job.</p><button className="primary" type="button" disabled={busy} onClick={()=>void perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours)}),"Workshop details saved — awaiting mechanic signature")}>Save workshop details</button></>}{role==="engineer"&&chosen.assigned_engineer===wheelCurrentUserId&&<>{!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}<label>Engineer signature (full name)<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>
+    {role==="office"&&<><p className="muted">Office can prepare and save these details. Only the assigned mechanic can sign and submit the job.</p><button className="primary" type="button" disabled={busy} onClick={()=>void perform(()=>supabase.rpc("save_workshop_job_progress",{p_job:chosen.id,p_work:work,p_parts:partItems.filter(v=>v.trim()).join("\n"),p_hours:Number(hours)}),"Workshop details saved — awaiting mechanic signature")}>Save workshop details</button></>}{role==="engineer"&&chosen.assigned_engineer===wheelCurrentUserId&&<>{!(String(chosen.job_type||"").startsWith("LOLER"))&&<WorkshopJobPhotos supabase={supabase} jobId={chosen.id} jobNumber={chosen.job_card_number} jobType={chosen.job_type} role={role} status={chosen.status}/>}{String(chosen.job_type||"").startsWith("LOLER")&&signature.trim()?<p><strong>Inspector printed name:</strong> {signature} · Draw your signature in the LOLER form above.</p>:<label>Engineer printed name<input value={signature} onChange={e=>setSignature(e.target.value)}/></label>}
     {(work.trim().length<3||signature.trim().length<2||(checklistByType[chosen.job_type]||[]).some(k=>!checklist[k]?.trim()))&&<p role="status" style={{color:"#92400e",background:"#fffbeb",padding:"10px 12px",borderRadius:6,fontSize:13}}><strong>Before you can sign and submit:</strong>{" "}{[...(checklistByType[chosen.job_type]||[]).filter(k=>!checklist[k]?.trim()),...(work.trim().length<3?["Work completed"]:[]),...(signature.trim().length<2?["Engineer signature (full name)"]:[])].join(", ")}. Complete these fields below the examination form.</p>}
     <button type="button" className="primary" disabled={busy} onClick={()=>void submitEngineerJob(chosen)}>Sign and submit to office</button>
    </>}
