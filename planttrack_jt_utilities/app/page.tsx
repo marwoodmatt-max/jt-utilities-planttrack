@@ -308,6 +308,35 @@ function GeneralRepairPaperForm({job,asset}: {job:any;asset:any}){
   <p style={{textAlign:"center",fontSize:12,marginTop:12}}>Greendown Farm, Chittlehampton, Umberleigh, EX37 9QR · www.jtutilities.com · 020 3840 4826</p>
  </div>;
 }
+const lolerEquipmentKeys=["QUANTITY","ID NO/S","EQUIPMENT DESCRIPTION","SWL/WLL","PROOF LOAD","NEXT EXAMINATION / TEST DUE DATE"] as const;
+function LolerEquipmentLines({values,onChange,readOnly}:{values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly:boolean}){
+ const stored=values["LOLER EQUIPMENT LINES"];
+ let parsed:Record<string,string>[]=[];
+ try{const data=JSON.parse(stored||"[]");if(Array.isArray(data))parsed=data.filter(item=>item&&typeof item==="object").map(item=>Object.fromEntries(lolerEquipmentKeys.map(k=>[k,String(item[k]||"")])));}catch{}
+ const initial=Object.fromEntries(lolerEquipmentKeys.map(k=>[k,values[k]||""])) as Record<string,string>;
+ const rows=parsed.length?parsed:[initial];
+ const setRows=(next:Record<string,string>[])=>onChange("LOLER EQUIPMENT LINES",JSON.stringify(next));
+ return <section style={{borderTop:"1px solid #64748b",padding:"12px 0"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:8}}>
+   <div><strong>EQUIPMENT AND ATTACHMENTS</strong><p style={{fontSize:12,margin:"4px 0"}}>Use a separate line for each attachment, lifting accessory or item examined.</p></div>
+   {!readOnly&&<button type="button" className="secondary" onClick={()=>setRows([...rows,Object.fromEntries(lolerEquipmentKeys.map(k=>[k,""]))])}>+ Add attachment / equipment line</button>}
+  </div>
+  <div style={{display:"grid",gap:10}}>
+   {rows.map((row,i)=><div key={i} style={{border:"1px solid #cbd5e1",borderRadius:6,padding:10,background:"#f8fafc"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+     <b style={{fontSize:12}}>Line {i+1}{i===0?" · Main machine / equipment":" · Attachment / accessory"}</b>
+     {!readOnly&&rows.length>1&&<button type="button" className="secondary" onClick={()=>setRows(rows.filter((_,j)=>j!==i))}>Remove line</button>}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:9}}>
+     {lolerEquipmentKeys.map(key=><label key={key} style={{fontSize:11,fontWeight:600}}>{key}
+       <input type="text" readOnly={readOnly} value={row[key]||""} onChange={e=>setRows(rows.map((r,j)=>j===i?{...r,[key]:e.target.value}:r))}
+         style={{width:"100%",marginTop:5,background:readOnly?"#f1f5f9":"#fff"}}/>
+     </label>)}
+    </div>
+   </div>)}
+  </div>
+ </section>;
+}
 function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,onExaminerSignatureChange,drawnSignature,onDrawnSignatureChange,signedAt}:{kind:"plant"|"chains";values:Record<string,string>;onChange:(key:string,value:string)=>void;readOnly?:boolean;examinerSignature?:string;onExaminerSignatureChange?:(value:string)=>void;drawnSignature?:string;onDrawnSignatureChange?:(value:string)=>void;signedAt?:string|null}){
  const chains=kind==="chains";
  const fields=chains?[
@@ -335,7 +364,7 @@ function LolerPaperForm({kind,values,onChange,readOnly=false,examinerSignature,o
  const choice=(key:string)=>(chains&&["Within an interval of 6 months?","Within an interval of 12 months?","In accordance with an examination scheme?","After the occurrence of exceptional circumstances?","IS THE EQUIPMENT/ ACCESSORY SAFE TO OPERATE/ USE?"].includes(key))||(!chains&&plantIntervalKeys.includes(key));
  return <div style={{background:"#fff",color:"#17212b",border:"2px solid #64748b",padding:18,margin:"14px 0",borderRadius:4}}>
   {chains?<h3 style={{textAlign:"center",color:"#17212b"}}>REPORT OF A THOROUGH EXAMINATION OF LIFTING EQUIPMENT & ACCESSORIES</h3>:<div style={{display:"flex",gap:18,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",marginBottom:20}}><img src="/jt-utilities-logo.jpg" alt="JT Utilities Ltd" style={{maxWidth:210,width:"35%",height:"auto",objectFit:"contain"}}/><div style={{flex:"1 1 340px",textAlign:"right",color:"#17496b"}}><strong style={{fontSize:15}}>Report of Thorough Examination and/or Test of Equipment</strong><div style={{fontSize:12,marginTop:5}}>Lifting Operations and Lifting Equipment Regulations L.O.L.E.R 1998 SI 2307</div><div style={{fontSize:12,marginTop:5}}>Provision and Use of Work Equipment Regulations P.U.W.E.R 1998 SI 2306</div><div style={{fontSize:12,marginTop:5}}>Supply of Machinery (Safety) Regulations 2008</div></div></div>}
-  {fields.map((group,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
+  {fields.map((group,i)=>!chains&&group.includes("QUANTITY")?<LolerEquipmentLines key={i} values={values} onChange={onChange} readOnly={readOnly}/>:<div key={i} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",borderTop:"1px solid #64748b"}}>
    {group.map(key=><label key={key} style={{borderRight:"1px solid #cbd5e1",padding:8,fontSize:12,fontWeight:600,color:"#17212b"}}>{key}
     {choice(key)?<select disabled={readOnly} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6}}><option value="">Not selected</option><option value="Yes">{chains?"Yes":"Selected (X)"}</option><option value="No">{chains?"No":"Not applicable"}</option></select>:
     <textarea readOnly={readOnly} rows={key.length>70?3:2} value={values[key]||""} onChange={e=>onChange(key,e.target.value)} style={{width:"100%",marginTop:6,background:readOnly?"#f1f5f9":"#fff"}}/>}
